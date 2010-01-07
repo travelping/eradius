@@ -230,24 +230,7 @@ id2i(Id) ->
 	    hex2i(Id)
     end.
 
-%% FIXME , too ugly...
-hex2i("0x" ++ A) ->
-    io:format("Converting: ~p~n", [A]),
-    {ok, [I], _} = io_lib:fread("~16u", A),
-    I.
-
-%hex2i("0x" ++ [A]) -> x2i(A);
-%hex2i("0x" ++ [A,B]) -> x2i(A)*16 + x2i(B);
-%hex2i("0x" ++ [A,B,C]) -> x2i(A)*16*16 + x2i(B)*16 + x2i(C);
-%hex2i("0x" ++ [A,B,C,D]) -> x2i(A)*16*16*16 + x2i(B)*16*16 + x2i(C)*16 + x2i(D).
-
-x2i(X) when X =< $9, X >= $0  -> X-48;
-x2i(X) when X == $A ; X == $a -> 16#a;
-x2i(X) when X == $B ; X == $b -> 16#b;
-x2i(X) when X == $C ; X == $c -> 16#c;
-x2i(X) when X == $D ; X == $d -> 16#d;
-x2i(X) when X == $E ; X == $e -> 16#e;
-x2i(X) when X == $F ; X == $f -> 16#f.
+hex2i("0x" ++ L) -> erlang:list_to_integer(L, 16).
 
 b2l(B) when is_binary(B) -> binary_to_list(B);
 b2l(L) when is_list(L)   -> L.
