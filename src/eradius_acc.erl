@@ -16,6 +16,8 @@
 -include("eradius_lib.hrl").
 -include_lib("kernel/include/inet.hrl").
 
+-define(DBG(F,A), io:format("(~w:~b): " ++ F ++ "~n", [?MODULE, ?LINE] ++ A)).
+
 %%--------------------------------------------------------------------
 %% External exports
 -export([start_link/0, acc_on/1, acc_off/1, 
@@ -23,8 +25,8 @@
 	 validate_servers/1, start/0, 
 	 set_user/2, set_nas_ip_address/1, set_nas_ip_address/2, 
  	 set_sockopts/2,
-	 set_login_time/1, set_logout_time/1, set_session_id/2, new/0, 
-	 set_radacct/1, set_attr/3, set_vend_attr/3, acc_update/1,
+	 set_login_time/1, set_logout_time/1, set_session_id/2, new/0,
+	 set_radacct/1, set_attr/3, set_vend_attr/2, set_vend_attr/3, acc_update/1,
 	 set_servers/2, set_timeout/2, set_login_time/2,  set_vendor_id/2,
 	 set_logout_time/2, set_tc_ureq/1, 
 	 set_tc_itimeout/1,set_tc_stimeout/1,
@@ -58,15 +60,25 @@
 new() -> #rad_accreq{}.
 
 %%% Set (any) Attribute
-set_attr(R, Type, Bval) when is_record(R,rad_accreq),is_integer(Type),is_binary(Bval)->
+set_attr(R, Id, Val) when is_record(R,rad_accreq),
+                          is_integer(Id) ->
     StdAttrs = R#rad_accreq.std_attrs,
-    R#rad_accreq{std_attrs = [{Type, Bval} | StdAttrs]}.
+    R#rad_accreq{std_attrs = [{Id, Val} | StdAttrs]}.
 
 %%% Vendor Attributes
-set_vend_attr(R, Type, Bval) when is_record(R,rad_accreq),
-				  is_integer(Type),is_binary(Bval)->
+set_vend_attr(R, VAttrs) when is_record(R,rad_accreq),
+                              is_list(VAttrs) ->
+    F = fun({Vid, Attrs}, NewR) ->
+                set_vend_attr(NewR, Vid, Attrs);
+           (_, NewR) -> NewR
+        end,
+    lists:foldl(F, R, VAttrs).
+
+set_vend_attr(R, Vid, Attrs) when is_record(R,rad_accreq),
+                                  is_integer(Vid),
+                                  is_list(Attrs) ->
     VendAttrs = R#rad_accreq.vend_attrs,
-    R#rad_accreq{vend_attrs = [{Type, Bval} | VendAttrs]}.
+    R#rad_accreq{vend_attrs = [{Vid, Attrs} | VendAttrs]}.
 
 %%% Vendor Id
 set_vendor_id(R, VendId) when is_record(R, rad_accreq),is_integer(VendId) ->
