@@ -36,7 +36,7 @@ scramble(Secret, Auth, Passwd) ->
     B = erlang:md5([Secret, Auth]),
     case xor16(Passwd, B) of
 	{C, <<>>}   -> C;
-	{C, Tail} -> concat_binary([C, scramble(Secret, C, Tail)])
+	{C, Tail} -> list_to_binary([C, scramble(Secret, C, Tail)])
     end.
 
 xor16(Passwd, B) when size(Passwd) < 16 ->
@@ -62,7 +62,7 @@ xor16(<<P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,T/binary>>,
      T}.
 
 pad16(Passwd) ->
-    concat_binary([Passwd, list_to_binary(zero(16 - size(Passwd)))]).
+    list_to_binary([Passwd, list_to_binary(zero(16 - size(Passwd)))]).
 
 zero(0) -> [];
 zero(N) -> [0 | zero(N-1)].
@@ -107,9 +107,18 @@ type_conv(V, _) when is_binary(V) -> V;
 type_conv(V, binary)         -> V;
 type_conv(V, integer)        -> <<V:32>>;
 type_conv({A,B,C,D}, ipaddr) -> <<A:8, B:8, C:8, D:8>>;
-type_conv(V, string)         -> list_to_binary(V);
-type_conv(V, octets)         -> list_to_binary(V);
-type_conv(V, date)           -> list_to_binary(V).  %% FIXME !!
+type_conv(V, string) when
+      is_list(V) -> iolist_to_binary(V);
+type_conv(V, string) when
+      is_binary(V) -> V;
+type_conv(V, octets) when
+      is_list(V) -> iolist_to_binary(V);
+type_conv(V, octets) when
+      is_binary(V) -> V;
+type_conv(V, date) when
+      is_list(V) -> iolist_to_binary(V);
+type_conv(V, date) when
+      is_binary(V) -> V.
 
 
 enc_cmd(R) when is_record(R, rad_request) ->
@@ -299,7 +308,7 @@ enc_accreq(Id, Secret, Req) ->
     patch_authenticator(PDU, l2b(Secret)).
 
 patch_authenticator(Req,Secret) ->
-    case {erlang:md5([Req,Secret]),concat_binary(Req)} of
+    case {erlang:md5([Req,Secret]),list_to_binary(Req)} of
 	{Auth,<<Head:4/binary, _:16/binary, Rest/binary>>} ->
 	    B = l2b(Auth),
 	    <<Head/binary, B/binary, Rest/binary>>;
