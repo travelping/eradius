@@ -181,15 +181,25 @@ close_files(Hrl, Map) ->
 
 parse_dict(File) when is_list(File) ->
     {ok,B} = file:read_file(File),
-    F = fun(Line,Acc) ->
-		case pd(string:tokens(Line,"\s\t\r")) of
-		    {ok,E} -> [E|Acc];
-		    _      -> Acc
-		end
+    F = fun(Line,{undefined = Vendor, AccList}) ->
+                case pd(string:tokens(Line,"\s\t\r")) of
+                    {ok,E} -> {Vendor, [E|AccList]};
+                    {begin_vendor, VName} -> {{vendor, VName}, AccList};
+                    _      -> {Vendor, AccList}
+                end;
+           (Line, {{vendor, VName} = Vendor, AccList}) ->
+                case pd(string:tokens(Line, "\s\t\r"), VName) of
+                    {end_vendor} -> {undefined, AccList};
+                    {ok,E} -> {Vendor, [E|AccList]};
+                    _ -> {Vendor, AccList}
+                end
 	end,
-    lists:foldl(F,[],string:tokens(b2l(B),"\n")).
+    {_, L} = lists:foldl(F,{undefined, []},string:tokens(b2l(B),"\n")),
+    L.
 
-pd(["VENDOR", Name, Id]) -> 
+pd(["BEGIN-VENDOR", Name]) ->
+    {begin_vendor, Name};
+pd(["VENDOR", Name, Id]) ->
     put({vendor,Name}, l2i(Id)),
     {ok, #vendor{type = l2i(Id), name = Name}};
 pd(["ATTRIBUTE", Name, Id, Type]) -> 
@@ -217,6 +227,24 @@ pd(["VALUE", Attr, Name, Id]) ->
 pd(_X) -> 
     %%io:format("Skipping: ~p~n", [X]),
     false.
+
+pd(["END-VENDOR", _Name], _VName) ->
+    {end_vendor};
+pd(["ATTRIBUTE", Name, Id, Type], VName) ->
+    case get({vendor, VName}) of
+        undefined ->
+            %% No vendor defined, line must have some other "crap" after Type.
+            {ok,#attribute{name = d2u(Name), id = id2i(Id), type = l2a(Type)}};
+        VendId ->
+            {ok,#attribute{name = d2u(Name), id = {VendId,id2i(Id)},type = l2a(Type)}}
+    end;
+pd(_X, VName) ->
+    %%io:format("Skipping: ~p~n", [_X]),
+    false.
+
+
+priv_dir() ->
+    dir(?MODULE) ++ "/priv".
 
 dir(Mod) ->
     P = code:which(Mod),
