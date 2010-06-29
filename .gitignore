@@ -1,0 +1,6 @@
+*~
+*.beam
+debian/eradius/*
+priv/*.map
+include/dictionary_*
+*.log

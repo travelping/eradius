@@ -1,0 +1,25 @@
+#
+# dictionary.travelping
+#
+
+VENDOR        TP        18681
+
+#
+#    Standard attribute
+#
+ATTRIBUTE	TP-Gateway-Version			1	string	TP
+ATTRIBUTE	TP-Firmware-Variant			2	string	TP
+ATTRIBUTE	TP-Firmware-Version			3	string	TP
+ATTRIBUTE	TP-Gateway-Config			4	string	TP
+ATTRIBUTE	TP-ENC-IV				5	string	TP
+ATTRIBUTE	TP-Password				6	string	TP
+ATTRIBUTE	TP-User-Agent				7	string	TP
+ATTRIBUTE	TP-Auth-Reply				8	integer	TP
+ATTRIBUTE	TP-Access-Class-Id			9	string	TP
+ATTRIBUTE	TP-Host-Name				10	string	TP
+ATTRIBUTE	TP-DHCP-Request-Option-List		11	string	TP
+ATTRIBUTE	TP-DHCP-Parameter-Request-List		12	string	TP
+ATTRIBUTE	TP-DHCP-Vendor-Class-Id			13	string	TP
+ATTRIBUTE	TP-DHCP-Client-Id			14	string	TP
+ATTRIBUTE	TP-Location-Id				15	string	TP
+ATTRIBUTE	TP-NAT-IP-Address			16	ipaddr	TP

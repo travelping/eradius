@@ -1,0 +1,12 @@
+Source: eradius
+Section: unknown
+Priority: extra
+Maintainer: Felix Lange <fl@travelping.com>
+Build-Depends: debhelper (>= 7), erlang
+Standards-Version: 3.8.3
+Homepage:
+
+Package: eradius
+Architecture: any
+Depends: ${shlibs:Depends}, erlang
+Description: 

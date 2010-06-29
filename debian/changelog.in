@@ -1,0 +1,5 @@
+@APPNAME@ (@VERSION@) unstable; urgency=low
+
+  * Initial Release.
+
+ -- Felix Lange <fl@travelping.com>  Tue, 29 Jun 2010 17:54:22 +0200
