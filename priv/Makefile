@@ -17,8 +17,7 @@ DICTMAPS := $(patsubst dictionaries/dictionary.%,dictionary_%.map,$(DICTFILES))
 dictionaries: dictionary.map $(DICTMAPS)
 
 clean: 
-	@echo $(DICTMAPS)
-#	rm -f $(DICTMAPS) 
+	rm -f $(DICTMAPS)
 
 dictionary.map: dictionaries/dictionary
 	$(ERL) -noshell -pa $(EBIN_DIR) -s eradius_dict make $< || exit 1;

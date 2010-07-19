@@ -18,7 +18,8 @@ ERL_LIB_DIR = `$(ERL) -noinput -eval 'io:format("~s",[code:lib_dir()]), halt(0).
 INSTDIR     = "$(DESTDIR)/$(ERL_LIB_DIR)/$(APPNAME)-$(VERSION)"
 ERLRC_ROOT  = "$(DESTDIR)/etc/erlrc.d"
 
-SRC_DIR     = $(PWD)/src
-EBIN_DIR    = $(PWD)/ebin
-INCLUDE_DIR = $(PWD)/include
-PRIV_DIR    = $(PWD)/priv
+TOP        := $(dir $(lastword $(MAKEFILE_LIST)))
+SRC_DIR     = $(TOP)/src
+EBIN_DIR    = $(TOP)/ebin
+INCLUDE_DIR = $(TOP)/include
+PRIV_DIR    = $(TOP)/priv
