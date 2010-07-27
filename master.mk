@@ -7,16 +7,8 @@
 #
 # Copyright (c) Travelping GmbH <info@travelping.com>
 
-APPNAME = eradius
-VERSION = 0.0.0
-
 ERL  = erl
 ERLC = erlc
-
-DESTDIR     = /
-ERL_LIB_DIR = `$(ERL) -noinput -eval 'io:format("~s",[code:lib_dir()]), halt(0).'`
-INSTDIR     = "$(DESTDIR)/$(ERL_LIB_DIR)/$(APPNAME)-$(VERSION)"
-ERLRC_ROOT  = "$(DESTDIR)/etc/erlrc.d"
 
 TOP        := $(dir $(lastword $(MAKEFILE_LIST)))
 SRC_DIR     = $(TOP)/src

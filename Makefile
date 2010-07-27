@@ -19,20 +19,5 @@ clean:
 	rm -f $(EBIN_DIR)/*.beam
 	$(MAKE) -C $(PRIV_DIR) clean
 
-install: all debian-hooks
-	mkdir -p $(INSTDIR)
-	cp -r $(EBIN_DIR) $(PRIV_DIR) $(INCLUDE_DIR) $(INSTDIR)
-	mkdir -p $(ERLRC_ROOT)/applications
-	touch $(ERLRC_ROOT)/applications/$(APPNAME)
-
-deb: debian-hooks
-	dpkg-buildpackage -b
-
-debian-hooks:
-	sed -e "s,@APPNAME@,$(APPNAME),; s,@VERSION@,$(VERSION)," <debian/postinst.in >debian/postinst
-	sed -e "s,@APPNAME@,$(APPNAME),; s,@VERSION@,$(VERSION)," <debian/prerm.in >debian/prerm
-	sed -e "s,@APPNAME@,$(APPNAME),; s,@VERSION@,$(VERSION)," <debian/postrm.in >debian/postrm
-	sed -e "s,@APPNAME@,$(APPNAME),; s,@VERSION@,$(VERSION)," <debian/changelog.in >debian/changelog
-
 shell: all
 	$(ERL) -pa $(EBIN_DIR)

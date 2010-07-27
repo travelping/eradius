@@ -1,5 +1,5 @@
 {application,eradius,
-  [{description,"A short description."},
+  [{description,"Generic radius application server"},
    {vsn,"0.0.0"},
    {modules,[eradius,
              eradius_dict,
