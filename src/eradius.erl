@@ -18,7 +18,7 @@
 %%--------------------------------------------------------------------
 %% External exports
 -export([start_link/0, start/0, auth/1, auth/3, auth/4, default_port/0,
-	 load_tables/2]).
+	       load_tables/1, load_tables/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, 
@@ -78,6 +78,8 @@ auth(E, User, Passwd, CallState) when is_record(E, eradius) ->
     gen_server:call(?SERVER, {auth, E, User, Passwd, CallState},
 		   infinity).
 
+load_tables(Tables) ->
+    eradius_dict:load_tables(Tables).
 load_tables(Dir, Tables) ->
     eradius_dict:load_tables(Dir, Tables).
 
