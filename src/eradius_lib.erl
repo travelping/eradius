@@ -107,6 +107,12 @@ type_conv(V, _) when is_binary(V) -> V;
 type_conv(V, binary)         -> V;
 type_conv(V, integer)        -> <<V:32>>;
 type_conv({A,B,C,D}, ipaddr) -> <<A:8, B:8, C:8, D:8>>;
+type_conv({A,B,C,D,E,F,G,H}, ipv6addr) -> <<A:16, B:16, C:16, D:16,
+					    E:16, F:16, G:16, H:16>>;
+type_conv({{A,B,C,D,E,F,G,H}, PLen}, ipv6prefix) ->
+    L = (PLen + 7) div 8,
+    <<IP:L, _R/binary>> = <<A:16, B:16, C:16, D:16, E:16, F:16, G:16, H:16>>,
+    <<0, PLen, IP>>;
 type_conv(V, string) when
       is_list(V) -> iolist_to_binary(V);
 type_conv(V, string) when
@@ -271,6 +277,11 @@ dec_attr_val(A, I0) when A#attribute.type == integer ->
     end;
 dec_attr_val(A, <<B,C,D,E>>) when A#attribute.type == ipaddr -> 
     [{A, {B,C,D,E}}];
+dec_attr_val(A, <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16>>) when A#attribute.type == ipv6addr -> 
+    [{A, {B,C,D,E,F,G,H,I}}];
+dec_attr_val(A, <<0,PLen,P/binary>>) when A#attribute.type == ipv6prefix ->
+    <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16,_R/binary>> = concat_binary([P, <<0:128>>]),
+    [{A, {{B,C,D,E,F,G,H,I}, PLen}}];
 dec_attr_val(A, Bin) when A#attribute.type == octets -> 
     case A#attribute.id of
 	?Vendor_Specific ->
