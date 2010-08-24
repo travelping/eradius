@@ -234,11 +234,22 @@ pd(["ATTRIBUTE", Name, Id, Type], VName) ->
     case get({vendor, VName}) of
         undefined ->
             %% No vendor defined, line must have some other "crap" after Type.
+	    put({attribute,d2u(Name)}, id2i(Id)),
             {ok,#attribute{name = d2u(Name), id = id2i(Id), type = l2a(Type)}};
         VendId ->
+	    put({attribute,d2u(Name)}, {VendId,id2i(Id)}),
             {ok,#attribute{name = d2u(Name), id = {VendId,id2i(Id)},type = l2a(Type)}}
     end;
-pd(_X, VName) ->
+pd(["VALUE", Attr, Name, Id], VName) -> 
+    case get({attribute,d2u(Attr)}) of
+	undefined ->
+	    io:format("missing: ~p~n", [Attr]),
+	    false;
+	AttrId ->
+	    io:format("found: ~p -> ~p~n", [Attr, AttrId]),
+	    {ok,#value{id = {AttrId, id2i(Id)}, name = d2u(Name)}}
+    end;
+pd(_X, _VName) ->
     %%io:format("Skipping: ~p~n", [_X]),
     false.
 
