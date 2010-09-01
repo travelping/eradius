@@ -47,11 +47,11 @@ create_tables(Nodes) ->
                                    {disc_copies, Nodes}]).
 
 %% All RAS devices must be known about otherwise packets from them
-%% will be discarded. MF must be of the form {Mod, Func}.
-define_ras(IP, Port, Secret, {Mod, Func}) ->
+%% will be discarded. MFB must be of the form {Mod, Func, Behavior}.
+define_ras(IP, Port, Secret, {Mod, Func, Behavior}) ->
     mnesia:dirty_write(#nas_prop{ip = {IP, Port},
                                  secret = Secret,
-                                 mf = {Mod, Func}}).
+                                 mfb = {Mod, Func, Behavior}}).
 
 trace_on(IP, Port) ->
     set_trace(IP, Port, true).
@@ -245,8 +245,9 @@ dbg(_, _, _) -> ok.
 radius(Server_pid, {udp, Socket, IP, InPortNo, Packet}, Req_id, Nas_prop) ->
     case catch eradius_lib:dec_packet(Packet) of
         #rad_pdu{} = Req_pdu ->
-            {M, F} = Nas_prop#nas_prop.mf,
-            Result = (catch M:F(Req_pdu, Nas_prop)),
+            {M, F, B} = Nas_prop#nas_prop.mfb,
+            Result = (catch M:F(B, Req_pdu, Nas_prop)),
+	    io:format("Result: ~p~n", [Result]),
             case encode_reply(Result, Req_pdu, Nas_prop#nas_prop.secret) of
                 {reply, Reply_packet} ->
                     Server_pid ! {reply, IP, InPortNo, Req_id, Nas_prop, Reply_packet};
