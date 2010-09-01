@@ -10,7 +10,7 @@
 -export([enc_pdu/1, enc_reply_pdu/2, dec_packet/1, enc_accreq/3]).
 -export([mk_authenticator/0, mk_password/3]).
 
--export([dec_packet/1]).  %% useful when debugging
+-export([set_attr/3, set_vend_attr/3, set_vend_attr/2]).
 
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
@@ -336,3 +336,47 @@ zero_bytes(N) ->
 
 l2b(L) when is_list(L)   -> list_to_binary(L);
 l2b(B) when is_binary(B) -> B.
+
+%%% Radius Attribute handling
+
+%%% Set (any) Attribute
+set_attr(R, Id, Val) when is_record(R, rad_accept),
+			  is_integer(Id),
+			  is_binary(Val) ->
+    StdAttrs = R#rad_accept.std_attrs,
+    R#rad_accept{std_attrs = [{Id, Val} | StdAttrs]};
+
+set_attr(R, Id, Val) when is_record(R, rad_accept),
+			  is_integer(Id) ->
+    StdAttrs = R#rad_accept.std_attrs,
+    R#rad_accept{std_attrs = [{Id, Val} | StdAttrs]};
+
+set_attr(R, Id, Val) when is_record(R, rad_accreq),
+                          is_integer(Id) ->
+    StdAttrs = R#rad_accreq.std_attrs,
+    R#rad_accreq{std_attrs = [{Id, Val} | StdAttrs]}.
+
+%%% Vendor Attributes
+set_vend_attr(R, Id, Val) when is_record(R, rad_accept),
+				  is_binary(Val)->
+    VendAttrs = R#rad_accept.vend_attrs,
+    R#rad_accept{vend_attrs = [{Id, Val} | VendAttrs]};
+
+set_vend_attr(R, Id, Val) when is_record(R, rad_accept) ->
+    VendAttrs = R#rad_accept.vend_attrs,
+    R#rad_accept{vend_attrs = [{Id, Val} | VendAttrs]};
+
+set_vend_attr(R, Vid, Attrs) when is_record(R, rad_accreq),
+                                  is_integer(Vid),
+                                  is_list(Attrs) ->
+    VendAttrs = R#rad_accreq.vend_attrs,
+    R#rad_accreq{vend_attrs = [{Vid, Attrs} | VendAttrs]}.
+
+set_vend_attr(R, VAttrs) when is_record(R, rad_accreq),
+			      is_list(VAttrs) ->
+    F = fun({Vid, Attrs}, NewR) ->
+                set_vend_attr(NewR, Vid, Attrs);
+           (_, NewR) -> NewR
+        end,
+    lists:foldl(F, R, VAttrs).
+
