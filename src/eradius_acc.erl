@@ -31,7 +31,8 @@
 	 set_logout_time/2, set_tc_ureq/1, 
 	 set_tc_itimeout/1,set_tc_stimeout/1,
 	 set_tc_areset/1, set_tc_areboot/1, 
-	 set_tc_nasrequest/1, set_tc_nasreboot/1]).
+	 set_tc_nasrequest/1, set_tc_nasreboot/1,
+	 punch/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, 
