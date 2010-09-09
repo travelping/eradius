@@ -109,6 +109,7 @@
 	  vend_id = 1872,  % Alteon
 	  vend_attrs = [], % list_of( {VendorId, list_of( {Id, Val} ) } )
 	  std_attrs  = [], % list_of( {Id, Val} )
+	  raw_attrs  = [], % list_of( #attributes )
 	  user,
 	  nas_ip,
 	  sockopts = [],   % list of extra socket options

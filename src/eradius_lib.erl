@@ -95,9 +95,12 @@ enc_attrib(Pos, R, Def, AttrName, Type) ->
 	    enc_attrib(AttrName, V, Type)
     end.
 
-enc_attrib(AttrName, V, Type) ->
+enc_attrib({Vendor, Id}, V, Type) ->
     Val = type_conv(V, Type),
-    Id = strip_vendor(AttrName), 
+    <<?RVendor_Specific:8, (size(Val) + 8):8, Vendor:32, Id:8, (size(Val) + 2):8, Val/binary >>;
+
+enc_attrib(Id, V, Type) ->
+    Val = type_conv(V, Type),
     <<Id, (size(Val) + 2):8, Val/binary>>.
 
 strip_vendor({_Vendor, Id}) -> Id;
@@ -121,6 +124,10 @@ type_conv(V, octets) when
       is_list(V) -> iolist_to_binary(V);
 type_conv(V, octets) when
       is_binary(V) -> V;
+type_conv({{_,_,_},{_,_,_}} = Date, date) ->
+    EpochSecs = calendar:datetime_to_gregorian_seconds(Date)
+	- calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}),
+    <<EpochSecs:32>>;
 type_conv(V, date) when
       is_list(V) -> iolist_to_binary(V);
 type_conv(V, date) when
@@ -166,7 +173,8 @@ enc_cmd(R) when is_record(R, rad_accreq) ->
       enc_attrib(#rad_accreq.user,        R, Def, ?RUser_Name,       binary),
       enc_attrib(#rad_accreq.nas_ip,      R, Def, ?RNAS_Ip_Address,  ipaddr),
       enc_attributes(R#rad_accreq.std_attrs),
-      enc_vendor_attributes(R#rad_accreq.vend_attrs)
+      enc_vendor_attributes(R#rad_accreq.vend_attrs),
+      enc_raw_attributes(R#rad_accreq.raw_attrs)
      ]};
 enc_cmd(R) when is_record(R, rad_accresp) ->
     Def = #rad_accresp{},
@@ -184,12 +192,24 @@ enc_vendor_attributes(As) ->
 
 enc_attributes(As) ->
     F = fun({Id, Val}, Acc) ->
+		io:format("lookup: ~p, ~p~n", [Id, Val]),
 		case eradius_dict:lookup(Id) of
 		    [A] when is_record(A, attribute) ->
 			[enc_attrib(Id, Val, A#attribute.type) | Acc];
 		    _ ->
 			Acc
 		end
+	end,
+    lists:foldl(F, [], As).
+
+enc_raw_attributes(As) ->
+    F = fun({Id, Val}, Acc) ->
+		{AttrName, Type} = case Id of
+				       #attribute{id = A, type = T} -> {A, T};
+				       R -> {R, undefined}
+				   end,
+		io:format("lookup: ~p, ~p, ~p~n", [AttrName, Type, Val]),
+		[enc_attrib(AttrName, Val, Type) | Acc]
 	end,
     lists:foldl(F, [], As).
 
@@ -272,6 +292,14 @@ dec_attr_val(A, I0) when A#attribute.type == integer ->
     case I0 of
         <<I:L/integer>> ->
             [{A, I}];
+        _ ->
+            [{A, I0}]
+    end;
+dec_attr_val(A, I0) when A#attribute.type == date -> 
+    L = size(I0)*8,
+    case I0 of
+        <<I:L/integer>> ->
+            [{A, calendar:now_to_universal_time({I div 1000000, I rem 1000000, 0})}];
         _ ->
             [{A, I0}]
     end;
