@@ -380,13 +380,18 @@ set_attr(R, Id, Val) when is_record(R, rad_accept),
     R#rad_accept{std_attrs = [{Id, Val} | StdAttrs]};
 
 set_attr(R, Id, Val) when is_record(R, rad_accreq),
+                          is_tuple(Id) ->
+    StdAttrs = R#rad_accreq.std_attrs,
+    R#rad_accreq{std_attrs = [{Id, Val} | StdAttrs]};
+
+set_attr(R, Id, Val) when is_record(R, rad_accreq),
                           is_integer(Id) ->
     StdAttrs = R#rad_accreq.std_attrs,
     R#rad_accreq{std_attrs = [{Id, Val} | StdAttrs]}.
 
 %%% Vendor Attributes
 set_vend_attr(R, Id, Val) when is_record(R, rad_accept),
-				  is_binary(Val)->
+			       is_binary(Val)->
     VendAttrs = R#rad_accept.vend_attrs,
     R#rad_accept{vend_attrs = [{Id, Val} | VendAttrs]};
 
