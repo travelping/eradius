@@ -109,6 +109,7 @@ strip_vendor(Id)            -> Id.
 type_conv(V, _) when is_binary(V) -> V;
 type_conv(V, binary)         -> V;
 type_conv(V, integer)        -> <<V:32>>;
+type_conv(V, integer64)      -> <<V:64>>;
 type_conv({A,B,C,D}, ipaddr) -> <<A:8, B:8, C:8, D:8>>;
 type_conv({A,B,C,D,E,F,G,H}, ipv6addr) -> <<A:16, B:16, C:16, D:16,
 					    E:16, F:16, G:16, H:16>>;
@@ -288,6 +289,14 @@ dec_attributes(A0, Acc) ->
 dec_attr_val(A, Bin) when A#attribute.type == string -> 
     [{A, binary_to_list(Bin)}];
 dec_attr_val(A, I0) when A#attribute.type == integer -> 
+    L = size(I0)*8,
+    case I0 of
+        <<I:L/integer>> ->
+            [{A, I}];
+        _ ->
+            [{A, I0}]
+    end;
+dec_attr_val(A, I0) when A#attribute.type == integer64 -> 
     L = size(I0)*8,
     case I0 of
         <<I:L/integer>> ->
