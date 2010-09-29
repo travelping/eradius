@@ -388,6 +388,11 @@ set_attr(R, Id, Val) when is_record(R, rad_accept),
     StdAttrs = R#rad_accept.std_attrs,
     R#rad_accept{std_attrs = [{Id, Val} | StdAttrs]};
 
+set_attr(R, Id, Val) when is_record(R, rad_accept),
+                          is_tuple(Id) ->
+    StdAttrs = R#rad_accept.std_attrs,
+    R#rad_accept{std_attrs = [{Id, Val} | StdAttrs]};
+
 set_attr(R, Id, Val) when is_record(R, rad_accreq),
                           is_tuple(Id) ->
     StdAttrs = R#rad_accreq.std_attrs,
