@@ -29,8 +29,8 @@ ATTRIBUTE	TP-Zone-Id				17	string
 ATTRIBUTE	TP-Monitor-Id				18	string
 ATTRIBUTE	TP-Related-Session-Id			19	string
 ATTRIBUTE	TP-Monitor-Session-Id			20	integer
-ATTRIBUTE	TP-Max-Input-Octets			21	integer
-ATTRIBUTE	TP-Max-Output-Octets			22	integer
-ATTRIBUTE	TP-Max-Total-Octets			23	integer
+ATTRIBUTE	TP-Max-Input-Octets			21	integer64
+ATTRIBUTE	TP-Max-Output-Octets			22	integer64
+ATTRIBUTE	TP-Max-Total-Octets			23	integer64
 
 END-VENDOR	Travelping
