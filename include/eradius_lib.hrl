@@ -58,7 +58,7 @@
 -record(nas_prop, {
           ip,
           secret,
-          mfb,
+          mfba,
           trace = false
          }).
 
