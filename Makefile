@@ -12,7 +12,7 @@ include master.mk
 .PHONY: all clean install shell 
 
 all:
-	$(ERL) -noinput -eval "case make:all() of up_to_date -> halt(0); error -> halt(1) end."
+	$(ERL) -noinput -eval "case make:all([{d, 'TEST'}]) of up_to_date -> halt(0); error -> halt(1) end."
 	$(MAKE) -C $(PRIV_DIR)
 
 clean:

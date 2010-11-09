@@ -8,10 +8,14 @@
 %%% $Id: eradius_lib.erl,v 1.5 2004/03/26 17:47:19 seanhinde Exp $
 %%%-------------------------------------------------------------------
 -export([enc_pdu/1, enc_reply_pdu/2, dec_packet/1, enc_accreq/3]).
--export([mk_authenticator/0, mk_password/3]).
+-export([mk_authenticator/0, mk_password/3, pad_to/2]).
+-export([generate_salt/0, salt_encrypt/4, salt_decrypt/3]).
 
 -export([set_attr/3, set_vend_attr/3, set_vend_attr/2]).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
 -include("dictionary.hrl").
@@ -22,51 +26,58 @@
 %% Create Attributes
 %%====================================================================
 
-%%% Generate an unpredictable 16 byte token.   FIXME !!
+%%% Generate an unpredictable 16 byte token.
 mk_authenticator() ->
-    {_, A2, A3} = now(),
-    A = erlang:phash(node(), A2),
-    B = erlang:phash(A2, A3),
-    erlang:md5(<<A3, A2, A, B>>).
+    crypto:rand_bytes(16).
 
-mk_password(Secret, Auth, Passwd) ->
-    scramble(Secret, Auth, Passwd).
+mk_password(SharedSecret, RequestAuthenticator, PlainText) ->
+    B = crypto:md5([SharedSecret, RequestAuthenticator]),
+    do_scramble(SharedSecret, B, pad_to(16, PlainText), << >>).
 
-scramble(Secret, Auth, Passwd) ->
-    B = erlang:md5([Secret, Auth]),
-    case xor16(Passwd, B) of
-	{C, <<>>}   -> C;
-	{C, Tail} -> list_to_binary([C, scramble(Secret, C, Tail)])
-    end.
+do_scramble(SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, CipherText) ->
+    NewCipherText = crypto:exor(PlainText, B),
+    Bnext = crypto:md5([SharedSecret, NewCipherText]),
+    do_scramble(SharedSecret, Bnext, Remaining, <<CipherText/binary, NewCipherText/binary>>);
 
-xor16(Passwd, B) when size(Passwd) < 16 ->
-    xor16(pad16(Passwd), B);
-xor16(<<P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,T/binary>>,
-      <<B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,B12,B13,B14,B15,B16>>) ->
-    {<<(P1 bxor B1),
-       (P2  bxor B2),
-       (P3  bxor B3),
-       (P4  bxor B4),
-       (P5  bxor B5),
-       (P6  bxor B6),
-       (P7  bxor B7),
-       (P8  bxor B8),
-       (P9  bxor B9),
-       (P10 bxor B10),
-       (P11 bxor B11),
-       (P12 bxor B12),
-       (P13 bxor B13),
-       (P14 bxor B14),
-       (P15 bxor B15),
-       (P16 bxor B16)>>,
-     T}.
+do_scramble(_SharedSecret, _B, << >>, CipherText) ->
+    CipherText.
 
-pad16(Passwd) ->
-    list_to_binary([Passwd, list_to_binary(zero(16 - size(Passwd)))]).
+%%
+%% pad binary to specific length
+%%   -> http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html
+%%
+pad_to(Width, Binary) ->
+     case (Width - size(Binary) rem Width) rem Width of
+	 0 -> Binary;
+	 N -> <<Binary/binary, 0:(N*8)>>
+     end.
 
-zero(0) -> [];
-zero(N) -> [0 | zero(N-1)].
+generate_salt() ->
+    Salt1 = crypto:rand_uniform(128, 256),
+    Salt2 = crypto:rand_uniform(0, 256),
+    << Salt1, Salt2 >>.
 
+%%
+%% salt encrypt
+%%
+salt_encrypt(Salt, SharedSecret, RequestAuthenticator, PlainText) ->
+    CipherText = do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, pad_to(16, PlainText)),
+    << Salt/binary, CipherText/binary >>.
+
+salt_decrypt(SharedSecret, RequestAuthenticator, <<Salt:2/binary, CipherText/binary>>) ->
+    do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, CipherText).
+
+do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, CipherText) ->
+    B = crypto:md5([SharedSecret, RequestAuthenticator, Salt]),
+    salt_crypt(SharedSecret, B, CipherText, << >>).
+
+salt_crypt(SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, CipherText) ->
+    NewCipherText = crypto:exor(PlainText, B),
+    Bnext = crypto:md5([SharedSecret, NewCipherText]),
+    salt_crypt(SharedSecret, Bnext, Remaining, <<CipherText/binary, NewCipherText/binary>>);
+
+salt_crypt(_SharedSecret, _B, << >>, CipherText) ->
+    CipherText.
 
 %%====================================================================
 %% Encode/Decode Functions
@@ -427,3 +438,29 @@ set_vend_attr(R, VAttrs) when is_record(R, rad_accreq),
         end,
     lists:foldl(F, R, VAttrs).
 
+-ifdef(TEST).
+
+%%
+%% EUnit Tests
+%%
+-define(SALT, <<171,213>>).
+-define(REQUEST_AUTHENTICATOR, << 1, 2, 3, 4, 5, 6, 7, 8 >>).
+-define(SECRET, <<"secret">>).
+-define(PLAIN_TEXT, <<"secret">>).
+-define(PLAIN_TEXT_PADDED, <<"secret",0,0,0,0,0,0,0,0,0,0>>).
+-define(CIPHER_TEXT, <<171,213,211,73,158,111,107,105,34,10,78,216,190,216,26,87,55,15>>).
+-define(ENC_PASSWORD, <<186,128,194,207,68,25,190,19,23,226,48,206,244,143,56,238>>).
+
+selt_encrypt_test() ->
+    ?CIPHER_TEXT = salt_encrypt(?SALT, ?SECRET, ?REQUEST_AUTHENTICATOR, ?PLAIN_TEXT).
+
+selt_decrypt_test() ->
+    ?PLAIN_TEXT_PADDED = eradius_lib:salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, ?CIPHER_TEXT).
+
+mk_password_enc_test() ->
+    ?ENC_PASSWORD = mk_password(?SECRET, ?REQUEST_AUTHENTICATOR, ?PLAIN_TEXT).
+
+mk_password_dec_test() ->
+    ?PLAIN_TEXT_PADDED = mk_password(?SECRET, ?REQUEST_AUTHENTICATOR, ?ENC_PASSWORD).
+
+-endif.
