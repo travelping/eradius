@@ -145,19 +145,19 @@ mk_outfiles(Res, Dir, File) ->
 
 emit([A|T], Hrl, Map) when is_record(A, attribute) ->
     io:format(Hrl, "-define( ~s , ~w ).~n", 
-	      [A#attribute.name, A#attribute.id]),
+	      [d2u(A#attribute.name), A#attribute.id]),
     io:format(Map, "{attribute, ~w, ~w, \"~s\"}.~n", 
 	      [A#attribute.id, A#attribute.type, A#attribute.name]),
     emit(T, Hrl, Map);
 emit([V|T], Hrl, Map) when is_record(V, vendor) ->
     io:format(Hrl, "-define( ~s , ~w ).~n", 
-	      [V#vendor.name, V#vendor.type]),
+	      [d2u(V#vendor.name), V#vendor.type]),
     io:format(Map, "{vendor, ~w, \"~s\"}.~n", 
 	      [V#vendor.type, V#vendor.name]),
     emit(T, Hrl, Map);
 emit([V|T], Hrl, Map) when is_record(V, value) ->
 %%    io:format(Hrl, "-define( ~s , ~w ).~n", 
-%%	      [V#value.attribute, V#value.name, V#value.id]),
+%%	      [V#value.attribute, d2u(V#value.name), V#value.id]),
     io:format(Map, "{value, ~w, \"~s\"}.~n", 
 	      [V#value.id, V#value.name]),
     emit(T, Hrl, Map);
@@ -203,26 +203,25 @@ pd(["VENDOR", Name, Id]) ->
     put({vendor,Name}, l2i(Id)),
     {ok, #vendor{type = l2i(Id), name = Name}};
 pd(["ATTRIBUTE", Name, Id, Type]) -> 
-    put({attribute,d2u(Name)}, id2i(Id)),
-    {ok,#attribute{name = d2u(Name), id = id2i(Id), type = l2a(Type)}};
+    put({attribute,Name}, id2i(Id)),
+    {ok,#attribute{name = Name, id = id2i(Id), type = l2a(Type)}};
 pd(["ATTRIBUTE", Name, Id, Type, Vendor]) -> 
     case get({vendor,Vendor}) of
 	undefined -> 
 	    %% No vendor defined, line must have some other "crap" after Type.
-	    put({attribute,d2u(Name)}, id2i(Id)),
-	    {ok,#attribute{name = d2u(Name), id = id2i(Id), type = l2a(Type)}};
+	    put({attribute,Name}, id2i(Id)),
+	    {ok,#attribute{name = Name, id = id2i(Id), type = l2a(Type)}};
 	VendId ->
-	    put({attribute,d2u(Name)}, {VendId,id2i(Id)}),
-	    {ok,#attribute{name = d2u(Name), id = {VendId,id2i(Id)},type = l2a(Type)}}
+	    put({attribute,Name}, {VendId,id2i(Id)}),
+	    {ok,#attribute{name = Name, id = {VendId,id2i(Id)},type = l2a(Type)}}
     end;
 pd(["VALUE", Attr, Name, Id]) -> 
-    case get({attribute,d2u(Attr)}) of
+    case get({attribute,Attr}) of
 	undefined ->
 	    io:format("missing: ~p~n", [Attr]),
 	    false;
 	AttrId ->
-	    io:format("found: ~p -> ~p~n", [Attr, AttrId]),
-	    {ok,#value{id = {AttrId, id2i(Id)}, name = d2u(Name)}}
+	    {ok,#value{id = {AttrId, id2i(Id)}, name = Name}}
     end;
 pd(_X) -> 
     %%io:format("Skipping: ~p~n", [X]),
@@ -234,20 +233,19 @@ pd(["ATTRIBUTE", Name, Id, Type], VName) ->
     case get({vendor, VName}) of
         undefined ->
             %% No vendor defined, line must have some other "crap" after Type.
-	    put({attribute,d2u(Name)}, id2i(Id)),
-            {ok,#attribute{name = d2u(Name), id = id2i(Id), type = l2a(Type)}};
+	    put({attribute,Name}, id2i(Id)),
+            {ok,#attribute{name = Name, id = id2i(Id), type = l2a(Type)}};
         VendId ->
-	    put({attribute,d2u(Name)}, {VendId,id2i(Id)}),
-            {ok,#attribute{name = d2u(Name), id = {VendId,id2i(Id)},type = l2a(Type)}}
+	    put({attribute,Name}, {VendId,id2i(Id)}),
+            {ok,#attribute{name = Name, id = {VendId,id2i(Id)},type = l2a(Type)}}
     end;
 pd(["VALUE", Attr, Name, Id], VName) -> 
-    case get({attribute,d2u(Attr)}) of
+    case get({attribute,Attr}) of
 	undefined ->
 	    io:format("missing: ~p~n", [Attr]),
 	    false;
 	AttrId ->
-	    io:format("found: ~p -> ~p~n", [Attr, AttrId]),
-	    {ok,#value{id = {AttrId, id2i(Id)}, name = d2u(Name)}}
+	    {ok,#value{id = {AttrId, id2i(Id)}, name = Name}}
     end;
 pd(_X, _VName) ->
     %%io:format("Skipping: ~p~n", [_X]),
