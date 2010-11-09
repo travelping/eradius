@@ -13,7 +13,9 @@
 -record(attribute, {
 	  id,         % integer
 	  type,       % atom
-	  name}).     % string
+	  name,       % string
+	  attrs}).    % list
+
 
 -record(vendor, {
 	  type,       % integer

@@ -143,12 +143,21 @@ mk_outfiles(Res, Dir, File) ->
     emit(Res, Hrl, Map),
     close_files(Hrl, Map).
 
-emit([A|T], Hrl, Map) when is_record(A, attribute) ->
+emit([A|T], Hrl, Map) when is_record(A, attribute), A#attribute.attrs =:= undefined ->
     io:format(Hrl, "-define( ~s , ~w ).~n", 
 	      [d2u(A#attribute.name), A#attribute.id]),
     io:format(Map, "{attribute, ~w, ~w, \"~s\"}.~n", 
 	      [A#attribute.id, A#attribute.type, A#attribute.name]),
     emit(T, Hrl, Map);
+
+emit([A|T], Hrl, Map) when is_record(A, attribute) ->
+    io:format("A: ~p~n", [A]),
+    io:format(Hrl, "-define( ~s , ~w ).~n", 
+	      [d2u(A#attribute.name), A#attribute.id]),
+    io:format(Map, "{attribute, ~w, ~w, \"~s\", ~p}.~n", 
+	      [A#attribute.id, A#attribute.type, A#attribute.name, A#attribute.attrs]),
+    emit(T, Hrl, Map);
+
 emit([V|T], Hrl, Map) when is_record(V, vendor) ->
     io:format(Hrl, "-define( ~s , ~w ).~n", 
 	      [d2u(V#vendor.name), V#vendor.type]),
@@ -197,24 +206,55 @@ parse_dict(File) when is_list(File) ->
     {_, L} = lists:foldl(F,{undefined, []},string:tokens(b2l(B),"\n")),
     L.
 
+paa({VendId, Attrs} = _State, ["has_tag"]) ->
+    {VendId, [has_tag | Attrs]};
+
+paa({VendId, Attrs} = State, ["encrypt", Enc]) ->
+    case l2i(Enc) of
+	1 -> {VendId, [scramble | Attrs]};
+	2 -> {VendId, [salt_crypt | Attrs]};
+	_ -> State
+    end;
+
+paa({_VendId, Attrs} = _State, [Vendor]) ->
+    {get({vendor, Vendor}), Attrs}.
+
+parse_attribute_attrs(Tail) ->
+    parse_attribute_attrs({undefined, []}, Tail).
+
+parse_attribute_attrs(State, []) ->
+    State;
+
+parse_attribute_attrs(State, [ [$# | _ ] | _]) ->
+    State;
+
+parse_attribute_attrs(State, [Attribute|Tail]) ->
+    [Token | Rest] = string:tokens(Attribute, ","),
+    NewState = paa(State, string:tokens(Token, "=")),
+    parse_attribute_attrs(NewState, Rest ++ Tail).
+
 pd(["BEGIN-VENDOR", Name]) ->
     {begin_vendor, Name};
 pd(["VENDOR", Name, Id]) ->
     put({vendor,Name}, l2i(Id)),
     {ok, #vendor{type = l2i(Id), name = Name}};
-pd(["ATTRIBUTE", Name, Id, Type]) -> 
-    put({attribute,Name}, id2i(Id)),
-    {ok,#attribute{name = Name, id = id2i(Id), type = l2a(Type)}};
-pd(["ATTRIBUTE", Name, Id, Type, Vendor]) -> 
-    case get({vendor,Vendor}) of
-	undefined -> 
-	    %% No vendor defined, line must have some other "crap" after Type.
-	    put({attribute,Name}, id2i(Id)),
-	    {ok,#attribute{name = Name, id = id2i(Id), type = l2a(Type)}};
-	VendId ->
-	    put({attribute,Name}, {VendId,id2i(Id)}),
-	    {ok,#attribute{name = Name, id = {VendId,id2i(Id)},type = l2a(Type)}}
+pd(["ATTRIBUTE", Name, Id, Type | Tail]) -> 
+    {VendId, Attrs} = parse_attribute_attrs(Tail),
+    R = case VendId of
+	    undefined ->
+		put({attribute,Name}, id2i(Id)),
+		#attribute{name = Name, id = id2i(Id), type = l2a(Type)};
+	    _ ->
+		put({attribute,Name}, {VendId,id2i(Id)}),
+		#attribute{name = Name, id = {VendId,id2i(Id)},type = l2a(Type)}
+	end,
+    case Attrs of
+	[] ->
+	    {ok, R};
+	_ ->
+	    {ok, R#attribute{attrs = Attrs}}
     end;
+
 pd(["VALUE", Attr, Name, Id]) -> 
     case get({attribute,Attr}) of
 	undefined ->
@@ -229,15 +269,23 @@ pd(_X) ->
 
 pd(["END-VENDOR", _Name], _VName) ->
     {end_vendor};
-pd(["ATTRIBUTE", Name, Id, Type], VName) ->
-    case get({vendor, VName}) of
-        undefined ->
-            %% No vendor defined, line must have some other "crap" after Type.
-	    put({attribute,Name}, id2i(Id)),
-            {ok,#attribute{name = Name, id = id2i(Id), type = l2a(Type)}};
-        VendId ->
-	    put({attribute,Name}, {VendId,id2i(Id)}),
-            {ok,#attribute{name = Name, id = {VendId,id2i(Id)},type = l2a(Type)}}
+
+pd(["ATTRIBUTE", Name, Id, Type | Tail], VName) -> 
+    R = case get({vendor, VName}) of
+	    undefined ->
+		put({attribute,Name}, id2i(Id)),
+		#attribute{name = Name, id = id2i(Id), type = l2a(Type)};
+	    VendId ->
+		put({attribute,Name}, {VendId,id2i(Id)}),
+		#attribute{name = Name, id = {VendId,id2i(Id)},type = l2a(Type)}
+	end,
+
+    {_, Attrs} = parse_attribute_attrs(Tail),
+    case Attrs of
+	[] ->
+	    {ok, R};
+	_ ->
+	    {ok, R#attribute{attrs = Attrs}}
     end;
 pd(["VALUE", Attr, Name, Id], VName) -> 
     case get({attribute,Attr}) of
