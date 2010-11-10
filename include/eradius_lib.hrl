@@ -71,53 +71,18 @@
 
 -record(rad_pdu, {
 	  reqid,
+	  secret,
 	  authenticator,
-	  cmd              % one of the records below
-	 }).
-
--record(rad_request, {
-	  user,
-	  passwd = <<>>,
-	  nas_ip,
-	  state = <<>>
-	 }).
-
--record(rad_accept, {
-	  user,
-	  vend_attrs = [], % list_of( {VendorId, list_of( {Id, Val} ) } )
-	  std_attrs  = [], % list_of( {Id, Val} )
-	  session_timeout = 0,
-	  idle_timeout = 0
-	 }).
-
--record(rad_challenge, {
 	  state,
-	  reply_msgs = [], % list of binaries
-	  session_timeout = 0
-	 }).
-
--record(rad_reject, {
-	  reply_msgs = []  % list of binaries
-	 }).
-
--record(rad_accreq, {      % accounting request
-	  status_type,
-	  session_time,
-	  login_time,      % erlang:now/0
-	  logout_time,     % erlang:now/0
-	  session_id,
-	  vend_id = 1872,  % Alteon
-	  vend_attrs = [], % list_of( {VendorId, list_of( {Id, Val} ) } )
-	  std_attrs  = [], % list_of( {Id, Val} )
-	  raw_attrs  = [], % list_of( #attributes )
-	  user,
 	  nas_ip,
-	  sockopts = [],   % list of extra socket options
-	  servers,         % overrides the #radacct{} content
-	  timeout = 5000,  % -- "" --  , default is 5 seconds
-	  term_cause}).
+	  req              % radius_request
+}).
 
--record(rad_accresp, {}).  % accounting response
-
+-record(radius_request, {
+	  cmd,             % rad_request, rad_accept, rad_challenge, rad_reject, rad_accreq, rad_accresp
+	  servers,
+	  timeout,
+	  attrs  = []
+	 }).
 
 -endif.

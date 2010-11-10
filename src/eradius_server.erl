@@ -261,7 +261,7 @@ radius(Server_pid, {udp, Socket, IP, InPortNo, Packet}, Req_id, Nas_prop) ->
 encode_reply({'EXIT', Reason}, _Pdu, _Secret) ->
     {discard, Reason};
 encode_reply(Resp, Req_pdu, Secret) ->
-    Reply = eradius_lib:enc_reply_pdu(Req_pdu#rad_pdu{cmd = Resp}, Secret),
+    Reply = eradius_lib:enc_reply_pdu(Req_pdu#rad_pdu{secret = Secret, req = Resp}),
     {reply, Reply}.
 
 printable_date() ->

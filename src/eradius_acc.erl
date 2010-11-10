@@ -24,11 +24,10 @@
 	 acc_start/1, acc_stop/1, 
 	 validate_servers/1, start/0, 
 	 set_user/2, set_nas_ip_address/1, set_nas_ip_address/2, 
- 	 set_sockopts/2,
-	 set_login_time/1, set_logout_time/1, set_session_id/2, new/0,
+	 set_session_id/2, new/0,
 	 set_radacct/1, acc_update/1,
-	 set_servers/2, set_timeout/2, set_login_time/2,  set_vendor_id/2,
-	 set_logout_time/2, set_tc_ureq/1, 
+	 set_servers/2, set_timeout/2, 
+	 set_tc_ureq/1, 
 	 set_tc_itimeout/1,set_tc_stimeout/1,
 	 set_tc_areset/1, set_tc_areboot/1, 
 	 set_tc_nasrequest/1, set_tc_nasreboot/1,
@@ -58,76 +57,69 @@
 %%% ====================================================================
 
 %%% Create ADT
-new() -> #rad_accreq{}.
-
-%%% Vendor Id
-set_vendor_id(R, VendId) when is_record(R, rad_accreq),is_integer(VendId) ->
-    R#rad_accreq{vend_id = VendId}.
+new() -> #radius_request{ cmd = accreq }.
 
 %%% User
-set_user(R, User) when is_record(R, rad_accreq) ->
-    R#rad_accreq{user = any2bin(User)}.
+set_user(R, User) when is_record(R, radius_request),
+		       R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RUser_Name, any2bin(User)).
 
 %%% NAS-IP
-set_nas_ip_address(R) when is_record(R, rad_accreq) ->
-    R#rad_accreq{nas_ip = nas_ip_address()}.
+set_nas_ip_address(R) when is_record(R, radius_request),
+			   R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RNAS_Ip_Address, nas_ip_address()).
 
-set_nas_ip_address(R, Ip) when is_record(R, rad_accreq),is_tuple(Ip) ->
-    R#rad_accreq{nas_ip = Ip}.
-
-%%% Extra socket options
-set_sockopts(R, SockOpts) when is_record(R, rad_accreq),is_list(SockOpts) ->
-    R#rad_accreq{sockopts = SockOpts}.
-
-%%% Login / Logout
-set_login_time(R) ->
-    set_login_time(R, erlang:now()).
-
-set_login_time(R, Login) when is_record(R, rad_accreq) ->
-    R#rad_accreq{login_time = Login}.
-
-set_logout_time(R) ->
-     set_logout_time(R, erlang:now()).
-
-set_logout_time(R, Logout) when is_record(R, rad_accreq) ->
-    SessTime = compute_session_time(R#rad_accreq.login_time, Logout),
-    R#rad_accreq{session_time = SessTime,
-		 logout_time = Logout}.
+set_nas_ip_address(R, Ip) when is_record(R, radius_request),
+			       R#radius_request.cmd =:= accreq,
+			       is_tuple(Ip) ->
+    eradius_lib:set_attr(R, ?RNAS_Ip_Address, Ip).
 
 %%% Terminate Cause
-set_tc_ureq(R) when is_record(R, rad_accreq) ->
-    R#rad_accreq{term_cause = ?RTCUser_Request}.
+set_tc_ureq(R) when is_record(R, radius_request),
+		    R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RTerminate_Cause, ?RTCUser_Request).
 
-set_tc_itimeout(R) when is_record(R, rad_accreq) ->
-    R#rad_accreq{term_cause = ?RTCIdle_Timeout}.
+set_tc_itimeout(R) when is_record(R, radius_request),
+			R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RTerminate_Cause, ?RTCIdle_Timeout).
 
-set_tc_stimeout(R) when is_record(R, rad_accreq) ->
-    R#rad_accreq{term_cause = ?RTCSession_Timeout}.
+set_tc_stimeout(R) when is_record(R, radius_request),
+			R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RTerminate_Cause, ?RTCSession_Timeout).
 
-set_tc_areset(R) when is_record(R, rad_accreq) ->
-    R#rad_accreq{term_cause = ?RTCAdmin_Reset}.
+set_tc_areset(R) when is_record(R, radius_request),
+		      R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RTerminate_Cause, ?RTCAdmin_Reset).
 
-set_tc_areboot(R) when is_record(R, rad_accreq) ->
-    R#rad_accreq{term_cause = ?RTCAdmin_Reboot}.
+set_tc_areboot(R) when is_record(R, radius_request),
+		       R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RTerminate_Cause, ?RTCAdmin_Reboot).
 
-set_tc_nasrequest(R) when is_record(R, rad_accreq) ->
-    R#rad_accreq{term_cause = ?RTCNAS_Request}.
+set_tc_nasrequest(R) when is_record(R, radius_request),
+			  R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RTerminate_Cause, ?RTCNAS_Request).
 
-set_tc_nasreboot(R) when is_record(R, rad_accreq) ->
-    R#rad_accreq{term_cause = ?RTCNAS_Reboot}.
+set_tc_nasreboot(R) when is_record(R, radius_request),
+			 R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RTerminate_Cause, ?RTCNAS_Reboot).
 
 %%% Session ID
-set_session_id(R, Id) when is_record(R, rad_accreq) ->
-    R#rad_accreq{session_id = any2bin(Id)}.
+set_session_id(R, Id) when is_record(R, radius_request),
+			   R#radius_request.cmd =:= accreq ->
+    eradius_lib:set_attr(R, ?RSession_Id, any2bin(Id)).
 
 %%% Server Info
-set_servers(R, Srvs) when is_record(R, rad_accreq) ->
-    R#rad_accreq{servers = Srvs}.
+set_servers(R, Srvs) when is_record(R, radius_request),
+			  R#radius_request.cmd =:= accreq ->
+    R#radius_request{servers = Srvs}.
 
-set_timeout(R, Timeout) when is_record(R, rad_accreq),is_integer(Timeout) ->
-    R#rad_accreq{timeout = Timeout}.
+set_timeout(R, Timeout) when is_record(R, radius_request),
+			     R#radius_request.cmd =:= accreq,
+			     is_integer(Timeout) ->
+    R#radius_request{timeout = Timeout}.
 
-set_radacct(Radacct) when is_record(Radacct,radacct) ->
+set_radacct(Radacct) when is_record(Radacct, radius_request),
+			  Radacct#radius_request.cmd =:= accreq ->
     gen_server:call(?SERVER, {set_radacct, Radacct}).
 
 
@@ -152,19 +144,19 @@ start() ->
 %% Purpose: 
 %%-----------------------------------------------------------------
 
-acc_on(Req) when is_record(Req,rad_accreq) ->
+acc_on(Req) when is_record(Req,radius_request) ->
     gen_server:cast(?SERVER, {acc_on, Req}).
 
-acc_off(Req) when is_record(Req,rad_accreq) ->
+acc_off(Req) when is_record(Req,radius_request) ->
     gen_server:cast(?SERVER, {acc_off, Req}).
 
-acc_start(Req) when is_record(Req,rad_accreq) ->
+acc_start(Req) when is_record(Req,radius_request) ->
     gen_server:cast(?SERVER, {acc_start, Req}).
 
-acc_stop(Req) when is_record(Req,rad_accreq) ->
+acc_stop(Req) when is_record(Req,radius_request) ->
     gen_server:cast(?SERVER, {acc_stop, Req}).
 
-acc_update(Req) when is_record(Req,rad_accreq) ->
+acc_update(Req) when is_record(Req,radius_request) ->
     gen_server:cast(?SERVER, {acc_update, Req}).
 
 
@@ -239,27 +231,27 @@ punch_acc(Req, State, Stype) ->
     case get_servers(Req,State) of
 	{Srvs,Timeout} ->
 	    punch(Srvs, Timeout,
-		 Req#rad_accreq{status_type = Stype});
+		 eradius_lib:set_attr(Req, ?RStatus_Type, Stype));
 	_ ->
 	    false
     end.
 
 %% Servers defined in the rad_accreq{} record
 %% overrides the State info.
-get_servers(Req,State) ->
-    Def = #rad_accreq{},
-    case {Req#rad_accreq.servers, Def#rad_accreq.servers} of
+get_servers(Req, State) ->
+    Def = #radius_request{},
+    case {Req#radius_request.servers, Def#radius_request.servers} of
 	{X,X} ->
 	    %% Ok, Req hadn't set the servers so lets
 	    %% use whatever we have in the State.
-	    if record(State#s.r, radacct) -> 
+	    if is_record(State#s.r, radacct) -> 
 		    R = State#s.r,
 		    {R#radacct.servers, R#radacct.timeout};
 	       true ->
 		    false
 	    end;
 	{Srvs,_} ->
-	    {Srvs, Req#rad_accreq.timeout}
+	    {Srvs, Req#radius_request.timeout}
     end.
 	 
 	    
@@ -310,8 +302,10 @@ do_punch([[Ip,Port,Shared] | Rest], Timeout, Req) ->
 	    do_punch(Rest, Timeout, Req);
 	Resp when is_record(Resp, rad_pdu) ->
 	    %% Not really necessary...
-	    if is_record(Resp#rad_pdu.cmd, rad_accresp) -> true;
-	       true                                  -> false
+	    R = Resp#rad_pdu.req,
+	    if is_record(R, radius_request),
+	       R#radius_request.cmd =:= accreq -> true;
+	       true                            -> false
 	    end
     end.
 	    
@@ -329,22 +323,6 @@ recv_wait(S, Timeout) ->
     after Timeout ->
 	    timeout 
     end.
-
-
-%% Login = Logout = {MSec, Sec, uSec} | integer()
-%% (In the second form it is erlang:now() in seconds)
-compute_session_time(Login0, Logout0) ->
-    Login = to_now(Login0),
-    Logout = to_now(Logout0),
-    calendar:datetime_to_gregorian_seconds(calendar:now_to_local_time(Logout)) -
-	calendar:datetime_to_gregorian_seconds(calendar:now_to_local_time(Login)).
-
-to_now(Now = {MSec, Sec, USec}) when is_integer(MSec),
-				     is_integer(Sec), is_integer(USec) ->
-    Now;
-to_now(Now) when is_integer(Now) ->
-    {Now div 1000000, Now rem 1000000, 0}.
-
 
 any2bin(I) when is_integer(I) -> list_to_binary(integer_to_list(I));
 any2bin(L) when is_list(L)    -> list_to_binary(L);

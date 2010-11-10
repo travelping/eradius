@@ -200,13 +200,17 @@ wloop(E, User0, Passwd0, [[Ip,Port,Secret0]|Srvs], State) ->
     Secret = list_to_binary(Secret0),
     Passwd = list_to_binary(Passwd0),
     User   = list_to_binary(User0),
-    RPasswd = eradius_lib:mk_password(Secret, Auth, Passwd),
+
+    R1 = #radius_request{ cmd = ?RAccess_Request },
+    R2 = eradius_lib:set_attr(R1, ?RUser_Name, User),
+    R3 = eradius_lib:set_attr(R2, ?RUser_Passwd, Passwd),
+
     Pdu = #rad_pdu{reqid = Id,
 		   authenticator = Auth,
-		   cmd = #rad_request{user = User,
-				      passwd = RPasswd,
-				      state = State,
-				      nas_ip = E#eradius.nas_ip_address}},
+		   secret = Secret,
+		   state = State,
+		   nas_ip = E#eradius.nas_ip_address,
+		   req = R3},
     ?TRACEFUN(E,"sending RADIUS request for ~s to ~p",
 	      [binary_to_list(User), {Ip, Port}]),
     Req = eradius_lib:enc_pdu(Pdu),
@@ -258,7 +262,7 @@ recv_wait(S, Timeout) ->
     end.
 
 decode_response(Resp, _E) when is_record(Resp, rad_pdu) ->
-    Resp#rad_pdu.cmd;
+    Resp#rad_pdu.req#radius_request.cmd;
 decode_response(timeout, _AuthSpec) ->
     timeout;
 decode_response(Resp, _AuthSpec) ->
