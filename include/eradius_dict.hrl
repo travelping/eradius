@@ -9,22 +9,25 @@
 %%% $Id: eradius_dict.hrl,v 1.1 2003/10/27 23:39:40 etnt Exp $
 %%%-------------------------------------------------------------------
 
+-type attribute_id() :: integer() | {integer(), integer()}.
 
 -record(attribute, {
-	  id,         % integer
-	  type,       % atom
-	  name,       % string
-	  attrs}).    % list
+	  id         :: attribute_id(),
+	  type       :: atom(),
+	  name       :: string(),
+	  attrs      :: list()
+	 }).
 
 
 -record(vendor, {
-	  type,       % integer
-	  name}).     % string
+	  type       :: integer(),
+	  name       :: string()
+	 }).
 
 -record(value, {
-	  id,         % integer
-	  name}).     % string
-
+	  id         :: integer(),
+	  name       :: string()
+}).
 
 -endif.
 
