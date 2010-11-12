@@ -313,13 +313,17 @@ send_recv_msg(Ip, Port, Timeout, Req) ->
     {ok, S} = gen_udp:open(0, [binary]),
     gen_udp:send(S, Ip, Port, Req),
     Resp = recv_wait(S, Timeout),
+    Reply = if 
+		is_binary(Resp) -> eradius_lib:dec_packet(Resp);
+		true ->  Resp
+	    end,
     gen_udp:close(S),
-    Resp.
+    Reply.
 
 recv_wait(S, Timeout) ->
     receive 
 	{udp, S, _IP, _Port, Packet} -> 
-	    eradius_lib:dec_packet(Packet)
+	    Packet
     after Timeout ->
 	    timeout 
     end.

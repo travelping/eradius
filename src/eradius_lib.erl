@@ -97,24 +97,41 @@ enc_reply_pdu(Pdu) ->
     Reply_auth = crypto:md5([Head, Auth, Cmd, Pdu#rad_pdu.secret]),
     [Head, Reply_auth, Cmd].
 
-enc_apply_attrs(Pdu, Val, [H|T]) ->
-    NewVal = case H of 
-		 has_tag -> Val;
-		 scramble -> scramble(Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
-		 salt_crypt -> salt_encrypt(generate_salt(), Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
-		 _ -> Val
-    end,
-    enc_apply_attrs(Pdu, NewVal, T);
+enc_apply_enc(Pdu, Val, scramble) ->
+    scramble(Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
 
-enc_apply_attrs(_Pdu, Val, []) ->
+enc_apply_enc(Pdu, Val, salt_crypt) ->
+    salt_encrypt(generate_salt(), Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
+
+enc_apply_enc(_Pdu, Val, _) ->
     Val.
 
-enc_attrib(Pdu, {Vendor, Id}, V, Type, Attrs) ->
-    Val = enc_apply_attrs(Pdu, type_conv(V, Type), Attrs),
-    <<?RVendor_Specific:8, (size(Val) + 8):8, Vendor:32, Id:8, (size(Val) + 2):8, Val/binary >>;
+enc_attrib(Pdu, {Vendor, Id}, V, Type, Enc) ->
+    Val = enc_attrib(Pdu, Id, V, Type, Enc),
+    <<?RVendor_Specific:8, (size(Val) + 6):8, Vendor:32, Val/binary >>;
 
-enc_attrib(Pdu, Id, V, Type, Attrs) ->
-    Val = enc_apply_attrs(Pdu, type_conv(V, Type), Attrs),
+enc_attrib(_Pdu, Id, V, {tagged, Type}, no) ->
+    case V of
+	{Tag, Val} when Tag >= 1, Tag =< 16#1F ->
+	    E = type_conv(Val, Type),
+	    <<Id, (size(Val) + 3):8, Tag:8, E/binary>>;
+	Val ->
+	    E = type_conv(Val, Type),
+	    <<Id, (size(Val) + 2):8, E/binary>>
+    end;
+
+enc_attrib(Pdu, Id, V, {tagged, Type}, Enc) ->
+    case V of
+	{Tag, Val} when Tag >= 1, Tag =< 16#1F ->
+	    E = enc_apply_enc(Pdu, type_conv(Val, Type), Enc),
+	    <<Id, (size(Val) + 3):8, Tag:8, E/binary>>;
+	Val ->
+	    E = enc_apply_enc(Pdu, type_conv(Val, Type), Enc),
+	    <<Id, (size(Val) + 3):8, 0:8, E/binary>>
+    end;
+
+enc_attrib(Pdu, Id, V, Type, Enc) ->
+    Val = enc_apply_enc(Pdu, type_conv(V, Type), Enc),
     <<Id, (size(Val) + 2):8, Val/binary>>.
 
 type_conv(V, _) when is_binary(V) -> V;
@@ -168,10 +185,12 @@ enc_cmd(_Pdu, Req) when Req#radius_request.cmd =:= accresp ->
     {?RAccounting_Response, []}.
 
 enc_attributes(Pdu, As) ->
-    F = fun({Id, Val}, Acc) ->
+    F = fun({#attribute{id = Id} = A, Val}, Acc) ->
+		[enc_attrib(Pdu, Id, Val, A#attribute.type, A#attribute.enc) | Acc];
+           ({Id, Val}, Acc) ->
 		case eradius_dict:lookup(Id) of
 		    [A] when is_record(A, attribute) ->
-			[enc_attrib(Pdu, Id, Val, A#attribute.type, A#attribute.attrs) | Acc];
+			[enc_attrib(Pdu, Id, Val, A#attribute.type, A#attribute.enc) | Acc];
 		    _ ->
 			Acc
 		end
@@ -235,87 +254,108 @@ dec_packet0(Packet, Secret) ->
 	__Len1 = __Len0 - 2,
 	<<Val:__Len1/binary, A1/binary>> = __R).
 
- 
-dec_apply_attrs(Pdu, Val, [H|T]) ->
-    NewVal = case H of 
-		 has_tag -> Val;
-		 scramble -> scramble(Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
-		 salt_crypt -> salt_decrypt(Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
-		 _ -> Val
-    end,
-    dec_apply_attrs(Pdu, NewVal, T);
+dec_apply_enc(Pdu, Val, scramble) ->
+    scramble(Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
 
-dec_apply_attrs(_Pdu, Val, []) ->
+dec_apply_enc(Pdu, Val, salt_crypt) ->
+    salt_decrypt(Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
+
+dec_apply_enc(_Pdu, Val, _) ->
     Val.
 
 dec_attributes(Pdu, As) -> 
-    dec_attributes(Pdu, As, []).
+    lists:flatten(dec_attributes(Pdu, As, [])).
 
 dec_attributes(_Pdu, <<>>, Acc) -> Acc;
 dec_attributes(Pdu, A0, Acc) ->
     ?dec_attrib(A0, Type, Val, A1),
     case eradius_dict:lookup(Type) of
 	[A] when is_record(A, attribute) ->
-	    dec_attributes(Pdu, A1, dec_apply_attrs(Pdu, dec_attr_val(A,Val), A#attribute.attrs) ++ Acc);
+	    dec_attributes(Pdu, A1, [dec_attr(Pdu, A, Val) | Acc]);
 	_ ->
 	    dec_attributes(Pdu, A1, [{Type, Val} | Acc])
     end.
 
-dec_attr_val(A, Bin) when A#attribute.type == string -> 
-    [{A, binary_to_list(Bin)}];
-dec_attr_val(A, I0) when A#attribute.type == integer -> 
-    L = size(I0)*8,
-    case I0 of
-        <<I:L/integer>> ->
-            [{A, I}];
-        _ ->
-            [{A, I0}]
-    end;
-dec_attr_val(A, I0) when A#attribute.type == integer64 -> 
-    L = size(I0)*8,
-    case I0 of
-        <<I:L/integer>> ->
-            [{A, I}];
-        _ ->
-            [{A, I0}]
-    end;
-dec_attr_val(A, I0) when A#attribute.type == date -> 
-    L = size(I0)*8,
-    case I0 of
-        <<I:L/integer>> ->
-            [{A, calendar:now_to_universal_time({I div 1000000, I rem 1000000, 0})}];
-        _ ->
-            [{A, I0}]
-    end;
-dec_attr_val(A, <<B,C,D,E>>) when A#attribute.type == ipaddr -> 
-    [{A, {B,C,D,E}}];
-dec_attr_val(A, <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16>>) when A#attribute.type == ipv6addr -> 
-    [{A, {B,C,D,E,F,G,H,I}}];
-dec_attr_val(A, <<0,PLen,P/binary>>) when A#attribute.type == ipv6prefix ->
-    <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16>> = pad_to(128, P),
-    [{A, {{B,C,D,E,F,G,H,I}, PLen}}];
-dec_attr_val(A, Bin) when A#attribute.type == octets -> 
-    case A#attribute.id of
-	?Vendor_Specific ->
-	    <<VendId:32/integer, VendVal/binary>> = Bin,
-	    dec_vend_attr_val(VendId, VendVal);
-	_ ->
-	    [{A, Bin}]
-    end;
-dec_attr_val(A, Val) -> 
-    io:format("Uups...A=~p~n",[A]),
-    [{A, Val}].
+dec_attr(Pdu, #attribute{id = Id, type = _Type, enc = _Enc} = _A, <<VendId:32/integer, VendVal/binary>>)
+  when Id =:= ?RVendor_Specific ->
+    %% TODO: add Vendor Type lookup
+    dec_vendor_v1_attr_val(Pdu, VendId, VendVal);
 
-dec_vend_attr_val(_VendId, <<>>) -> [];
-dec_vend_attr_val(VendId, <<Vtype:8, Vlen:8, Vbin/binary>>) ->
+dec_attr(_Pdu, #attribute{id = _Id, type = {tagged, Type}, enc = Enc} = A, <<T:8, R/binary>> = Bin)
+  when Enc =:= no->
+    Val = if 
+	      T >= 1, T =< 16#1F -> {T, dec_attr_val(Type, R)};
+	      true -> {0, dec_attr_val(Type, Bin)}
+	  end,
+    {A, Val};
+
+dec_attr(Pdu, #attribute{id = _Id, type = {tagged, Type}, enc = Enc} = A, <<T:8, R/binary>> = _Bin) ->
+    Tag = if 
+	T >= 1, T =< 16#1F -> T;
+	      true -> 0
+	  end,
+    {A, {Tag, dec_attr_val(Type, dec_apply_enc(Pdu, R, Enc))}};
+
+dec_attr(Pdu, #attribute{id = _Id, type = Type, enc = Enc} = A, Bin) ->
+    {A, dec_attr_val(Type, dec_apply_enc(Pdu, Bin, Enc))}.
+
+dec_attr_val(string, Bin) ->
+    binary_to_list(Bin);
+
+dec_attr_val(octets, Bin) ->
+    Bin;
+
+dec_attr_val(integer, I0) ->
+    L = size(I0)*8,
+    case I0 of
+        <<I:L/integer>> ->
+	    I;
+        _ ->
+            I0
+    end;
+
+dec_attr_val(integer64, I0) ->
+    L = size(I0)*8,
+    case I0 of
+        <<I:L/integer>> ->
+            I;
+        _ ->
+            I0
+    end;
+
+dec_attr_val(date, I0) ->
+    L = size(I0)*8,
+    case I0 of
+        <<I:L/integer>> ->
+            calendar:now_to_universal_time({I div 1000000, I rem 1000000, 0});
+        _ ->
+            I0
+    end;
+
+dec_attr_val(ipaddr, <<B,C,D,E>>) ->
+    {B,C,D,E};
+
+dec_attr_val(ipv6addr, <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16>>) ->
+    {B,C,D,E,F,G,H,I};
+
+dec_attr_val(ipv6prefix, <<0,PLen,P/binary>>) ->
+    <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16>> = pad_to(128, P),
+    {{B,C,D,E,F,G,H,I}, PLen};
+
+dec_attr_val(Type, Val) -> 
+    io:format("Uups...Type=~p~n",[Type]),
+    Val.
+
+dec_vendor_v1_attr_val(_Pdu, _VendId, <<>>) -> [];
+dec_vendor_v1_attr_val(Pdu, VendId, <<Vtype:8, Vlen:8, Vbin/binary>>) ->
     Len = Vlen - 2,
     <<Vval:Len/binary,Vrest/binary>> = Vbin,
-    Vkey = {VendId,Vtype},
+    Vkey = {VendId, Vtype},
     case eradius_dict:lookup(Vkey) of
 	[A] when is_record(A, attribute) ->
-	    dec_attr_val(A, Vval) ++ dec_vend_attr_val(VendId, Vrest);
+	    [dec_attr(Pdu, A, Vval) | dec_vendor_v1_attr_val(Pdu, VendId, Vrest)];
 	_ ->
-	    [{Vkey,Vval} | dec_vend_attr_val(VendId, Vrest)]
+	    [{Vkey, Vval} | dec_vendor_v1_attr_val(Pdu, VendId, Vrest)]
     end.
     
 
@@ -385,22 +425,40 @@ scramble_dec_test() ->
 
 enc_simple_test() ->
     L = length(?USER) + 2,
-    << ?User_Name, L:8, ?USER >> = enc_attrib(?PDU, ?User_Name, << ?USER >>, string, []).
+    << ?RUser_Name, L:8, ?USER >> = enc_attrib(?PDU, ?RUser_Name, << ?USER >>, string, []).
 
 enc_scramble_test() ->
     L = 16 + 2,
-    << ?User_Password, L:8, ?ENC_PASSWORD >> = enc_attrib(?PDU, ?User_Password, << ?PLAIN_TEXT >>, string, [scramble]).
+    << ?RUser_Passwd, L:8, ?ENC_PASSWORD >> = enc_attrib(?PDU, ?RUser_Passwd, << ?PLAIN_TEXT >>, string, scramble).
 
 enc_salt_test() ->
-    L = 16 + 2,
-    << ?User_Password, L:8, Enc/binary >> = enc_attrib(?PDU, ?User_Password, << ?PLAIN_TEXT >>, string, [salt_enrypt]),
+    L = 16 + 4,
+    << ?RUser_Passwd, L:8, Enc/binary >> = enc_attrib(?PDU, ?RUser_Passwd, << ?PLAIN_TEXT >>, string, salt_crypt),
     %% need to decrypt to verfiy due to salt
     ?PLAIN_TEXT_PADDED = salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, Enc).
 
 enc_vendor_test() ->
     L = length(?USER),
-    E = << ?Vendor_Specific, (L+8):8, 18681:32, 1:8, (L+2):8, ?USER >>,
-    E = enc_attrib(?PDU, {18681,1}, << ?USER >>, string, []).
+    E = << ?RVendor_Specific, (L+8):8, 18681:32, 1:8, (L+2):8, ?USER >>,
+    E = enc_attrib(?PDU, {18681,1}, << ?USER >>, string, no).
+
+dec_simple_integer_test() ->
+    {40, 1} = dec_attr(?PDU, #attribute{id = 40, type = integer, enc = no}, <<0,0,0,1>>).
+
+dec_simple_string_test() ->
+    {44, "29113"} = dec_attr(?PDU, #attribute{id = 44, type = string, enc = no}, <<"29113">>).
+
+dec_simple_ipv4_test() ->
+    {4,{10,33,0,1}} = dec_attr(?PDU, #attribute{id = 4, type = ipaddr, enc = no}, <<10,33,0,1>>).
+    
+dec_vendor_integer_test() ->
+    [{{10415,3},0}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,3,6,0,0,0,0>>).
+
+dec_vendor_string_test() ->
+    [{{10415,8},"23415"}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,8,7,"23415">>).
+
+dec_vendor_ipv4_test() ->
+    [{{10415,6},{212,183,144,246}}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,6,6,212,183,144,246>>).
 
 %% TODO: add more tests
 

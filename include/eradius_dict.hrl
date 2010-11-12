@@ -15,7 +15,7 @@
 	  id         :: attribute_id(),
 	  type       :: atom(),
 	  name       :: string(),
-	  attrs      :: list()
+	  enc = no   :: atom()
 	 }).
 
 

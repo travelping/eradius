@@ -243,7 +243,7 @@ dbg(_, _, _) -> ok.
 %% slow as they like :)
 %%-----------------------------------------------------------------------
 radius(Server_pid, {udp, Socket, IP, InPortNo, Packet}, Req_id, Nas_prop) ->
-    case catch eradius_lib:dec_packet(Packet) of
+    case catch eradius_lib:dec_packet(Packet, Nas_prop#nas_prop.secret) of
         #rad_pdu{} = Req_pdu ->
             {M, F, B, A} = Nas_prop#nas_prop.mfba,
             Result = (catch M:F({B, A}, Req_pdu, Nas_prop)),

@@ -143,19 +143,18 @@ mk_outfiles(Res, Dir, File) ->
     emit(Res, Hrl, Map),
     close_files(Hrl, Map).
 
-emit([A|T], Hrl, Map) when is_record(A, attribute), A#attribute.attrs =:= undefined ->
-    io:format(Hrl, "-define( ~s , ~w ).~n", 
-	      [d2u(A#attribute.name), A#attribute.id]),
-    io:format(Map, "{attribute, ~w, ~w, \"~s\"}.~n", 
-	      [A#attribute.id, A#attribute.type, A#attribute.name]),
-    emit(T, Hrl, Map);
+%% emit([A|T], Hrl, Map) when is_record(A, attribute), A#attribute.attrs =:= undefined ->
+%%     io:format(Hrl, "-define( ~s , ~w ).~n", 
+%% 	      [d2u(A#attribute.name), A#attribute.id]),
+%%     io:format(Map, "{attribute, ~w, ~w, \"~s\"}.~n", 
+%% 	      [A#attribute.id, A#attribute.type, A#attribute.name]),
+%%     emit(T, Hrl, Map);
 
 emit([A|T], Hrl, Map) when is_record(A, attribute) ->
-    io:format("A: ~p~n", [A]),
     io:format(Hrl, "-define( ~s , ~w ).~n", 
 	      [d2u(A#attribute.name), A#attribute.id]),
     io:format(Map, "{attribute, ~w, ~w, \"~s\", ~p}.~n", 
-	      [A#attribute.id, A#attribute.type, A#attribute.name, A#attribute.attrs]),
+	      [A#attribute.id, A#attribute.type, A#attribute.name, A#attribute.enc]),
     emit(T, Hrl, Map);
 
 emit([V|T], Hrl, Map) when is_record(V, vendor) ->
@@ -193,11 +192,11 @@ parse_dict(File) when is_list(File) ->
     F = fun(Line,{undefined = Vendor, AccList}) ->
                 case pd(string:tokens(Line,"\s\t\r")) of
                     {ok,E} -> {Vendor, [E|AccList]};
-                    {begin_vendor, VName} -> {{vendor, VName}, AccList};
+                    {begin_vendor, VendId} -> {{vendor, VendId}, AccList};
                     _      -> {Vendor, AccList}
                 end;
-           (Line, {{vendor, VName} = Vendor, AccList}) ->
-                case pd(string:tokens(Line, "\s\t\r"), VName) of
+           (Line, {{vendor, VendId} = Vendor, AccList}) ->
+                case pd(string:tokens(Line, "\s\t\r"), VendId) of
                     {end_vendor} -> {undefined, AccList};
                     {ok,E} -> {Vendor, [E|AccList]};
                     _ -> {Vendor, AccList}
@@ -206,57 +205,50 @@ parse_dict(File) when is_list(File) ->
     {_, L} = lists:foldl(F,{undefined, []},string:tokens(b2l(B),"\n")),
     L.
 
-paa({VendId, Attrs} = _State, ["has_tag"]) ->
-    {VendId, [has_tag | Attrs]};
+paa(Attr, ["has_tag"]) ->
+    Attr#attribute{ type = {tagged, Attr#attribute.type} };
 
-paa({VendId, Attrs} = State, ["encrypt", Enc]) ->
+paa(Attr, ["encrypt", Enc]) ->
     case l2i(Enc) of
-	1 -> {VendId, [scramble | Attrs]};
-	2 -> {VendId, [salt_crypt | Attrs]};
-	_ -> State
+	1 -> Attr#attribute{ enc = scramble };
+	2 -> Attr#attribute{ enc = salt_crypt };
+	_ -> Attr
     end;
 
-paa({_VendId, Attrs} = _State, [Vendor]) ->
-    {get({vendor, Vendor}), Attrs}.
+paa(Attr, [Vendor]) ->
+    case get({vendor, Vendor}) of
+	undefined -> Attr;
+	VendId -> Attr#attribute{ id = {VendId, Attr#attribute.id} }
+    end.
 
-parse_attribute_attrs(Tail) ->
-    parse_attribute_attrs({undefined, []}, Tail).
+parse_attribute_attrs(Attr, []) ->
+    Attr;
 
-parse_attribute_attrs(State, []) ->
-    State;
+parse_attribute_attrs(Attr, [ [$# | _ ] | _]) ->
+    Attr;
 
-parse_attribute_attrs(State, [ [$# | _ ] | _]) ->
-    State;
-
-parse_attribute_attrs(State, [Attribute|Tail]) ->
+parse_attribute_attrs(Attr, [Attribute|Tail]) ->
     [Token | Rest] = string:tokens(Attribute, ","),
-    NewState = paa(State, string:tokens(Token, "=")),
-    parse_attribute_attrs(NewState, Rest ++ Tail).
+    NewAttr = paa(Attr, string:tokens(Token, "=")),
+    parse_attribute_attrs(NewAttr, Rest ++ Tail).
 
 pd(["BEGIN-VENDOR", Name]) ->
-    {begin_vendor, Name};
+    case get({vendor, Name}) of
+	undefined -> {begin_vendor, Name};
+	VendId -> {begin_vendor, VendId}
+    end;
+
 pd(["VENDOR", Name, Id]) ->
     put({vendor,Name}, l2i(Id)),
     {ok, #vendor{type = l2i(Id), name = Name}};
+
 pd(["ATTRIBUTE", Name, Id, Type | Tail]) -> 
-    {VendId, Attrs} = parse_attribute_attrs(Tail),
-    R = case VendId of
-	    undefined ->
-		put({attribute,Name}, id2i(Id)),
-		#attribute{name = Name, id = id2i(Id), type = l2a(Type)};
-	    _ ->
-		put({attribute,Name}, {VendId,id2i(Id)}),
-		#attribute{name = Name, id = {VendId,id2i(Id)},type = l2a(Type)}
-	end,
-    case Attrs of
-	[] ->
-	    {ok, R};
-	_ ->
-	    {ok, R#attribute{attrs = Attrs}}
-    end;
+    Attr = parse_attribute_attrs(#attribute{name = Name, id = id2i(Id), type = l2a(Type)}, Tail),
+    put({attribute, Attr#attribute.name}, Attr#attribute.id),
+    {ok, Attr};
 
 pd(["VALUE", Attr, Name, Id]) -> 
-    case get({attribute,Attr}) of
+    case get({attribute, Attr}) of
 	undefined ->
 	    io:format("missing: ~p~n", [Attr]),
 	    false;
@@ -267,35 +259,23 @@ pd(_X) ->
     %%io:format("Skipping: ~p~n", [X]),
     false.
 
-pd(["END-VENDOR", _Name], _VName) ->
+pd(["END-VENDOR", _Name], _VendId) ->
     {end_vendor};
 
-pd(["ATTRIBUTE", Name, Id, Type | Tail], VName) -> 
-    R = case get({vendor, VName}) of
-	    undefined ->
-		put({attribute,Name}, id2i(Id)),
-		#attribute{name = Name, id = id2i(Id), type = l2a(Type)};
-	    VendId ->
-		put({attribute,Name}, {VendId,id2i(Id)}),
-		#attribute{name = Name, id = {VendId,id2i(Id)},type = l2a(Type)}
-	end,
+pd(["ATTRIBUTE", Name, Id, Type | Tail], VendId) -> 
+    Attr = parse_attribute_attrs(#attribute{name = Name, id = {VendId, id2i(Id)}, type = l2a(Type)}, Tail),
+    put({attribute, Attr#attribute.name}, Attr#attribute.id),
+    {ok, Attr};
 
-    {_, Attrs} = parse_attribute_attrs(Tail),
-    case Attrs of
-	[] ->
-	    {ok, R};
-	_ ->
-	    {ok, R#attribute{attrs = Attrs}}
-    end;
-pd(["VALUE", Attr, Name, Id], VName) -> 
-    case get({attribute,Attr}) of
+pd(["VALUE", Attr, Name, Id], _VendId) -> 
+    case get({attribute, Attr}) of
 	undefined ->
 	    io:format("missing: ~p~n", [Attr]),
 	    false;
 	AttrId ->
 	    {ok,#value{id = {AttrId, id2i(Id)}, name = Name}}
     end;
-pd(_X, _VName) ->
+pd(_X, _VendId) ->
     %%io:format("Skipping: ~p~n", [_X]),
     false.
 

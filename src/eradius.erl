@@ -201,7 +201,7 @@ wloop(E, User0, Passwd0, [[Ip,Port,Secret0]|Srvs], State) ->
     Passwd = list_to_binary(Passwd0),
     User   = list_to_binary(User0),
 
-    R1 = #radius_request{ cmd = ?RAccess_Request },
+    R1 = #radius_request{ cmd = request },
     R2 = eradius_lib:set_attr(R1, ?RUser_Name, User),
     R3 = eradius_lib:set_attr(R2, ?RUser_Passwd, Passwd),
 
@@ -256,6 +256,7 @@ send_recv_msg(Ip, Port, Req, E) ->
 recv_wait(S, Timeout) ->
     receive 
 	{udp, S, _IP, _Port, Packet} ->
+	    %% FIXME: we need the share secret
 	    eradius_lib:dec_packet(Packet)
     after Timeout ->
 	    timeout
