@@ -153,6 +153,8 @@ type_conv(V, octets) when
       is_list(V) -> iolist_to_binary(V);
 type_conv(V, octets) when
       is_binary(V) -> V;
+type_conv(V, octets) when
+      is_integer(V) -> << V:32 >>;
 type_conv({{_,_,_},{_,_,_}} = Date, date) ->
     EpochSecs = calendar:datetime_to_gregorian_seconds(Date)
 	- calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}),
@@ -442,23 +444,27 @@ enc_vendor_test() ->
     E = << ?RVendor_Specific, (L+8):8, 18681:32, 1:8, (L+2):8, ?USER >>,
     E = enc_attrib(?PDU, {18681,1}, << ?USER >>, string, no).
 
+enc_vendor_octet_test() ->
+    E = << ?RVendor_Specific, (4+8):8, 311:32, 7:8, (4+2):8, 7:32 >>,
+    E = enc_attrib(?PDU, {311,7}, 7, octets, no).
+
 dec_simple_integer_test() ->
-    {40, 1} = dec_attr(?PDU, #attribute{id = 40, type = integer, enc = no}, <<0,0,0,1>>).
+    {{attribute,40,integer,undefined,no}, 1} = dec_attr(?PDU, #attribute{id = 40, type = integer, enc = no}, <<0,0,0,1>>).
 
 dec_simple_string_test() ->
-    {44, "29113"} = dec_attr(?PDU, #attribute{id = 44, type = string, enc = no}, <<"29113">>).
+    {{attribute,44,string,undefined,no}, "29113"} = dec_attr(?PDU, #attribute{id = 44, type = string, enc = no}, <<"29113">>).
 
 dec_simple_ipv4_test() ->
-    {4,{10,33,0,1}} = dec_attr(?PDU, #attribute{id = 4, type = ipaddr, enc = no}, <<10,33,0,1>>).
+    {{attribute,4,ipaddr,undefined,no},{10,33,0,1}} = dec_attr(?PDU, #attribute{id = 4, type = ipaddr, enc = no}, <<10,33,0,1>>).
     
 dec_vendor_integer_test() ->
-    [{{10415,3},0}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,3,6,0,0,0,0>>).
+    [{{attribute,{10415,3},integer,"X_3GPP-PDP-Type",no},0}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,3,6,0,0,0,0>>).
 
 dec_vendor_string_test() ->
-    [{{10415,8},"23415"}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,8,7,"23415">>).
+    [{{attribute,{10415,8},string,"X_3GPP-IMSI-MCC-MNC",no},"23415"}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,8,7,"23415">>).
 
 dec_vendor_ipv4_test() ->
-    [{{10415,6},{212,183,144,246}}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,6,6,212,183,144,246>>).
+    [{{attribute,{10415,6},ipaddr,"X_3GPP-SGSN-Address",no},{212,183,144,246}}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,6,6,212,183,144,246>>).
 
 %% TODO: add more tests
 
