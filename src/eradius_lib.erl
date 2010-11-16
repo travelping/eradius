@@ -60,11 +60,17 @@ generate_salt() ->
 %% salt encrypt
 %%
 salt_encrypt(Salt, SharedSecret, RequestAuthenticator, PlainText) ->
-    CipherText = do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, pad_to(16, PlainText)),
+    CipherText = do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, (pad_to(16, << (size(PlainText)):8, PlainText/binary >>))),
     << Salt/binary, CipherText/binary >>.
 
 salt_decrypt(SharedSecret, RequestAuthenticator, <<Salt:2/binary, CipherText/binary>>) ->
-    do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, CipherText).
+    << Length:8/integer, PlainText/binary >> = do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, CipherText),
+    if
+	Length < size(PlainText) -> 
+	    binary:part(PlainText, 0, Length);
+	true ->
+	    PlainText
+    end.
 
 do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, CipherText) ->
     B = crypto:md5([SharedSecret, RequestAuthenticator, Salt]),
@@ -409,15 +415,15 @@ set_attr(R, Id, Val) when is_record(R, radius_request) ->
 -define(SECRET, <<"secret">>).
 -define(PLAIN_TEXT, "secret").
 -define(PLAIN_TEXT_PADDED, <<"secret",0,0,0,0,0,0,0,0,0,0>>).
--define(CIPHER_TEXT, <<171,213,211,73,158,111,107,105,34,10,78,216,190,216,26,87,55,15>>).
+-define(CIPHER_TEXT, <<171,213,166,95,152,126,124,120,86,10,78,216,190,216,26,87,55,15>>).
 -define(ENC_PASSWORD, 186,128,194,207,68,25,190,19,23,226,48,206,244,143,56,238).
 -define(PDU, #rad_pdu{ reqid = 1, secret = ?SECRET, authenticator = ?REQUEST_AUTHENTICATOR }).
 
 selt_encrypt_test() ->
     ?CIPHER_TEXT = salt_encrypt(?SALT, ?SECRET, ?REQUEST_AUTHENTICATOR, << ?PLAIN_TEXT >>).
 
-selt_decrypt_test() ->
-    ?PLAIN_TEXT_PADDED = salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, ?CIPHER_TEXT).
+salt_decrypt_test() ->
+    << ?PLAIN_TEXT >> = salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, ?CIPHER_TEXT).
 
 scramble_enc_test() ->
     << ?ENC_PASSWORD >> = scramble(?SECRET, ?REQUEST_AUTHENTICATOR, << ?PLAIN_TEXT >>).
@@ -437,7 +443,7 @@ enc_salt_test() ->
     L = 16 + 4,
     << ?RUser_Passwd, L:8, Enc/binary >> = enc_attrib(?PDU, ?RUser_Passwd, << ?PLAIN_TEXT >>, string, salt_crypt),
     %% need to decrypt to verfiy due to salt
-    ?PLAIN_TEXT_PADDED = salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, Enc).
+    << ?PLAIN_TEXT >> = salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, Enc).
 
 enc_vendor_test() ->
     L = length(?USER),
