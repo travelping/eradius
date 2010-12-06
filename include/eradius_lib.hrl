@@ -57,6 +57,7 @@
 %% an mnesia record as well as in call processing.
 -record(nas_prop, {
           ip,
+          nas_id,
           secret,
           mfba,
           trace = false
