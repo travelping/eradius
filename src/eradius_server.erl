@@ -247,7 +247,7 @@ radius(Server_pid, {udp, Socket, IP, InPortNo, Packet}, Req_id, Nas_prop) ->
         #rad_pdu{} = Req_pdu ->
             {M, F, B, A} = Nas_prop#nas_prop.mfba,
             Result = (catch M:F({B, A}, Req_pdu, Nas_prop)),
-	    io:format("Result: ~p~n", [Result]),
+	    %%io:format("Result: ~p~n", [Result]),
             case encode_reply(Result, Req_pdu, Nas_prop#nas_prop.secret) of
                 {reply, Reply_packet} ->
                     Server_pid ! {reply, IP, InPortNo, Req_id, Nas_prop, Reply_packet};
