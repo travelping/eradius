@@ -219,12 +219,12 @@ io_list_len([], N) ->
 
 %% Ret: #rad_pdu | Reason
 dec_packet(Packet, Secret) ->
-    case catch dec_packet0(Packet, Secret) of
-	{'EXIT', _R} ->
-	    io:format("_R = ~p~n",[_R]),
-	    bad_pdu;
-	Else ->
-	    Else
+    case (catch dec_packet0(Packet, Secret)) of
+        {'EXIT', R} ->
+            error_logger:warning_msg("decoding of a RADIUS packet failed~nError: ~p~n", [R]),  
+            bad_pdu;
+        Else ->
+            Else
     end.
 
 dec_packet0(Packet, Secret) ->
@@ -278,18 +278,18 @@ dec_attributes(_Pdu, <<>>, Acc) -> Acc;
 dec_attributes(Pdu, A0, Acc) ->
     ?dec_attrib(A0, Type, Val, A1),
     case eradius_dict:lookup(Type) of
-	[A] when is_record(A, attribute) ->
-	    dec_attributes(Pdu, A1, [dec_attr(Pdu, A, Val) | Acc]);
-	_ ->
-	    dec_attributes(Pdu, A1, [{Type, Val} | Acc])
+        [A = #attribute{}] ->
+            dec_attributes(Pdu, A1, [dec_attr(Pdu, A, Val) | Acc]);
+        _ ->
+            dec_attributes(Pdu, A1, [{Type, Val} | Acc])
     end.
 
-dec_attr(Pdu, #attribute{id = Id, type = _Type, enc = _Enc} = _A, <<VendId:32/integer, VendVal/binary>>)
+dec_attr(Pdu, #attribute{id = Id} = _A, <<VendId:32/integer, VendVal/binary>>)
   when Id =:= ?RVendor_Specific ->
     %% TODO: add Vendor Type lookup
     dec_vendor_v1_attr_val(Pdu, VendId, VendVal);
 
-dec_attr(_Pdu, #attribute{id = _Id, type = {tagged, Type}, enc = Enc} = A, <<T:8, R/binary>> = Bin)
+dec_attr(_Pdu, #attribute{type = {tagged, Type}, enc = Enc} = A, <<T:8, R/binary>> = Bin)
   when Enc =:= no->
     Val = if 
 	      T >= 1, T =< 16#1F -> {T, dec_attr_val(Type, R)};
@@ -297,14 +297,14 @@ dec_attr(_Pdu, #attribute{id = _Id, type = {tagged, Type}, enc = Enc} = A, <<T:8
 	  end,
     {A, Val};
 
-dec_attr(Pdu, #attribute{id = _Id, type = {tagged, Type}, enc = Enc} = A, <<T:8, R/binary>> = _Bin) ->
+dec_attr(Pdu, #attribute{type = {tagged, Type}, enc = Enc} = A, <<T:8, R/binary>> = _Bin) ->
     Tag = if 
 	T >= 1, T =< 16#1F -> T;
 	      true -> 0
 	  end,
     {A, {Tag, dec_attr_val(Type, dec_apply_enc(Pdu, R, Enc))}};
 
-dec_attr(Pdu, #attribute{id = _Id, type = Type, enc = Enc} = A, Bin) ->
+dec_attr(Pdu, #attribute{type = Type, enc = Enc} = A, Bin) ->
     {A, dec_attr_val(Type, dec_apply_enc(Pdu, Bin, Enc))}.
 
 dec_attr_val(string, Bin) ->

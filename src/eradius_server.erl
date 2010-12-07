@@ -41,7 +41,6 @@ start_link({A,B,C,D}=If, Port) ->
     Name = list_to_atom(lists:flatten(io_lib:format("rad_~p_~p_~p_~p_~p", [A,B,C,D,Port]))),
     gen_server:start_link({local, Name}, ?MODULE, {If, Port}, []).
 
-
 create_tables(Nodes) ->
     mnesia:create_table(nas_prop, [{attributes, record_info(fields, nas_prop)},
                                    {disc_copies, Nodes}]).

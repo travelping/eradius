@@ -12,7 +12,8 @@
 -export([load_tables/1, load_tables/2, mk_dict/1, parse_dict/1, make/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 
 -include("eradius_dict.hrl").
@@ -27,12 +28,12 @@
 %%% API
 %%%----------------------------------------------------------------------
 
-lookup(Id) -> 
+lookup(Id) ->
     ets:lookup(?TABLENAME, Id).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
- 
+
 start() ->
     gen_server:start({local, ?SERVER}, ?MODULE, [], []).
 
@@ -60,7 +61,6 @@ init([]) ->
 
 create_table() ->
     ets:new(?TABLENAME, [named_table, {keypos, 2}, public]).
-
 
 %%----------------------------------------------------------------------
 %% Func: handle_call/3
@@ -101,6 +101,9 @@ handle_info(_Info, State) ->
 terminate(_Reason, _State) ->
     ok.
 
+code_change(_OldVsn, _NewVsn, State) ->
+    {ok, state}.
+
 %%%----------------------------------------------------------------------
 %%% Internal functions
 %%%----------------------------------------------------------------------
@@ -111,16 +114,14 @@ terminate(_Reason, _State) ->
 %%% --------------------------------------------------------------------
 
 load_table(Dir, Table) ->
-    MapFile = Dir ++ "/" ++ Table ++ ".map",
+    MapFile = filename:join(Dir, Table ++ ".map"),
     case file:consult(MapFile) of
-	{ok, Res} ->
-	    lists:foreach(fun(R) -> ets:insert(?TABLENAME, R) end, Res),
-	    ok;
-	_ ->
-	    {error, load_table}
+        {ok, Res} ->
+            lists:foreach(fun(R) -> ets:insert(?TABLENAME, R) end, Res),
+            ok;
+        _ ->
+            {error, load_table}
     end.
-			  
-
 
 %%% --------------------------------------------------------------------
 %%% Dictionary making
@@ -131,7 +132,6 @@ make([File]) ->
     {ok, Dir} = file:get_cwd(),
     mk_dict(Dir ++ "/" ++ atom_to_list(File)),
     init:stop().
-    
 
 mk_dict(File) ->
     Res = parse_dict(File),
@@ -144,30 +144,27 @@ mk_outfiles(Res, Dir, File) ->
     close_files(Hrl, Map).
 
 %% emit([A|T], Hrl, Map) when is_record(A, attribute), A#attribute.attrs =:= undefined ->
-%%     io:format(Hrl, "-define( ~s , ~w ).~n", 
+%%     io:format(Hrl, "-define( ~s , ~w ).~n",
 %% 	      [d2u(A#attribute.name), A#attribute.id]),
-%%     io:format(Map, "{attribute, ~w, ~w, \"~s\"}.~n", 
+%%     io:format(Map, "{attribute, ~w, ~w, \"~s\"}.~n",
 %% 	      [A#attribute.id, A#attribute.type, A#attribute.name]),
 %%     emit(T, Hrl, Map);
 
 emit([A|T], Hrl, Map) when is_record(A, attribute) ->
-    io:format(Hrl, "-define( ~s , ~w ).~n", 
+    io:format(Hrl, "-define( ~s , ~w ).~n",
 	      [d2u(A#attribute.name), A#attribute.id]),
-    io:format(Map, "{attribute, ~w, ~w, \"~s\", ~p}.~n", 
-	      [A#attribute.id, A#attribute.type, A#attribute.name, A#attribute.enc]),
+    io:format(Map, "~w.~n", [A]),
     emit(T, Hrl, Map);
 
 emit([V|T], Hrl, Map) when is_record(V, vendor) ->
-    io:format(Hrl, "-define( ~s , ~w ).~n", 
+    io:format(Hrl, "-define( ~s , ~w ).~n",
 	      [d2u(V#vendor.name), V#vendor.type]),
-    io:format(Map, "{vendor, ~w, \"~s\"}.~n", 
-	      [V#vendor.type, V#vendor.name]),
+    io:format(Map, "~w.~n", [V]),
     emit(T, Hrl, Map);
 emit([V|T], Hrl, Map) when is_record(V, value) ->
-%%    io:format(Hrl, "-define( ~s , ~w ).~n", 
+%%    io:format(Hrl, "-define( ~s , ~w ).~n",
 %%	      [V#value.attribute, d2u(V#value.name), V#value.id]),
-    io:format(Map, "{value, ~w, \"~s\"}.~n", 
-	      [V#value.id, V#value.name]),
+    io:format(Map, "~w.~n", [V]),
     emit(T, Hrl, Map);
 emit([_|T], Hrl, Map) ->
     emit(T, Hrl, Map);
@@ -242,12 +239,12 @@ pd(["VENDOR", Name, Id]) ->
     put({vendor,Name}, l2i(Id)),
     {ok, #vendor{type = l2i(Id), name = Name}};
 
-pd(["ATTRIBUTE", Name, Id, Type | Tail]) -> 
+pd(["ATTRIBUTE", Name, Id, Type | Tail]) ->
     Attr = parse_attribute_attrs(#attribute{name = Name, id = id2i(Id), type = l2a(Type)}, Tail),
     put({attribute, Attr#attribute.name}, Attr#attribute.id),
     {ok, Attr};
 
-pd(["VALUE", Attr, Name, Id]) -> 
+pd(["VALUE", Attr, Name, Id]) ->
     case get({attribute, Attr}) of
 	undefined ->
 	    io:format("missing: ~p~n", [Attr]),
@@ -255,19 +252,19 @@ pd(["VALUE", Attr, Name, Id]) ->
 	AttrId ->
 	    {ok,#value{id = {AttrId, id2i(Id)}, name = Name}}
     end;
-pd(_X) -> 
+pd(_X) ->
     %%io:format("Skipping: ~p~n", [X]),
     false.
 
 pd(["END-VENDOR", _Name], _VendId) ->
     {end_vendor};
 
-pd(["ATTRIBUTE", Name, Id, Type | Tail], VendId) -> 
+pd(["ATTRIBUTE", Name, Id, Type | Tail], VendId) ->
     Attr = parse_attribute_attrs(#attribute{name = Name, id = {VendId, id2i(Id)}, type = l2a(Type)}, Tail),
     put({attribute, Attr#attribute.name}, Attr#attribute.id),
     {ok, Attr};
 
-pd(["VALUE", Attr, Name, Id], _VendId) -> 
+pd(["VALUE", Attr, Name, Id], _VendId) ->
     case get({attribute, Attr}) of
 	undefined ->
 	    io:format("missing: ~p~n", [Attr]),
@@ -278,10 +275,6 @@ pd(["VALUE", Attr, Name, Id], _VendId) ->
 pd(_X, _VendId) ->
     %%io:format("Skipping: ~p~n", [_X]),
     false.
-
-
-priv_dir() ->
-    dir(?MODULE) ++ "/priv".
 
 dir(Mod) ->
     P = code:which(Mod),
