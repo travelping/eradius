@@ -17,6 +17,7 @@ DICTMAPS := $(patsubst dictionaries/dictionary.%,dictionary_%.map,$(DICTFILES))
 dictionaries: dictionary.map $(DICTMAPS)
 
 clean: 
+	rm -f dictionary.map
 	rm -f $(DICTMAPS)
 
 dictionary.map: dictionaries/dictionary
