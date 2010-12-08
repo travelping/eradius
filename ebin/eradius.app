@@ -1,6 +1,6 @@
 {application,eradius,
   [{description,"Generic radius application server"},
-   {vsn,"0.0.0"},
+   {vsn,"0.0.1"},
    {modules,[eradius,
              eradius_dict,
              eradius_acc,

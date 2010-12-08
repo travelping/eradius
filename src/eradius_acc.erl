@@ -295,7 +295,7 @@ do_punch([], _Timeout, _Req) ->
 do_punch([[Ip,Port,Shared] | Rest], Timeout, Req) ->
     Id = get_id(),
     PDU = eradius_lib:enc_accreq(Id, Shared, Req),
-    case send_recv_msg(Ip, Port, Timeout, PDU) of
+    case send_recv_msg(Ip, Port, Timeout, PDU, Shared) of
 	timeout ->
 	    %% NB: We could implement a re-send strategy here
 	    %% along the lines of what the RFC proposes.
@@ -309,14 +309,14 @@ do_punch([[Ip,Port,Shared] | Rest], Timeout, Req) ->
 	    end
     end.
 	    
-send_recv_msg(Ip, Port, Timeout, Req) ->
+send_recv_msg(Ip, Port, Timeout, ReqBinary, Secret) ->
     {ok, S} = gen_udp:open(0, [binary]),
-    gen_udp:send(S, Ip, Port, Req),
+    gen_udp:send(S, Ip, Port, ReqBinary),
     Resp = recv_wait(S, Timeout),
     Reply = if 
-		is_binary(Resp) -> eradius_lib:dec_packet(Resp);
-		true ->  Resp
-	    end,
+               is_binary(Resp) -> eradius_lib:dec_packet(Resp, Secret);
+               true ->  Resp
+	        end,
     gen_udp:close(S),
     Reply.
 
