@@ -17,7 +17,6 @@
 -endif.
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
--include("dictionary.hrl").
 
 -define(DBG(F,A), io:format("(~w:~b): " ++ F ++ "~n", [?MODULE, ?LINE] ++ A)).
 

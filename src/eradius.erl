@@ -4,7 +4,7 @@
 %%% Author      : {mbj,tobbe}@bluetail.com>
 %%% Description : RADIUS Authentication
 %%% Created     :  7 Oct 2002 by Martin Bjorklund <mbj@bluetail.com>
-%%% 
+%%%
 %%% $Id: eradius.erl,v 1.2 2003/11/05 21:00:03 etnt Exp $
 %%%-------------------------------------------------------------------
 -behaviour(gen_server).
@@ -17,15 +17,13 @@
 
 %%--------------------------------------------------------------------
 %% External exports
--export([start_link/0, start/0, auth/1, auth/3, auth/4, default_port/0,
-	       load_tables/1, load_tables/2]).
+-export([start_link/0, start/0, auth/1, auth/3, auth/4, default_port/0, load_tables/1, load_tables/2]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, 
-	 code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Internal exports
--export([worker/5]).
+-export([worker/5, recv_wait/2]).
 
 
 -record(state, {}).
@@ -33,7 +31,7 @@
 -define(SERVER    , ?MODULE).
 -define(TABLENAME , ?MODULE).
 
--define(WORKER_TIMEOUT, 10000).  % serious error if no answer after 10 sec 
+-define(WORKER_TIMEOUT, 10000).  % serious error if no answer after 10 sec
 
 -define(PORT, 1812).
 
@@ -51,7 +49,7 @@ default_port() -> ?PORT.
 start_link() ->
     eradius_dict:start_link(),
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
- 
+
 start() ->
     eradius_dict:start(),
     gen_server:start({local, ?SERVER}, ?MODULE, [], []).
@@ -95,7 +93,7 @@ load_tables(Dir, Tables) ->
 %%              processes which talk SMB authentication. There
 %%              is one worker per SMB-XNET "domain".
 %%
-%% Returns:     {ok, State}         
+%% Returns:     {ok, State}
 %%--------------------------------------------------------------------
 init([]) ->
     process_flag(trap_exit, true),
@@ -108,7 +106,7 @@ create_ets_table() ->
 
 bump_id() ->
     ets:update_counter(?TABLENAME, id_counter, 1).
-    
+
 
 %%--------------------------------------------------------------------
 %% Function: handle_call/3
@@ -174,7 +172,7 @@ start_worker(From, E, User, Passwd, CState) ->
     Args = [From, E, User, Passwd, CState],
     proc_lib:spawn(?MODULE, worker, Args).
 
-get_id() -> 
+get_id() ->
     bump_id().
 
 worker(From, E, User, Passwd, CState) ->
@@ -254,10 +252,10 @@ send_recv_msg(Ip, Port, Req, E) ->
 
 
 recv_wait(S, Timeout) ->
-    receive 
+    receive
 	{udp, S, _IP, _Port, Packet} ->
 	    %% FIXME: we need the share secret
-	    eradius_lib:dec_packet(Packet)
+	    eradius_lib:dec_packet(Packet, <<>>)
     after Timeout ->
 	    timeout
     end.
