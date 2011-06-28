@@ -31,7 +31,7 @@
 	 set_tc_itimeout/1,set_tc_stimeout/1,
 	 set_tc_areset/1, set_tc_areboot/1, 
 	 set_tc_nasrequest/1, set_tc_nasreboot/1,
-	 punch/3]).
+	 punch/3, send_recv_msg/5]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, 
@@ -295,7 +295,7 @@ do_punch([], _Timeout, _Req) ->
 do_punch([[Ip,Port,Shared] | Rest], Timeout, Req) ->
     Id = get_id(),
     PDU = eradius_lib:enc_accreq(Id, Shared, Req),
-    case send_recv_msg(Ip, Port, Timeout, PDU, Shared) of
+    case send_recv_msg(Ip, Port, PDU, Timeout, Shared) of
 	timeout ->
 	    %% NB: We could implement a re-send strategy here
 	    %% along the lines of what the RFC proposes.
@@ -309,7 +309,7 @@ do_punch([[Ip,Port,Shared] | Rest], Timeout, Req) ->
 	    end
     end.
 	    
-send_recv_msg(Ip, Port, Timeout, ReqBinary, Secret) ->
+send_recv_msg(Ip, Port, ReqBinary, Timeout, Secret) ->
     {ok, S} = gen_udp:open(0, [binary]),
     gen_udp:send(S, Ip, Port, ReqBinary),
     Resp = recv_wait(S, Timeout),

@@ -23,7 +23,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Internal exports
--export([worker/5, recv_wait/2]).
+-export([worker/5]).
 
 
 -record(state, {}).
@@ -213,7 +213,7 @@ wloop(E, User0, Passwd0, [[Ip,Port,Secret0]|Srvs], State) ->
 	      [binary_to_list(User), {Ip, Port}]),
     Req = eradius_lib:enc_pdu(Pdu),
 %%    StatKey = [E, Ip, Port],
-    case send_recv_msg(Ip, Port, Req, E) of
+    case send_recv_msg(Ip, Port, Req, E#eradius.timeout, Secret) of
 	timeout ->
 	    ?STATFUN_TIMEDOUT(E, Ip, Port),
 	    ?TRACEFUN(E,"RADIUS request for ~p timed out", [{Ip, Port}]),
@@ -242,27 +242,8 @@ wloop(E, User, _Passwd, [], _State) ->
     ?TRACEFUN(E,"no more RADIUS servers to try for ~s",[binary_to_list(User)]),
     {reject, ?AL_Backend_Unreachable}.
 
-
-send_recv_msg(Ip, Port, Req, E) ->
-    {ok, S} = gen_udp:open(0, [binary]),
-    gen_udp:send(S, Ip, Port, Req),
-    Resp = recv_wait(S, E#eradius.timeout),
-    gen_udp:close(S),
-    decode_response(Resp, E).
-
-
-recv_wait(S, Timeout) ->
-    receive
-	{udp, S, _IP, _Port, Packet} ->
-	    %% FIXME: we need the share secret
-	    eradius_lib:dec_packet(Packet, <<>>)
-    after Timeout ->
-	    timeout
+send_recv_msg(Ip, Port, Req, Timeout, Secret) ->
+    case eradius_acc:send_recv_msg(Ip, Port, Req, Timeout, Secret) of
+        timeout             -> timeout;
+        #rad_pdu{req = Req} -> Req#radius_request.cmd
     end.
-
-decode_response(Resp, _E) when is_record(Resp, rad_pdu) ->
-    Resp#rad_pdu.req#radius_request.cmd;
-decode_response(timeout, _AuthSpec) ->
-    timeout;
-decode_response(Resp, _AuthSpec) ->
-    Resp. % can't end up here really...
