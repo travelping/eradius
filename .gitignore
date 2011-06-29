@@ -4,3 +4,4 @@ priv/*.map
 include/dictionary_*
 *.log
 /dist/
+/ebin/eradius.app
