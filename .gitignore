@@ -1,7 +1,8 @@
 *~
 *.beam
 priv/*.map
-include/dictionary_*
+include/dictionary.hrl
+include/dictionary_*.hrl
 *.log
 /dist/
 /ebin/eradius.app
