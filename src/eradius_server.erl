@@ -13,6 +13,7 @@
 -type port_number() :: 1..65535.
 -type req_id()      :: byte().
 -type udp_socket()  :: port().
+-type udp_packet()  :: {udp, udp_socket(), inet:ip_address(), port_number(), binary()}.
 
 -record(state, {
     socket             :: udp_socket(),      % Socket Reference of opened UDP port
@@ -49,6 +50,7 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
             ReqKey = {ReqID, FromIP},
             case ets:lookup(Transacts, ReqKey) of
                 [] ->
+                    dbg(NasProp, "new request: ~p~n", [{ReqID, FromIP, FromPortNo}]),
                     Pid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqUDP, ReqID, Handler, NasProp]),
                     ets:insert(Transacts, {ReqKey, Pid}),
                     inet:setopts(Socket, [{active, once}]),
@@ -61,6 +63,7 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
                     %% duplicate request arrived after we had already
                     %% sent our answer. This is the only reason to
                     %% even store the transaction.
+                    dbg(NasProp, "duplicate request: ~p~n", [{ReqID, FromIP, FromPortNo}]),
                     inet:setopts(Socket, [{active, once}]),
                     {noreply, State}
             end;
@@ -108,6 +111,7 @@ dec_radius(_State, _NasIP, _Packet) ->
 
 %% @private
 %% @doc handler function (spawned for every request)
+-spec do_radius(pid(), udp_packet(), req_id(), eradius_server_mon:handler(), #nas_prop{}) -> any().
 do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, {HandlerMod, HandlerArgs}, NasProp) ->
     Secret = NasProp#nas_prop.secret,
     case (catch eradius_lib:dec_packet(Packet, Secret)) of
@@ -129,13 +133,13 @@ do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, {HandlerM
 
 encode_reply({'EXIT', Reason}, _Pdu, _Secret) ->
     {discard, Reason};
-encode_reply(Resp, ReqPDU, Secret) ->
+encode_reply(Resp = #radius_request{}, ReqPDU, Secret) ->
     Reply = eradius_lib:enc_reply_pdu(ReqPDU#rad_pdu{secret = Secret, req = Resp}),
     {reply, Reply}.
 
 -spec dbg(#nas_prop{}, string(), list()) -> ok.
 dbg(#nas_prop{trace = true}, Fmt, Vals) ->
-    io:put_chars([printable_date(), "--", io_lib:format(Fmt, Vals)]);
+    io:put_chars([printable_date(), " -- ", io_lib:format(Fmt, Vals)]);
 dbg(_, _, _) ->
     ok.
 
