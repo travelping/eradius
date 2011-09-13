@@ -18,18 +18,18 @@
 %%
 %%   ```
 %%   -record(nas_prop, {
-%%       server_ip          :: inet:ip_address(),
-%%       server_port        :: eradius_server:port_number(),
-%%       nas_ip             :: inet:ip_address(),
-%%       secret             :: eradius_lib:secret(),
-%%       trace = true       :: boolean()
+%%       server_ip   :: inet:ip_address(),
+%%       server_port :: eradius_server:port_number(),
+%%       nas_ip      :: inet:ip_address(),
+%%       secret      :: eradius_lib:secret(),
+%%       trace       :: boolean()
 %%   }).
 %%
 %%   -record(radius_request, {
-%%       cmd                :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
-%%       servers            :: list(),
-%%       timeout = infinity :: timeout(),
-%%       attrs = []         :: [eradius_dict:attribute()]
+%%       cmd         :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
+%%       servers     :: list(),
+%%       timeout     :: timeout(),
+%%       attrs       :: [eradius_dict:attribute()]
 %%   }).
 %%   '''
 -module(eradius_server).

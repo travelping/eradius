@@ -44,11 +44,11 @@
 
 %% this is handed to radius server behaviour implementations
 -record(nas_prop, {
-    server_ip    :: inet:ip_address(),
-    server_port  :: eradius_server:port_number(),
-    nas_ip       :: inet:ip_address(),
-    secret       :: binary(),
-    trace = true :: boolean()
+    server_ip     :: inet:ip_address(),
+    server_port   :: eradius_server:port_number(),
+    nas_ip        :: inet:ip_address(),
+    secret        :: binary(),
+    trace = false :: boolean()
 }).
 
 -record(radius_request, {
