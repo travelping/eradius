@@ -1,89 +1,68 @@
--ifndef(_ERADIUS_LIB).
--define(_ERADIUS_LIB , true).
-%%%-------------------------------------------------------------------
-%%% File        : oaml_radius_lib.hrl
-%%% Author      : Martin Bjorklund <mbj@bluetail.com>
-%%% Description : Definitions for RADIUS
-%%% Created     :  7 Oct 2002 by Martin Bjorklund <mbj@bluetail.com>
-%%%
-%%% $Id: eradius_lib.hrl,v 1.4 2005/01/14 13:44:20 etnt Exp $
-%%%-------------------------------------------------------------------
-
 -define(BYTE, integer-unit:8).    % Nice syntactic sugar...
 
 %%- cmds
--define(RAccess_Request,         1).
--define(RAccess_Accept,          2).
--define(RAccess_Reject,          3).
--define(RAccounting_Request,     4).
--define(RAccounting_Response,    5).
--define(RAccess_Challenge,      11).
+-define(RAccess_Request,       1).
+-define(RAccess_Accept,        2).
+-define(RAccess_Reject,        3).
+-define(RAccounting_Request,   4).
+-define(RAccounting_Response,  5).
+-define(RAccess_Challenge,    11).
 
 %%- attribs
--define(RUser_Name,              1).
--define(RUser_Passwd,            2).
--define(RNAS_Ip_Address,         4).
--define(RReply_Msg,             18).
--define(RState,                 24).
--define(RClass,                 25).
--define(RVendor_Specific,       26).
--define(RSession_Timeout,       27).
--define(RIdle_Timeout,          28).
--define(RStatus_Type,           40).
--define(RSession_Id,            44).
--define(RSession_Time,          46).
--define(RTerminate_Cause,       49).
+-define(RUser_Name,        1).
+-define(RUser_Passwd,      2).
+-define(RNAS_Ip_Address,   4).
+-define(RReply_Msg,       18).
+-define(RState,           24).
+-define(RClass,           25).
+-define(RVendor_Specific, 26).
+-define(RSession_Timeout, 27).
+-define(RIdle_Timeout,    28).
+-define(RStatus_Type,     40).
+-define(RSession_Id,      44).
+-define(RSession_Time,    46).
+-define(RTerminate_Cause, 49).
 
 %%- attribute values
--define(RStatus_Type_Start,      1).
--define(RStatus_Type_Stop,       2).
--define(RStatus_Type_Update,     3).  % Interim-Update
--define(RStatus_Type_On,         7).
--define(RStatus_Type_Off,        8).
+-define(RStatus_Type_Start,  1).
+-define(RStatus_Type_Stop,   2).
+-define(RStatus_Type_Update, 3).  % Interim-Update
+-define(RStatus_Type_On,     7).
+-define(RStatus_Type_Off,    8).
 
 %%- Set radius accounting attributes
 -define(ACC_ATTR(Key,Val), {Key,Val}).
 
 %%- Terminate Cause values
--define(RTCUser_Request,           1).
--define(RTCIdle_Timeout,           4).
--define(RTCSession_Timeout,        5).
--define(RTCAdmin_Reset,            6).
--define(RTCAdmin_Reboot,           7).
--define(RTCNAS_Request,           10).
--define(RTCNAS_Reboot,            11).
+-define(RTCUser_Request,     1).
+-define(RTCIdle_Timeout,     4).
+-define(RTCSession_Timeout,  5).
+-define(RTCAdmin_Reset,      6).
+-define(RTCAdmin_Reboot,     7).
+-define(RTCNAS_Request,     10).
+-define(RTCNAS_Reboot,      11).
 
-%% In a server we need to store properties of a NAS. This is used as
-%% an mnesia record as well as in call processing.
+%% this is handed to radius server behaviour implementations
 -record(nas_prop, {
-          ip,
-          nas_id,
-          secret,
-          mfba,
-          trace = false
-         }).
-
-%%- Radius accounting server info.
--record( radacct , {
-	   servers,      % a list of [Ip,Port,Secret] tripplets
-	   sockopts = [],% list of extra socket options
-	   timeout}).    % timeout in seconds
-
-
--record(rad_pdu, {
-	  reqid,
-	  secret,
-	  authenticator,
-	  state,
-	  nas_ip,
-	  req              % radius_request
+    server_ip    :: inet:ip_address(),
+    server_port  :: eradius_server:port_number(),
+    nas_ip       :: inet:ip_address(),
+    secret       :: binary(),
+    trace = true :: boolean()
 }).
 
 -record(radius_request, {
-	  cmd,             % rad_request, rad_accept, rad_challenge, rad_reject, rad_accreq, rad_accresp
-	  servers,
-	  timeout,
-	  attrs  = []
-	 }).
+    cmd                :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
+    servers            :: list(),
+    timeout = infinity :: timeout(),
+    attrs = []         :: [eradius_dict:attribute()]
+}).
 
--endif.
+-record(rad_pdu, {
+    reqid  = 0         :: 0..255,
+    secret = <<>>      :: binary(),
+    authenticator,
+    state,
+    nas_ip = {0,0,0,0} :: inet:ip_address(),
+    req                :: #radius_request{}
+}).

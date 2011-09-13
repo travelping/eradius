@@ -1,15 +1,6 @@
 -module(eradius_lib).
-%%%-------------------------------------------------------------------
-%%% File        : eradius_lib.erl
-%%% Author      : Martin Bjorklund <mbj@bluetail.com>
-%%% Description : Radius encode/decode routines (RFC-2865).
-%%% Created     :  7 Oct 2002 by Martin Bjorklund <mbj@bluetail.com>
-%%%
-%%% $Id: eradius_lib.erl,v 1.5 2004/03/26 17:47:19 seanhinde Exp $
-%%%-------------------------------------------------------------------
 -export([enc_pdu/1, enc_reply_pdu/1, dec_packet/2, enc_accreq/3]).
 -export([mk_authenticator/0, pad_to/2]).
-
 -export([set_attr/3]).
 
 -ifdef(TEST).
@@ -46,8 +37,8 @@ do_scramble(_SharedSecret, _B, << >>, CipherText) ->
 %%
 pad_to(Width, Binary) ->
      case (Width - size(Binary) rem Width) rem Width of
-	 0 -> Binary;
-	 N -> <<Binary/binary, 0:(N*8)>>
+         0 -> Binary;
+         N -> <<Binary/binary, 0:(N*8)>>
      end.
 
 generate_salt() ->
@@ -65,10 +56,10 @@ salt_encrypt(Salt, SharedSecret, RequestAuthenticator, PlainText) ->
 salt_decrypt(SharedSecret, RequestAuthenticator, <<Salt:2/binary, CipherText/binary>>) ->
     << Length:8/integer, PlainText/binary >> = do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, CipherText),
     if
-	Length < size(PlainText) -> 
-	    binary:part(PlainText, 0, Length);
-	true ->
-	    PlainText
+    Length < size(PlainText) ->
+        binary:part(PlainText, 0, Length);
+    true ->
+        PlainText
     end.
 
 do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, CipherText) ->
@@ -87,15 +78,15 @@ salt_crypt(_SharedSecret, _B, << >>, CipherText) ->
 %% Encode/Decode Functions
 %%====================================================================
 
-%% Ret: io_list(). Specific format of io_list is relied on by 
+%% Ret: io_list(). Specific format of io_list is relied on by
 %% enc_reply_pdu/2
 enc_pdu(Pdu) ->
     {Cmd, CmdPdu} = enc_cmd(Pdu, Pdu#rad_pdu.req),
-    [<<Cmd:8, (Pdu#rad_pdu.reqid):8, (io_list_len(CmdPdu) + 20):16>>, 
+    [<<Cmd:8, (Pdu#rad_pdu.reqid):8, (io_list_len(CmdPdu) + 20):16>>,
      <<(Pdu#rad_pdu.authenticator):16/binary>>,
      CmdPdu].
 
-%% This one includes the authenticator substitution required for 
+%% This one includes the authenticator substitution required for
 %% sending replies from the server.
 enc_reply_pdu(Pdu) ->
     [Head, Auth, Cmd] = enc_pdu(Pdu),
@@ -117,22 +108,22 @@ enc_attrib(Pdu, {Vendor, Id}, V, Type, Enc) ->
 
 enc_attrib(_Pdu, Id, V, {tagged, Type}, no) ->
     case V of
-	{Tag, Val} when Tag >= 1, Tag =< 16#1F ->
-	    E = type_conv(Val, Type),
-	    <<Id, (size(Val) + 3):8, Tag:8, E/binary>>;
-	Val ->
-	    E = type_conv(Val, Type),
-	    <<Id, (size(Val) + 2):8, E/binary>>
+    {Tag, Val} when Tag >= 1, Tag =< 16#1F ->
+        E = type_conv(Val, Type),
+        <<Id, (size(Val) + 3):8, Tag:8, E/binary>>;
+    Val ->
+        E = type_conv(Val, Type),
+        <<Id, (size(Val) + 2):8, E/binary>>
     end;
 
 enc_attrib(Pdu, Id, V, {tagged, Type}, Enc) ->
     case V of
-	{Tag, Val} when Tag >= 1, Tag =< 16#1F ->
-	    E = enc_apply_enc(Pdu, type_conv(Val, Type), Enc),
-	    <<Id, (size(Val) + 3):8, Tag:8, E/binary>>;
-	Val ->
-	    E = enc_apply_enc(Pdu, type_conv(Val, Type), Enc),
-	    <<Id, (size(Val) + 3):8, 0:8, E/binary>>
+    {Tag, Val} when Tag >= 1, Tag =< 16#1F ->
+        E = enc_apply_enc(Pdu, type_conv(Val, Type), Enc),
+        <<Id, (size(Val) + 3):8, Tag:8, E/binary>>;
+    Val ->
+        E = enc_apply_enc(Pdu, type_conv(Val, Type), Enc),
+        <<Id, (size(Val) + 3):8, 0:8, E/binary>>
     end;
 
 enc_attrib(Pdu, Id, V, Type, Enc) ->
@@ -145,7 +136,7 @@ type_conv(V, integer)        -> <<V:32>>;
 type_conv(V, integer64)      -> <<V:64>>;
 type_conv({A,B,C,D}, ipaddr) -> <<A:8, B:8, C:8, D:8>>;
 type_conv({A,B,C,D,E,F,G,H}, ipv6addr) -> <<A:16, B:16, C:16, D:16,
-					    E:16, F:16, G:16, H:16>>;
+                        E:16, F:16, G:16, H:16>>;
 type_conv({{A,B,C,D,E,F,G,H}, PLen}, ipv6prefix) ->
     L = (PLen + 7) div 8,
     <<IP:L, _R/binary>> = <<A:16, B:16, C:16, D:16, E:16, F:16, G:16, H:16>>,
@@ -162,7 +153,7 @@ type_conv(V, octets) when
       is_integer(V) -> << V:32 >>;
 type_conv({{_,_,_},{_,_,_}} = Date, date) ->
     EpochSecs = calendar:datetime_to_gregorian_seconds(Date)
-	- calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}),
+    - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}),
     <<EpochSecs:32>>;
 type_conv(V, date) when
       is_list(V) -> iolist_to_binary(V);
@@ -193,23 +184,23 @@ enc_cmd(_Pdu, Req) when Req#radius_request.cmd =:= accresp ->
 
 enc_attributes(Pdu, As) ->
     F = fun({#attribute{id = Id} = A, Val}, Acc) ->
-		[enc_attrib(Pdu, Id, Val, A#attribute.type, A#attribute.enc) | Acc];
+        [enc_attrib(Pdu, Id, Val, A#attribute.type, A#attribute.enc) | Acc];
            ({Id, Val}, Acc) ->
-		case eradius_dict:lookup(Id) of
-		    [A] when is_record(A, attribute) ->
-			[enc_attrib(Pdu, Id, Val, A#attribute.type, A#attribute.enc) | Acc];
-		    _ ->
-			Acc
-		end
-	end,
+        case eradius_dict:lookup(Id) of
+            [A] when is_record(A, attribute) ->
+            [enc_attrib(Pdu, Id, Val, A#attribute.type, A#attribute.enc) | Acc];
+            _ ->
+            Acc
+        end
+    end,
     lists:foldl(F, [], As).
 
 io_list_len(L) -> io_list_len(L, 0).
 io_list_len([H|T], N) ->
     if
-	H >= 0, H =< 255 -> io_list_len(T, N+1);
-	is_list(H) -> io_list_len(T, io_list_len(H,N));
-	is_binary(H) -> io_list_len(T, size(H) + N)
+        H >= 0, H =< 255 -> io_list_len(T, N+1);
+        is_list(H) -> io_list_len(T, io_list_len(H,N));
+        is_binary(H) -> io_list_len(T, size(H) + N)
     end;
 io_list_len(H, N) when is_binary(H) ->
     size(H) + N;
@@ -220,7 +211,7 @@ io_list_len([], N) ->
 dec_packet(Packet, Secret) ->
     case (catch dec_packet0(Packet, Secret)) of
         {'EXIT', R} ->
-            error_logger:warning_msg("decoding of a RADIUS packet failed~nError: ~p~n", [R]),  
+            error_logger:warning_msg("decoding of a RADIUS packet failed~nError: ~p~n", [R]),
             bad_pdu;
         Else ->
             Else
@@ -230,36 +221,35 @@ dec_packet0(Packet, Secret) ->
     <<Cmd:8, ReqId:8, Len:16, Auth:16/binary, Attribs0/binary>> = Packet,
     Size = size(Attribs0),
     Attr_len = Len - 20,
-    Attribs = 
-	if 
-	    Attr_len > Size -> 
-		throw(bad_pdu);
-	    Attr_len == Size -> 
-		Attribs0;
-	    true ->
-		<<Attribs1:Attr_len/binary, _/binary>> = Attribs0,
-		Attribs1
-	end,
+    Attribs = if
+                  Attr_len > Size ->
+                      throw(bad_pdu);
+                  Attr_len == Size ->
+                      Attribs0;
+                  true ->
+                      <<Attribs1:Attr_len/binary, _/binary>> = Attribs0,
+                      Attribs1
+              end,
     P = #rad_pdu{reqid = ReqId, authenticator = Auth, secret = Secret},
     case Cmd of
-	?RAccess_Request ->
-	    P#rad_pdu{req = #radius_request{cmd = request, attrs = dec_attributes(P, Attribs)}};
-	?RAccess_Accept ->
-	    P#rad_pdu{req = #radius_request{cmd = accept, attrs = dec_attributes(P, Attribs)}};
-	?RAccess_Challenge ->
-	    P#rad_pdu{req = #radius_request{cmd = challenge, attrs = dec_attributes(P, Attribs)}};
-	?RAccess_Reject ->
-	    P#rad_pdu{req = #radius_request{cmd = reject, attrs = dec_attributes(P, Attribs)}};
-	?RAccounting_Request ->
-	    P#rad_pdu{req = #radius_request{cmd = accreq, attrs = dec_attributes(P, Attribs)}};
-	?RAccounting_Response ->
-	    P#rad_pdu{req = #radius_request{cmd = accresp, attrs = dec_attributes(P, Attribs)}}
+        ?RAccess_Request ->
+            P#rad_pdu{req = #radius_request{cmd = request, attrs = dec_attributes(P, Attribs)}};
+        ?RAccess_Accept ->
+            P#rad_pdu{req = #radius_request{cmd = accept, attrs = dec_attributes(P, Attribs)}};
+        ?RAccess_Challenge ->
+            P#rad_pdu{req = #radius_request{cmd = challenge, attrs = dec_attributes(P, Attribs)}};
+        ?RAccess_Reject ->
+            P#rad_pdu{req = #radius_request{cmd = reject, attrs = dec_attributes(P, Attribs)}};
+        ?RAccounting_Request ->
+            P#rad_pdu{req = #radius_request{cmd = accreq, attrs = dec_attributes(P, Attribs)}};
+        ?RAccounting_Response ->
+            P#rad_pdu{req = #radius_request{cmd = accresp, attrs = dec_attributes(P, Attribs)}}
     end.
 
 -define(dec_attrib(A0, Type, Val, A1),
-	<<Type:8, __Len0:8, __R/binary>> = A0,
-	__Len1 = __Len0 - 2,
-	<<Val:__Len1/binary, A1/binary>> = __R).
+    <<Type:8, __Len0:8, __R/binary>> = A0,
+    __Len1 = __Len0 - 2,
+    <<Val:__Len1/binary, A1/binary>> = __R).
 
 dec_apply_enc(Pdu, Val, scramble) ->
     scramble(Pdu#rad_pdu.secret, Pdu#rad_pdu.authenticator, Val);
@@ -270,7 +260,7 @@ dec_apply_enc(Pdu, Val, salt_crypt) ->
 dec_apply_enc(_Pdu, Val, _) ->
     Val.
 
-dec_attributes(Pdu, As) -> 
+dec_attributes(Pdu, As) ->
     lists:flatten(dec_attributes(Pdu, As, [])).
 
 dec_attributes(_Pdu, <<>>, Acc) -> Acc;
@@ -290,17 +280,17 @@ dec_attr(Pdu, #attribute{id = Id} = _A, <<VendId:32/integer, VendVal/binary>>)
 
 dec_attr(_Pdu, #attribute{type = {tagged, Type}, enc = Enc} = A, <<T:8, R/binary>> = Bin)
   when Enc =:= no->
-    Val = if 
-	      T >= 1, T =< 16#1F -> {T, dec_attr_val(Type, R)};
-	      true -> {0, dec_attr_val(Type, Bin)}
-	  end,
+    Val = if
+          T >= 1, T =< 16#1F -> {T, dec_attr_val(Type, R)};
+          true -> {0, dec_attr_val(Type, Bin)}
+      end,
     {A, Val};
 
 dec_attr(Pdu, #attribute{type = {tagged, Type}, enc = Enc} = A, <<T:8, R/binary>> = _Bin) ->
-    Tag = if 
-	T >= 1, T =< 16#1F -> T;
-	      true -> 0
-	  end,
+    Tag = if
+    T >= 1, T =< 16#1F -> T;
+          true -> 0
+      end,
     {A, {Tag, dec_attr_val(Type, dec_apply_enc(Pdu, R, Enc))}};
 
 dec_attr(Pdu, #attribute{type = Type, enc = Enc} = A, Bin) ->
@@ -316,7 +306,7 @@ dec_attr_val(integer, I0) ->
     L = size(I0)*8,
     case I0 of
         <<I:L/integer>> ->
-	    I;
+        I;
         _ ->
             I0
     end;
@@ -349,7 +339,7 @@ dec_attr_val(ipv6prefix, <<0,PLen,P/binary>>) ->
     <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16>> = pad_to(128, P),
     {{B,C,D,E,F,G,H,I}, PLen};
 
-dec_attr_val(Type, Val) -> 
+dec_attr_val(Type, Val) ->
     io:format("Uups...Type=~p~n",[Type]),
     Val.
 
@@ -359,32 +349,29 @@ dec_vendor_v1_attr_val(Pdu, VendId, <<Vtype:8, Vlen:8, Vbin/binary>>) ->
     <<Vval:Len/binary,Vrest/binary>> = Vbin,
     Vkey = {VendId, Vtype},
     case eradius_dict:lookup(Vkey) of
-	[A] when is_record(A, attribute) ->
-	    [dec_attr(Pdu, A, Vval) | dec_vendor_v1_attr_val(Pdu, VendId, Vrest)];
-	_ ->
-	    [{Vkey, Vval} | dec_vendor_v1_attr_val(Pdu, VendId, Vrest)]
+    [A] when is_record(A, attribute) ->
+        [dec_attr(Pdu, A, Vval) | dec_vendor_v1_attr_val(Pdu, VendId, Vrest)];
+    _ ->
+        [{Vkey, Vval} | dec_vendor_v1_attr_val(Pdu, VendId, Vrest)]
     end.
-    
+
 
 %%% ====================================================================
 %%% Radius Accounting specifics
 %%% ====================================================================
 
 enc_accreq(Id, Secret, Req) ->
-    Rpdu = #rad_pdu{reqid = Id,
-		    authenticator = zero16(),
-		    secret = Secret,
-		    req = Req},
+    Rpdu = #rad_pdu{reqid = Id, authenticator = zero16(), secret = Secret, req = Req},
     PDU = enc_pdu(Rpdu),
     patch_authenticator(PDU, l2b(Secret)).
 
-patch_authenticator(Req,Secret) ->
-    case {crypto:md5([Req,Secret]),list_to_binary(Req)} of
-	{Auth,<<Head:4/binary, _:16/binary, Rest/binary>>} ->
-	    B = l2b(Auth),
-	    <<Head/binary, B/binary, Rest/binary>>;
-	_Urk ->
-	    exit(patch_authenticator)
+patch_authenticator(Req, Secret) ->
+    case {crypto:md5([Req,Secret]), list_to_binary(Req)} of
+        {Auth, <<Head:4/binary, _:16/binary, Rest/binary>>} ->
+            B = l2b(Auth),
+            <<Head/binary, B/binary, Rest/binary>>;
+        _Urk ->
+            error(patch_authenticator, [Req, Secret])
     end.
 
 %%% An empty Acc-Req Authenticator
@@ -461,7 +448,7 @@ dec_simple_string_test() ->
 
 dec_simple_ipv4_test() ->
     {{attribute,4,ipaddr,undefined,no},{10,33,0,1}} = dec_attr(?PDU, #attribute{id = 4, type = ipaddr, enc = no}, <<10,33,0,1>>).
-    
+
 dec_vendor_integer_test() ->
     [{{attribute,{10415,3},integer,"X_3GPP-PDP-Type",no},0}] = dec_attr(?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}, <<0,0,40,175,3,6,0,0,0,0>>).
 

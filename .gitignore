@@ -6,3 +6,6 @@ include/dictionary_*.hrl
 *.log
 /dist/
 /ebin/eradius.app
+
+/doc
+!/doc/overview.edoc

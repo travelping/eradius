@@ -1,6 +1,10 @@
-{application,eradius,
-  [{description,"Generic radius application server"},
-   {registered,[eradius,eradius_acc]},
-   {applications,[kernel,stdlib,mnesia]},
-   {env,[]}]}
-.
+%% vim: ft=erlang
+{application, eradius, [
+   {description, "Erlang RADIUS server"},
+   {registered, [eradius_dict, eradius_sup, eradius_server_top_sup, eradius_server_sup, eradius_server_mon]},
+   {applications, [kernel, stdlib, crypto]},
+   {mod, {eradius, []}},
+   {env, [
+      {servers, []}
+   ]}
+]}.
