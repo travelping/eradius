@@ -60,9 +60,8 @@
 
 -record(rad_pdu, {
     reqid  = 0         :: 0..255,
-    secret = <<>>      :: binary(),
-    authenticator,
-    state,
+    secret = <<>>      :: eradius_lib:secret(),
+    authenticator      :: eradius_lib:authenticator(),
     nas_ip = {0,0,0,0} :: inet:ip_address(),
     req                :: #radius_request{}
 }).

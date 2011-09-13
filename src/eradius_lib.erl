@@ -1,7 +1,7 @@
 -module(eradius_lib).
 -export([enc_pdu/1, enc_reply_pdu/1, dec_packet/2, enc_accreq/3]).
--export([mk_authenticator/0, pad_to/2]).
--export([set_attr/3]).
+-export([mk_authenticator/0, pad_to/2, set_attr/3]).
+-export_type([secret/0, authenticator/0]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -9,16 +9,19 @@
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
 
--define(DBG(F,A), io:format("(~w:~b): " ++ F ++ "~n", [?MODULE, ?LINE] ++ A)).
+-type secret() :: binary().
+-type authenticator() :: binary().
 
 %%====================================================================
 %% Create Attributes
 %%====================================================================
 
 %%% Generate an unpredictable 16 byte token.
+-spec mk_authenticator() -> authenticator().
 mk_authenticator() ->
     crypto:rand_bytes(16).
 
+-spec scramble(secret(), authenticator(), binary()) -> binary().
 scramble(SharedSecret, RequestAuthenticator, PlainText) ->
     B = crypto:md5([SharedSecret, RequestAuthenticator]),
     do_scramble(SharedSecret, B, pad_to(16, PlainText), << >>).
@@ -80,6 +83,7 @@ salt_crypt(_SharedSecret, _B, << >>, CipherText) ->
 
 %% Ret: io_list(). Specific format of io_list is relied on by
 %% enc_reply_pdu/2
+-spec enc_pdu(#rad_pdu{}) -> iolist().
 enc_pdu(Pdu) ->
     {Cmd, CmdPdu} = enc_cmd(Pdu, Pdu#rad_pdu.req),
     [<<Cmd:8, (Pdu#rad_pdu.reqid):8, (io_list_len(CmdPdu) + 20):16>>,
@@ -88,6 +92,7 @@ enc_pdu(Pdu) ->
 
 %% This one includes the authenticator substitution required for
 %% sending replies from the server.
+-spec enc_reply_pdu(#rad_pdu{}) -> iolist().
 enc_reply_pdu(Pdu) ->
     [Head, Auth, Cmd] = enc_pdu(Pdu),
     Reply_auth = crypto:md5([Head, Auth, Cmd, Pdu#rad_pdu.secret]),
@@ -208,13 +213,11 @@ io_list_len([], N) ->
     N.
 
 %% Ret: #rad_pdu | Reason
+-spec dec_packet(binary(), secret()) -> #rad_pdu{} | bad_pdu.
 dec_packet(Packet, Secret) ->
     case (catch dec_packet0(Packet, Secret)) of
-        {'EXIT', R} ->
-            error_logger:warning_msg("decoding of a RADIUS packet failed~nError: ~p~n", [R]),
-            bad_pdu;
-        Else ->
-            Else
+        {'EXIT', _} -> bad_pdu;
+        Else        -> Else
     end.
 
 dec_packet0(Packet, Secret) ->
