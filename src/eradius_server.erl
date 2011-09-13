@@ -1,3 +1,37 @@
+%% @doc
+%%   This module implements a generic RADIUS server. A handler callback module
+%%   is used to process requests. The handler module is selected based on the NAS that
+%%   sent the request. Requests from unknown NASs are discarded.
+%%
+%%   == Callback Description ==
+%%
+%%   There is only one callback at the moment.
+%%
+%%   === radius_request(#radius_request{}, #nas_prop{}, HandlerData :: term()) -> {reply, #radius_request{}} | noreply ===
+%%
+%%   This function is called for every RADIUS request that is received by the server.
+%%   Its first argument is a request record which contains the request type and AVPs.
+%%   The second argument is a NAS descriptor. The third argument is an opaque term from the
+%%   server configuration.
+%%
+%%   Both records are defined in 'eradius_lib.hrl', but their definition is reproduced here for easy reference.
+%%
+%%   ```
+%%   -record(nas_prop, {
+%%       server_ip          :: inet:ip_address(),
+%%       server_port        :: eradius_server:port_number(),
+%%       nas_ip             :: inet:ip_address(),
+%%       secret             :: eradius_lib:secret(),
+%%       trace = true       :: boolean()
+%%   }).
+%%
+%%   -record(radius_request, {
+%%       cmd                :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
+%%       servers            :: list(),
+%%       timeout = infinity :: timeout(),
+%%       attrs = []         :: [eradius_dict:attribute()]
+%%   }).
+%%   '''
 -module(eradius_server).
 -export([start_link/2, behaviour_info/1]).
 -export_type([port_number/0]).
@@ -112,12 +146,11 @@ dec_radius(_State, _NasIP, _Packet) ->
 %% @private
 %% @doc handler function (spawned for every request)
 -spec do_radius(pid(), udp_packet(), req_id(), eradius_server_mon:handler(), #nas_prop{}) -> any().
-do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, {HandlerMod, HandlerArgs}, NasProp) ->
+do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, Handler, NasProp) ->
     Secret = NasProp#nas_prop.secret,
     case (catch eradius_lib:dec_packet(Packet, Secret)) of
         ReqPDU = #rad_pdu{} ->
-            Result = (catch apply(HandlerMod, radius_request, [ReqPDU, NasProp, HandlerArgs])),
-            case encode_reply(Result, ReqPDU, Secret) of
+            case apply_handler(Handler, ReqPDU, NasProp) of
                 {reply, ReplyPacket} ->
                     dbg(NasProp, "sending response for ~1000.p~n", [{ReqID, FromIP, FromPortNo}]),
                     gen_udp:send(Socket, FromIP, FromPortNo, ReplyPacket),
@@ -131,11 +164,20 @@ do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, {HandlerM
             ServerPid ! {handled, ReqID, FromIP}
     end.
 
-encode_reply({'EXIT', Reason}, _Pdu, _Secret) ->
-    {discard, Reason};
-encode_reply(Resp = #radius_request{}, ReqPDU, Secret) ->
-    Reply = eradius_lib:enc_reply_pdu(ReqPDU#rad_pdu{secret = Secret, req = Resp}),
-    {reply, Reply}.
+-spec apply_handler(eradius_server_mon:handler(), #rad_pdu{}, #nas_prop{}) -> {discard, term()} | {reply, iolist()}.
+apply_handler({HandlerMod, HandlerArg}, ReqPDU, NasProp) ->
+    try HandlerMod:radius_request(ReqPDU#rad_pdu.req, NasProp, HandlerArg) of
+        {reply, Reply = #radius_request{}} ->
+            EncReply = eradius_lib:enc_reply_pdu(ReqPDU#rad_pdu{req = Reply}),
+            {reply, EncReply};
+        noreply ->
+            {discard, handler_returned_noreply};
+        OtherReturn ->
+            eradius:error_report("Bad return value from RADIUS handler ~s: ~p", [HandlerMod, OtherReturn])
+    catch
+        Exn ->
+            {discard, Exn}
+    end.
 
 -spec dbg(#nas_prop{}, string(), list()) -> ok.
 dbg(#nas_prop{trace = true}, Fmt, Vals) ->
