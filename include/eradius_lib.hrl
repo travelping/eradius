@@ -55,7 +55,7 @@
     cmd                :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
     servers            :: list(),
     timeout = infinity :: timeout(),
-    attrs = []         :: [eradius_dict:attribute()]
+    attrs = []         :: list({eradius_dict:attribute(), eradius_dict:attr_value()})
 }).
 
 -record(rad_pdu, {

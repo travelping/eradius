@@ -5,6 +5,7 @@
    {applications, [kernel, stdlib, crypto]},
    {mod, {eradius, []}},
    {env, [
-      {servers, []}
+      {servers, []},
+      {logfile, "./radius.log"}
    ]}
 ]}.

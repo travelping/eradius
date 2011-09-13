@@ -37,7 +37,7 @@
 -export_type([port_number/0]).
 
 %% internal
--export([do_radius/5]).
+-export([do_radius/6]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -53,7 +53,8 @@
     socket             :: udp_socket(),      % Socket Reference of opened UDP port
     ip     = {0,0,0,0} :: inet:ip_address(), % IP to which this socket is bound
     port   = 0         :: port_number(),     % Port number we are listening on
-    transacts          :: ets:tid()          % ETS table containing current transactions
+    transacts          :: ets:tid(),         % ETS table containing current transactions
+    radlog             :: eradius_log:log()  % log file
 }).
 
 -spec behaviour_info('callbacks') -> [{module(), non_neg_integer()}].
@@ -72,20 +73,24 @@ init({IP, Port}) ->
     process_flag(trap_exit, true),
     case gen_udp:open(Port, [{active, once}, {ip, IP}, binary]) of
         {ok, Socket} ->
-            {ok, #state{socket = Socket, ip = IP, port = Port, transacts = ets:new(transacts, [])}};
+            {ok, Log} = eradius_log:open(),
+            {ok, #state{socket = Socket,
+                        ip = IP, port = Port,
+                        radlog = Log,
+                        transacts = ets:new(transacts, [])}};
         {error, Reason} ->
             {stop, Reason}
     end.
 
 %% @private
-handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{transacts = Transacts}) ->
+handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{radlog = Log, transacts = Transacts}) ->
     case dec_radius(State, FromIP, Packet) of
         {ok, ReqID, Handler, NasProp} ->
             ReqKey = {ReqID, FromIP},
             case ets:lookup(Transacts, ReqKey) of
                 [] ->
                     dbg(NasProp, "new request: ~p~n", [{ReqID, FromIP, FromPortNo}]),
-                    Pid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqUDP, ReqID, Handler, NasProp]),
+                    Pid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqUDP, ReqID, Handler, NasProp, Log]),
                     ets:insert(Transacts, {ReqKey, Pid}),
                     inet:setopts(Socket, [{active, once}]),
                     {noreply, State};
@@ -145,11 +150,12 @@ dec_radius(_State, _NasIP, _Packet) ->
 
 %% @private
 %% @doc handler function (spawned for every request)
--spec do_radius(pid(), udp_packet(), req_id(), eradius_server_mon:handler(), #nas_prop{}) -> any().
-do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, Handler, NasProp) ->
+-spec do_radius(pid(), udp_packet(), req_id(), eradius_server_mon:handler(), #nas_prop{}, eradius_log:log()) -> any().
+do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, Handler, NasProp, RadiusLog) ->
     Secret = NasProp#nas_prop.secret,
     case (catch eradius_lib:dec_packet(Packet, Secret)) of
         ReqPDU = #rad_pdu{} ->
+            eradius_log:write_pdu(RadiusLog, ReqPDU),
             case apply_handler(Handler, ReqPDU, NasProp) of
                 {reply, ReplyPacket} ->
                     dbg(NasProp, "sending response for ~1000.p~n", [{ReqID, FromIP, FromPortNo}]),

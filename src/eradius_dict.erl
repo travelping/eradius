@@ -2,7 +2,7 @@
 %% @doc Dictionary server
 -module(eradius_dict).
 -export([start_link/0, lookup/1, load_tables/1, load_tables/2]).
--export_type([attribute/0, table_name/0, attribute_id/0, attribute_type/0, vendor_id/0, value_id/0]).
+-export_type([attribute/0, attr_value/0, table_name/0, attribute_id/0, attribute_type/0, vendor_id/0, value_id/0]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -13,13 +13,16 @@
 -define(TABLENAME, ?MODULE).
 
 -type table_name() :: atom() | string().
--type attribute_id() :: pos_integer() | {pos_integer(), pos_integer()}.
+-type attribute_id() :: pos_integer() | {vendor_id(), pos_integer()}.
 -type attribute_type() :: attribute_prim_type() | {tagged, attribute_prim_type()}.
 -type attribute_prim_type() :: 'string' | 'integer' | 'integer64' | 'ipaddr' | 'ipv6addr'
                              | 'ipv6prefix' | 'date' | 'abinary' | 'binary' | 'octets'.
 -type value_id() :: {attribute_id(), pos_integer()}.
 -type vendor_id() :: pos_integer().
--type attribute() :: #attribute{}.
+
+-type attribute()  :: #attribute{} | attribute_id().
+-type attr_value() :: term().
+
 -record(state, {}).
 
 %% ------------------------------------------------------------------------------------------
@@ -28,7 +31,7 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec lookup(attribute_id() | value_id()) -> [#attribute{} | #value{}].
+-spec lookup(attribute_id() | value_id()) -> [#attribute{} | #value{} | #vendor{}].
 lookup(Id) ->
     ets:lookup(?TABLENAME, Id).
 

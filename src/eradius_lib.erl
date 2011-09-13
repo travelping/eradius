@@ -366,13 +366,12 @@ dec_vendor_v1_attr_val(Pdu, VendId, <<Vtype:8, Vlen:8, Vbin/binary>>) ->
 enc_accreq(Id, Secret, Req) ->
     Rpdu = #rad_pdu{reqid = Id, authenticator = zero16(), secret = Secret, req = Req},
     PDU = enc_pdu(Rpdu),
-    patch_authenticator(PDU, l2b(Secret)).
+    patch_authenticator(PDU, Secret).
 
 patch_authenticator(Req, Secret) ->
     case {crypto:md5([Req,Secret]), list_to_binary(Req)} of
         {Auth, <<Head:4/binary, _:16/binary, Rest/binary>>} ->
-            B = l2b(Auth),
-            <<Head/binary, B/binary, Rest/binary>>;
+            <<Head/binary, Auth/binary, Rest/binary>>;
         _Urk ->
             error(patch_authenticator, [Req, Secret])
     end.
@@ -384,14 +383,10 @@ zero16() ->
 zero_bytes(N) ->
     <<0:N/?BYTE>>.
 
-l2b(L) when is_list(L)   -> list_to_binary(L);
-l2b(B) when is_binary(B) -> B.
-
-%%% Radius Attribute handling
-
 %%% Set (any) Attribute
-set_attr(R, Id, Val) when is_record(R, radius_request) ->
-    R#radius_request{attrs = [{Id, Val} | R#radius_request.attrs]}.
+-spec set_attr(#radius_request{}, eradius_dict:attribute_id(), eradius_dict:attr_value()) -> #radius_request{}.
+set_attr(Req = #radius_request{attrs = Attrs}, Id, Val) ->
+    Req#radius_request{attrs = [{Id, Val} | Attrs]}.
 
 -ifdef(TEST).
 
