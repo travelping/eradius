@@ -7,5 +7,6 @@
    {env, [
       {servers, []},
       {logfile, "./radius.log"}
+      {tables, [dictionary]}
    ]}
 ]}.

@@ -50,25 +50,15 @@ load_tables(Dir, Tables) when is_list(Tables) ->
 %% -- gen_server callbacks
 init([]) ->
     create_table(),
+    {ok, InitialLoadTables} = application:get_env(tables),
+    do_load_tables(code:priv_dir(eradius), InitialLoadTables),
     {ok, #state{}}.
 
 create_table() ->
     ets:new(?TABLENAME, [named_table, {keypos, 2}, protected]).
 
 handle_call({load_tables, Dir, Tables}, _From, State) ->
-    try
-        Defs = lists:flatmap(fun (Tab) ->
-                                     case file:consult(filename:join(Dir, mapfile(Tab))) of
-                                         {ok, Res}       -> Res;
-                                         {error, _Error} -> throw({consult, Tab})
-                                     end
-                             end, Tables),
-        ets:insert(?TABLENAME, Defs),
-        {reply, ok, State}
-    catch
-        throw:{consult, FailedTable} ->
-            {reply, {error, {consult, FailedTable}}, State}
-    end.
+    {reply, do_load_tables(Dir, Tables), State}.
 
 %% unused callbacks
 handle_cast(_Msg, State)   -> {noreply, State}.
@@ -76,5 +66,25 @@ handle_info(_Info, State)  -> {noreply, State}.
 terminate(_Reason, _State) -> ok.
 code_change(_OldVsn, _NewVsn, _State) -> {ok, state}.
 
+%% ------------------------------------------------------------------------------------------
+%% -- gen_server callbacks
 mapfile(A) when is_atom(A) -> mapfile(atom_to_list(A));
 mapfile(A) when is_list(A) -> A ++ ".map".
+
+-spec do_load_tables(file:filename(), [table_name()]) -> ok | {error, {consult, file:filename()}}.
+do_load_tables(Dir, Tables) ->
+    try
+        Defs = lists:flatmap(fun (Tab) ->
+                                     TabFile = filename:join(Dir, mapfile(Tab)),
+                                     case file:consult(TabFile) of
+                                         {ok, Res}       -> Res;
+                                         {error, _Error} -> throw({consult, TabFile})
+                                     end
+                             end, Tables),
+        ets:insert(?TABLENAME, Defs),
+        eradius:info_report("Loaded RADIUS tables: ~p", [Tables])
+    catch
+        throw:{consult, FailedTable} ->
+            eradius:error_report("Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
+            {error, {consult, FailedTable}}
+    end.
