@@ -17,19 +17,20 @@
 %%   Both records are defined in 'eradius_lib.hrl', but their definition is reproduced here for easy reference.
 %%
 %%   ```
+%%   -record(radius_request, {
+%%       cmd           :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
+%%       attrs         :: eradius_lib:attribute_list(),
+%%       reqid         :: byte(),
+%%       secret        :: eradius_lib:secret(),
+%%       authenticator :: eradius_lib:authenticator()
+%%   }).
+%%
 %%   -record(nas_prop, {
 %%       server_ip   :: inet:ip_address(),
 %%       server_port :: eradius_server:port_number(),
 %%       nas_ip      :: inet:ip_address(),
 %%       secret      :: eradius_lib:secret(),
 %%       trace       :: boolean()
-%%   }).
-%%
-%%   -record(radius_request, {
-%%       cmd         :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
-%%       servers     :: list(),
-%%       timeout     :: timeout(),
-%%       attrs       :: [eradius_dict:attribute()]
 %%   }).
 %%   '''
 -module(eradius_server).
@@ -153,10 +154,10 @@ dec_radius(_State, _NasIP, _Packet) ->
 -spec do_radius(pid(), udp_packet(), req_id(), eradius_server_mon:handler(), #nas_prop{}, eradius_log:log()) -> any().
 do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, Handler, NasProp, RadiusLog) ->
     Secret = NasProp#nas_prop.secret,
-    case (catch eradius_lib:dec_packet(Packet, Secret)) of
-        ReqPDU = #rad_pdu{} ->
-            eradius_log:write_pdu(RadiusLog, ReqPDU),
-            case apply_handler(Handler, ReqPDU, NasProp) of
+    case eradius_lib:decode_request(Packet, Secret) of
+        Request = #radius_request{} ->
+            eradius_log:write_request(RadiusLog, Request),
+            case apply_handler(Handler, Request, NasProp) of
                 {reply, ReplyPacket} ->
                     dbg(NasProp, "sending response for ~1000.p~n", [{ReqID, FromIP, FromPortNo}]),
                     gen_udp:send(Socket, FromIP, FromPortNo, ReplyPacket),
@@ -165,16 +166,16 @@ do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, Handler, 
                     dbg(NasProp, "discarding response for ~1000.p~n", [{ReqID, FromIP, Reason}]),
                     ServerPid ! {handled, ReqID, FromIP}
             end;
-        NonPDU ->
-            dbg(NasProp, "discarding response for ~1000.p~n", [{ReqID, FromIP, NonPDU}]),
+        bad_pdu ->
+            dbg(NasProp, "discarding response for ~1000.p~n", [{ReqID, FromIP, bad_pdu}]),
             ServerPid ! {handled, ReqID, FromIP}
     end.
 
--spec apply_handler(eradius_server_mon:handler(), #rad_pdu{}, #nas_prop{}) -> {discard, term()} | {reply, iolist()}.
-apply_handler({HandlerMod, HandlerArg}, ReqPDU, NasProp) ->
-    try HandlerMod:radius_request(ReqPDU#rad_pdu.req, NasProp, HandlerArg) of
-        {reply, Reply = #radius_request{}} ->
-            EncReply = eradius_lib:enc_reply_pdu(ReqPDU#rad_pdu{req = Reply}),
+-spec apply_handler(eradius_server_mon:handler(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {reply, iolist()}.
+apply_handler({HandlerMod, HandlerArg}, Request, NasProp) ->
+    try HandlerMod:radius_request(Request, NasProp, HandlerArg) of
+        {reply, #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs}} ->
+            EncReply = eradius_lib:encode_reply_request(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs}),
             {reply, EncReply};
         noreply ->
             {discard, handler_returned_noreply};

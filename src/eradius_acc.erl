@@ -4,7 +4,6 @@
 -module(eradius_acc).
 -export([set_user/2, set_nas_ip_address/1, set_nas_ip_address/2,
          set_session_id/2, new/0,
-         set_servers/2, set_timeout/2,
          set_tc_ureq/1,
          set_tc_itimeout/1,set_tc_stimeout/1,
          set_tc_areset/1, set_tc_areboot/1,
@@ -69,16 +68,6 @@ set_session_id(R, Id) when is_record(R, radius_request),
 			   R#radius_request.cmd =:= accreq ->
     eradius_lib:set_attr(R, ?RSession_Id, any2bin(Id)).
 
-%% Server Info
-set_servers(R, Srvs) when is_record(R, radius_request),
-			  R#radius_request.cmd =:= accreq ->
-    R#radius_request{servers = Srvs}.
-
-set_timeout(R, Timeout) when is_record(R, radius_request),
-			     R#radius_request.cmd =:= accreq,
-			     is_integer(Timeout) ->
-    R#radius_request{timeout = Timeout}.
-
 %% ------------------------------------------------------------------------------------------
 %% -- Sending Requests
 punch(Srvs, Timeout, Req) ->
@@ -95,27 +84,26 @@ do_punch([[Ip,Port,Shared] | Rest], Timeout, Req) ->
            %% NB: We could implement a re-send strategy here
            %% along the lines of what the RFC proposes.
            do_punch(Rest, Timeout, Req);
-       Resp when is_record(Resp, rad_pdu) ->
-           %% Not really necessary...
-           R = Resp#rad_pdu.req,
-           if is_record(R, radius_request),
-              R#radius_request.cmd =:= accreq -> true;
-              true                            -> false
-           end
+       #radius_request{cmd = accreq} ->
+           true;
+       bad_pdu ->
+           false
     end.
 
 send_recv_msg(Ip, Port, ReqBinary, Timeout, Secret) ->
     {ok, S} = gen_udp:open(0, [binary]),
     gen_udp:send(S, Ip, Port, ReqBinary),
-    receive
-        {udp, S, _IP, _Port, Packet} ->
-            Reply = eradius_lib:dec_packet(Packet, Secret)
+    try
+        receive
+            {udp, S, _IP, _Port, Packet} ->
+                eradius_lib:decode_request(Packet, Secret)
+        after
+            Timeout ->
+                timeout
+        end
     after
-        Timeout ->
-            Reply = timeout
-    end,
-    gen_udp:close(S),
-    Reply.
+        gen_udp:close(S)
+    end.
 
 %% ------------------------------------------------------------------------------------------
 %% -- Helpers

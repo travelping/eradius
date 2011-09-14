@@ -42,26 +42,18 @@
 -define(RTCNAS_Request,     10).
 -define(RTCNAS_Reboot,      11).
 
-%% this is handed to radius server behaviour implementations
 -record(nas_prop, {
     server_ip     :: inet:ip_address(),
     server_port   :: eradius_server:port_number(),
     nas_ip        :: inet:ip_address(),
-    secret        :: binary(),
+    secret        :: eradius_lib:secret(),
     trace = false :: boolean()
 }).
 
 -record(radius_request, {
-    cmd                :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
-    servers            :: list(),
-    timeout = infinity :: timeout(),
-    attrs = []         :: list({eradius_dict:attribute(), eradius_dict:attr_value()})
-}).
-
--record(rad_pdu, {
-    reqid  = 0         :: 0..255,
-    secret = <<>>      :: eradius_lib:secret(),
-    authenticator      :: eradius_lib:authenticator(),
-    nas_ip = {0,0,0,0} :: inet:ip_address(),
-    req                :: #radius_request{}
+    cmd           :: eradius_lib:command(),
+    attrs = []    :: eradius_lib:attribute_list(),
+    reqid = 0     :: byte(),
+    secret = <<>> :: eradius_lib:secret(),
+    authenticator = eradius_lib:mk_authenticator() :: eradius_lib:authenticator()
 }).

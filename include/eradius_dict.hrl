@@ -2,7 +2,7 @@
     id              :: eradius_dict:attribute_id(),
     type = 'octets' :: eradius_dict:attribute_type(),
     name            :: string(),
-    enc  = 'no'     :: 'no' | 'scramble' | 'salt_crypt'
+    enc  = 'no'     :: eradius_dict:attribute_encryption()
 }).
 
 -record(vendor, {

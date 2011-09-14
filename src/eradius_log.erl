@@ -1,6 +1,6 @@
 %% @private
 -module(eradius_log).
--export([open/0, close/1, write_pdu/2]).
+-export([open/0, close/1, write_request/2]).
 -export([radius_date/1, printable_attr_value/2]).
 -export_type([log/0]).
 
@@ -21,21 +21,21 @@ open() ->
 close(Log) ->
     disk_log:close(Log).
 
--spec write_pdu(log(), #rad_pdu{}) -> ok.
-write_pdu(Log, Pdu = #rad_pdu{}) ->
+-spec write_request(log(), #radius_request{}) -> ok.
+write_request(Log, Request = #radius_request{}) ->
     Time = calendar:universal_time(),
-    Msg  = format_message(Time, Pdu),
+    Msg  = format_message(Time, Request),
     disk_log:blog(Log, Msg).
 
 %% ------------------------------------------------------------------------------------------
 %% -- formatting
-format_message(Time, Pdu) ->
+format_message(Time, Request) ->
     BinTStamp = radius_date(Time),
-    BinPacket = format_packet(Pdu),
+    BinPacket = format_packet(Request),
     <<BinTStamp/binary, "\n", BinPacket/binary, "\n">>.
 
-format_packet(Pdu) ->
-    Attrs = (Pdu#rad_pdu.req)#radius_request.attrs,
+format_packet(Request) ->
+    Attrs = Request#radius_request.attrs,
     << <<(print_attr(Key, Val))/binary>> || {Key, Val} <- Attrs >>.
 
 print_attr(Key = #attribute{name = Attr, type = Type}, InVal) ->

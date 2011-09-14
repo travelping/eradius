@@ -4,7 +4,9 @@
 -export([radius_request/3]).
 
 -include("eradius_lib.hrl").
+-include("dictionary.hrl").
 
-radius_request(Request, NasProp, _Args) ->
-    io:format("GOT REQUEST:~n   Req: ~p~n   Nas: ~p~n~n", [Request, NasProp]),
-    {reply, #radius_request{cmd = accresp}}.
+radius_request(R = #radius_request{cmd = request}, _NasProp, _Args) ->
+    io:format("~nGOT AUTH REQUEST:~n~p~n", [R]),
+    Response = #radius_request{cmd = accept, attrs = [{?Realm, "foo"}]},
+    {reply, Response}.
