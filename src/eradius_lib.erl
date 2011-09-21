@@ -1,6 +1,6 @@
 -module(eradius_lib).
 -export([encode_request/1, encode_reply_request/1, decode_request/2, enc_accreq/3]).
--export([mk_authenticator/0, pad_to/2, set_attr/3]).
+-export([mk_authenticator/0, pad_to/2, set_attr/3, set_attributes/2]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
 % -compile(bin_opt_info).
@@ -22,6 +22,11 @@
 -spec mk_authenticator() -> authenticator().
 mk_authenticator() ->
     crypto:rand_bytes(16).
+
+set_attributes(Req = #radius_request{}, []) -> Req;
+set_attributes(Req = #radius_request{}, [{Id, Val} | Attributes]) ->
+    NewReq = set_attr(Req, Id, Val),
+    set_attributes(NewReq, Attributes).
 
 -spec set_attr(#radius_request{}, eradius_dict:attribute_id(), eradius_dict:attr_value()) -> #radius_request{}.
 set_attr(Req = #radius_request{attrs = Attrs}, Id, Val) ->
