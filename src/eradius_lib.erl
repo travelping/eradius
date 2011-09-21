@@ -23,8 +23,9 @@
 mk_authenticator() ->
     crypto:rand_bytes(16).
 
+-spec set_attributes(#radius_request{}, attribute_list()) -> #radius_request{}.
 set_attributes(Req = #radius_request{attrs = Attrs}, NewAttrs) ->
-    Req#radius_request{attrs = [NewAttrs | Attrs]}.
+    Req#radius_request{attrs = NewAttrs ++ Attrs}.
 
 -spec set_attr(#radius_request{}, eradius_dict:attribute_id(), eradius_dict:attr_value()) -> #radius_request{}.
 set_attr(Req = #radius_request{attrs = Attrs}, Id, Val) ->
