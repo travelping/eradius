@@ -1,4 +1,3 @@
-
 -include("eradius_dict.hrl").
 
 -task({"build:dicts", "Compile eradius dictionaries"}).
@@ -12,7 +11,6 @@ check("build:dicts") ->
     tpk_util:check_files_mtime(Files).
 
 run("build:dicts", DictFiles) ->
-    tetrapak:require("build:erlang"),
     lists:foreach(fun ({F, _}) -> mk_dict(F) end, DictFiles);
 
 run("clean:dicts", _) ->
