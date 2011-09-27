@@ -13,7 +13,7 @@ start_link() ->
 %% ------------------------------------------------------------------------------------------
 %% -- supervisor callbacks
 init([]) ->
-    RestartStrategy = one_for_all,
+    RestartStrategy = one_for_one,
     MaxRestarts = 10,
     MaxSecondsBetweenRestarts = 5,
 
@@ -21,5 +21,6 @@ init([]) ->
 
     DictServer   = {dict, {eradius_dict, start_link, []}, permanent, brutal_kill, worker, [eradius_dict]},
     ServerTopSup = {server_top_sup, {eradius_server_top_sup, start_link, []}, permanent, infinity, supervisor, [eradius_server_top_sup]},
+    Client       = {client, {eradius_client, start_link, []}, permanent, 500, worker, [eradius_client]}, 
 
-    {ok, {SupFlags, [DictServer, ServerTopSup]}}.
+    {ok, {SupFlags, [DictServer, ServerTopSup, Client]}}.

@@ -1,5 +1,5 @@
 -module(eradius_lib).
--export([encode_request/1, encode_reply_request/1, decode_request/2, enc_accreq/3]).
+-export([encode_request/1, encode_reply_request/1, decode_request/2, decode_request_id/1]).
 -export([mk_authenticator/0, pad_to/2, set_attr/3, set_attributes/2]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
@@ -35,19 +35,21 @@ set_attr(Req = #radius_request{attrs = Attrs}, Id, Val) ->
 %% -- Wire Encoding
 
 %% @doc Convert a RADIUS request to the wire format.
--spec encode_request(#radius_request{}) -> iolist(). %% Specific format of iolist is relied on by encode_reply_request/2
+-spec encode_request(#radius_request{}) -> binary().
 encode_request(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, attrs = Attributes}) ->
     {Body, BodySize} = encode_attributes(Req, Attributes),
-    [<<(encode_command(Command)):8, ReqID:8, (BodySize + 20):16>>, <<Authenticator:16/binary>>, Body].
+    <<(encode_command(Command)):8, ReqID:8, (BodySize + 20):16, Authenticator:16/binary, Body/binary>>.
 
 %% @doc Convert a RADIUS reply to the wire format.
 %%   This function performs the same task as {@link encode_request/2},
 %%   except that it includes the authenticator substitution required for replies.
--spec encode_reply_request(#radius_request{}) -> iolist().
-encode_reply_request(Req) ->
-    [Head, Auth, Body] = encode_request(Req),
-    ReplyAuth = crypto:md5([Head, Auth, Body, Req#radius_request.secret]),
-    [Head, ReplyAuth, Body].
+-spec encode_reply_request(#radius_request{}) -> binary().
+encode_reply_request(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, attrs = Attributes}) ->
+    {Body, BodySize} = encode_attributes(Req, Attributes),
+    Head = <<(encode_command(Command)):8, ReqID:8, (BodySize + 20):16>>,
+    ReqAuth = <<Authenticator:16/binary>>,
+    ReplyAuth = crypto:md5([Head, ReqAuth, Body, Req#radius_request.secret]),
+    <<Head/binary, ReplyAuth:16/binary, Body/binary>>.
 
 -spec encode_command(command()) -> byte().
 encode_command(request)   -> ?RAccess_Request;
@@ -57,21 +59,21 @@ encode_command(reject)    -> ?RAccess_Reject;
 encode_command(accreq)    -> ?RAccounting_Request;
 encode_command(accresp)   -> ?RAccounting_Response.
 
--spec encode_attributes(#radius_request{}, attribute_list()) -> {iolist(), non_neg_integer()}.
+-spec encode_attributes(#radius_request{}, attribute_list()) -> {binary(), non_neg_integer()}.
 encode_attributes(Req, Attributes) ->
-    F = fun ({A = #attribute{}, Val}, BodySize) ->
+    F = fun ({A = #attribute{}, Val}, {Body, BodySize}) ->
                 EncAttr = encode_attribute(Req, A, Val),
-                {EncAttr, BodySize + byte_size(EncAttr)};
-            ({ID, Val}, BodySize) ->
+                {<<Body/binary, EncAttr/binary>>, BodySize + byte_size(EncAttr)};
+            ({ID, Val}, {Body, BodySize}) ->
                 case eradius_dict:lookup(ID) of
                     [A = #attribute{}] ->
                         EncAttr = encode_attribute(Req, A, Val),
-                        {EncAttr, BodySize + byte_size(EncAttr)};
+                        {<<Body/binary, EncAttr/binary>>, BodySize + byte_size(EncAttr)};
                     _ ->
-                        {[], BodySize}
+                        {Body, BodySize}
                 end
         end,
-    lists:mapfoldl(F, 0, Attributes).
+    lists:foldl(F, {<<>>, 0}, Attributes).
 
 -spec encode_attribute(#radius_request{}, #attribute{}, term()) -> binary().
 encode_attribute(Req, Attr = #attribute{id = {Vendor, ID}}, Value) ->
@@ -124,6 +126,10 @@ encode_value(date, Date = {{_,_,_},{_,_,_}}) ->
 
 %% ------------------------------------------------------------------------------------------
 %% -- Wire Decoding
+-spec decode_request_id(binary()) -> {0..255, binary()} | bad_pdu.
+decode_request_id(Req = <<_Cmd:8, ReqId:8, _Rest/binary>>) -> {ReqId, Req};
+decode_request_id(_Req) -> bad_pdu.
+
 -spec decode_request(binary(), secret()) -> #radius_request{} | bad_pdu.
 decode_request(Packet, Secret) ->
     case (catch decode_request0(Packet, Secret)) of
@@ -307,7 +313,9 @@ salt_crypt(_SharedSecret, _B, << >>, CipherText) ->
     CipherText.
 
 %% @doc pad binary to specific length
-%%   {@see http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html}
+%%   See <a href="http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html">
+%%          http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html
+%%       </a>
 -compile({inline, pad_to/2}).
 pad_to(Width, Binary) ->
      case (Width - byte_size(Binary) rem Width) rem Width of
@@ -315,31 +323,6 @@ pad_to(Width, Binary) ->
          N -> <<Binary/binary, 0:(N*8)>>
      end.
 
-%%% ====================================================================
-%%% Radius Accounting specifics
-%%% ====================================================================
-
-enc_accreq(Id, Secret, Req) ->
-    CompleteRequest = Req#radius_request{reqid = Id, authenticator = zero16(), secret = Secret},
-    Packet = encode_request(CompleteRequest),
-    patch_authenticator(Packet, Secret).
-
-patch_authenticator(Req, Secret) ->
-    case {crypto:md5([Req,Secret]), list_to_binary(Req)} of
-        {Auth, <<Head:4/binary, _:16/binary, Rest/binary>>} ->
-            <<Head/binary, Auth/binary, Rest/binary>>;
-        _Urk ->
-            error(patch_authenticator, [Req, Secret])
-    end.
-
-%%% An empty Acc-Req Authenticator
-zero16() ->
-    zero_bytes(16).
-
-zero_bytes(N) ->
-    <<0:N/?BYTE>>.
-
-%%% Set (any) Attribute
 -ifdef(TEST).
 
 %%
