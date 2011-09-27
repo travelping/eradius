@@ -90,7 +90,6 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{r
             ReqKey = {ReqID, FromIP},
             case ets:lookup(Transacts, ReqKey) of
                 [] ->
-                    dbg(NasProp, "new request: ~p~n", [{ReqID, FromIP, FromPortNo}]),
                     Pid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqUDP, ReqID, Handler, NasProp, Log]),
                     ets:insert(Transacts, {ReqKey, Pid}),
                     inet:setopts(Socket, [{active, once}]),
@@ -103,12 +102,11 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{r
                     %% duplicate request arrived after we had already
                     %% sent our answer. This is the only reason to
                     %% even store the transaction.
-                    dbg(NasProp, "duplicate request: ~p~n", [{ReqID, FromIP, FromPortNo}]),
+                    dbg(NasProp, "duplicate request ~p~n", [{ReqID, FromIP, FromPortNo}]),
                     inet:setopts(Socket, [{active, once}]),
                     {noreply, State}
             end;
-        {discard, Message, _Reason} ->
-            eradius:error_report("Discarded request from ~1000.p, Reason: ~1000.p~n", [{FromIP, FromPortNo}, Message]),
+        {discard, _Reason} ->
             inet:setopts(Socket, [{active, once}]),
             {noreply, State}
     end;
@@ -128,7 +126,7 @@ terminate(_Reason, State) ->
     gen_udp:close(State#state.socket),
     ok.
 
-%% ---------------- unused callbacks
+%% -- unused callbacks
 %% @private
 handle_call(_Request, _From, State) -> {noreply, State}.
 %% @private
@@ -138,16 +136,16 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %% ------------------------------------------------------------------------------------------
 %% -- Internal Functions
--spec dec_radius(#state{}, inet:ip_address(), binary()) -> {ok, req_id(), eradius_server_mon:handler(), #nas_prop{}} | {discard, string(), atom()}.
+-spec dec_radius(#state{}, inet:ip_address(), binary()) -> {ok, req_id(), eradius_server_mon:handler(), #nas_prop{}} | {discard, unknown_nas | bad_pdu}.
 dec_radius(#state{ip = IP, port = Port}, NasIP, <<_Code, ReqID, _/binary>>) ->
     case eradius_server_mon:lookup_handler(IP, Port, NasIP) of
         {ok, Handler, NasProp} ->
             {ok, ReqID, Handler, NasProp};
         {error, not_found} ->
-            {discard, "Radius Request from non allowed IP address.", dis_bad_ras}
+            {discard, unknown_nas}
     end;
 dec_radius(_State, _NasIP, _Packet) ->
-    {discard, "Radius request packet size too small to start", dis_bad_packet}.
+    {discard, bad_pdu}.
 
 %% @private
 %% @doc handler function (spawned for every request)
@@ -160,18 +158,18 @@ do_radius(ServerPid, {udp, Socket, FromIP, FromPortNo, Packet}, ReqID, Handler, 
             case apply_handler(Handler, Request, NasProp) of
                 {reply, ReplyPacket} ->
                     dbg(NasProp, "sending response for ~1000.p~n", [{ReqID, FromIP, FromPortNo}]),
-                    gen_udp:send(Socket, FromIP, FromPortNo, ReplyPacket),
-                    ServerPid ! {handled, ReqID, FromIP};
+                    gen_udp:send(Socket, FromIP, FromPortNo, ReplyPacket);
                 {discard, Reason} ->
-                    dbg(NasProp, "discarding response for ~1000.p~n", [{ReqID, FromIP, Reason}]),
-                    ServerPid ! {handled, ReqID, FromIP}
+                    dbg(NasProp, "discarding response for ~1000.p~n", [{ReqID, FromIP, Reason}]);
+                {exit, Reason} ->
+                    dbg(NasProp, "discarding response (handler EXIT) for ~1000.p~n", [{ReqID, FromIP, Reason}])
             end;
         bad_pdu ->
-            dbg(NasProp, "discarding response for ~1000.p~n", [{ReqID, FromIP, bad_pdu}]),
-            ServerPid ! {handled, ReqID, FromIP}
-    end.
+            dbg(NasProp, "discarding request ~1000.p~n", [{ReqID, FromIP, bad_pdu}])
+    end,
+    ServerPid ! {handled, ReqID, FromIP}.
 
--spec apply_handler(eradius_server_mon:handler(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {reply, iolist()}.
+-spec apply_handler(eradius_server_mon:handler(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {exit, term()} | {reply, binary()}.
 apply_handler({HandlerMod, HandlerArg}, Request, NasProp) ->
     try HandlerMod:radius_request(Request, NasProp, HandlerArg) of
         {reply, #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs}} ->
@@ -180,10 +178,10 @@ apply_handler({HandlerMod, HandlerArg}, Request, NasProp) ->
         noreply ->
             {discard, handler_returned_noreply};
         OtherReturn ->
-            eradius:error_report("Bad return value from RADIUS handler ~s: ~p", [HandlerMod, OtherReturn])
+            {exit, {bad_return, OtherReturn}}
     catch
-        Exn ->
-            {discard, Exn}
+        Reason ->
+            {exit, Reason}
     end.
 
 -spec dbg(#nas_prop{}, string(), list()) -> ok.
