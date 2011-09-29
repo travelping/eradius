@@ -7,5 +7,5 @@ include/dictionary_*.hrl
 /dist/
 /ebin/eradius.app
 
-/doc
+/doc/*
 !/doc/overview.edoc

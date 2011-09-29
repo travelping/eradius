@@ -30,9 +30,6 @@
 -define(RStatus_Type_On,     7).
 -define(RStatus_Type_Off,    8).
 
-%%- Set radius accounting attributes
--define(ACC_ATTR(Key,Val), {Key,Val}).
-
 %%- Terminate Cause values
 -define(RTCUser_Request,     1).
 -define(RTCIdle_Timeout,     4).
@@ -47,13 +44,14 @@
     server_port   :: eradius_server:port_number(),
     nas_ip        :: inet:ip_address(),
     secret        :: eradius_lib:secret(),
-    trace = false :: boolean()
+    trace = false :: boolean(),
+    handler_nodes = local :: list(atom()) | local
 }).
 
 -record(radius_request, {
-    cmd           :: eradius_lib:command(),
-    attrs = []    :: eradius_lib:attribute_list(),
     reqid = 0     :: byte(),
-    secret = <<>> :: eradius_lib:secret(),
-    authenticator = eradius_lib:mk_authenticator() :: eradius_lib:authenticator()
+    cmd = request :: eradius_lib:command(),
+    attrs = []    :: eradius_lib:attribute_list(),
+    secret        :: eradius_lib:secret(),
+    authenticator :: eradius_lib:authenticator()
 }).

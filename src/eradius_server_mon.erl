@@ -2,7 +2,9 @@
 %% @doc Manager for RADIUS server processes.
 %%   This module manages the RADIUS server registry and
 %%   validates and applies the server configuration from the application environment.
-%%   It starts all servers that are configured as part of its initialization.
+%%   It starts all servers that are configured as part of its initialization,
+%%   then sends ping requests to all nodes that are part of the configuration in order
+%%   to keep them connected.
 -module(eradius_server_mon).
 -export([start_link/0, reconfigure/0, lookup_handler/3, lookup_pid/2, set_trace/4]).
 -export_type([handler/0]).
@@ -13,6 +15,7 @@
 -include("eradius_lib.hrl").
 
 -define(SERVER, ?MODULE).
+-define(PING_INTERVAL, 1000).
 -define(NAS_TAB, eradius_nas_tab).
 
 -type server()  :: {inet:ip_address(), eradius_server:port_number()}.
@@ -62,7 +65,7 @@ set_trace(ServerIP, ServerPort, NasIP, Trace) when is_boolean(Trace) ->
 
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
--record(state, {running, nas_tab}).
+-record(state, {running, nodes}).
 
 init([]) ->
     ?NAS_TAB = ets:new(?NAS_TAB, [named_table, protected, {keypos, #nas.key}]),
@@ -72,16 +75,15 @@ init([]) ->
             eradius:error_report("invalid server config: ~s", [Message]),
             {stop, invalid_config};
         ServList ->
-            Running = lists:map(fun ({{IP, Port}, HandlerList}) ->
+            Running = lists:map(fun (Server = {{IP, Port}, _}) ->
                                         {ok, Pid} = eradius_server_sup:start_instance(IP, Port),
-                                        HandlersForETS = [#nas{key = {{IP, Port}, NasIP},
-                                                               handler = {HandlerMod, HandlerArgs},
-                                                               prop = #nas_prop{nas_ip = NasIP, secret = Secret, trace = false}}
-                                                           || {NasIP, Secret, HandlerMod, HandlerArgs} <- HandlerList],
-                                        ets:insert(?NAS_TAB, HandlersForETS),
+                                        ets:insert(?NAS_TAB, server_naslist(Server)),
                                         {{IP, Port}, Pid}
                                 end, ServList),
-            {ok, #state{running = Running}}
+            AllNodes = config_nodes(ServList),
+            ping_disconnected_nodes(AllNodes),
+            timer:send_interval(?PING_INTERVAL, self(), ping_nodes),
+            {ok, #state{running = Running, nodes = AllNodes}}
     end.
 
 handle_call({lookup_pid, Server}, _From, State) ->
@@ -105,11 +107,36 @@ handle_call(reconfigure, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
+handle_info(ping_nodes, State = #state{nodes = Nodes}) ->
+    ping_disconnected_nodes(Nodes),
+    {noreply, State};
+handle_info(_Info, State) ->
+    {noreply, State}.
+
 %% unused callbacks
 handle_cast(_Msg, State)            -> {noreply, State}.
-handle_info(_Info, State)           -> {noreply, State}.
 terminate(_Reason, _State)          -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
+
+%% ------------------------------------------------------------------------------------------
+%% -- helpers
+-spec server_naslist(valid_server()) -> list(#nas{}).
+server_naslist({{IP, Port}, HandlerList}) ->
+    [#nas{key = {{IP, Port}, NasIP},
+          handler = {HandlerMod, HandlerArgs},
+          prop = #nas_prop{handler_nodes = HandlerNodes, nas_ip = NasIP, secret = Secret, trace = false}}
+      || {NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs} <- HandlerList].
+
+-spec config_nodes(valid_config()) -> list(atom()).
+config_nodes(Config) ->
+    ordsets:from_list(lists:concat([N || {_Server, HandlerList} <- Config,
+                                         {_, _, N, _, _} <- HandlerList,
+                                         N /= local, N /= node()])).
+
+ping_disconnected_nodes(Nodes) ->
+    lists:foreach(fun (Node) ->
+                          lists:member(Node, nodes()) orelse net_adm:ping(Node)
+                  end, Nodes).
 
 %% ------------------------------------------------------------------------------------------
 %% -- config validation
@@ -118,8 +145,9 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 -define(ip4_address(T), ?ip4_address_num(element(1, T)), ?ip4_address_num(element(2, T)),
                         ?ip4_address_num(element(3, T)), ?ip4_address_num(element(4, T))).
 
--type valid_nas()    :: {inet:ip_address(), binary(), module(), term()}.
--type valid_config() :: list({server(), list(valid_nas())}).
+-type valid_nas()    :: {inet:ip_address(), binary(), list(atom()), module(), term()}.
+-type valid_server() :: {server(), list(valid_nas())}.
+-type valid_config() :: list(valid_server()).
 
 -spec validate_server_config(list(term())) -> valid_config() | {invalid, io_lib:chars()}.
 
@@ -175,31 +203,36 @@ validate_server(X) ->
 
 validate_nas_list([]) ->
     [];
-validate_nas_list([{NasAddress, Secret, Module, Args} | NasListRest]) when is_list(NasAddress) ->
+validate_nas_list([{NasAddress, Secret, HandlerNodes, Module, Args} | NasListRest]) when is_list(NasAddress) ->
     case inet_parse:ipv4_address(NasAddress) of
         {ok, ValidAddress} ->
-            validate_nas_list([{ValidAddress, Secret, Module, Args} | NasListRest]);
+            validate_nas_list([{ValidAddress, Secret, HandlerNodes, Module, Args} | NasListRest]);
         {error, einval} ->
             {invalid, io_lib:format("bad IP address in NAS specification: ~p", [NasAddress])}
     end;
-validate_nas_list([{NasAddress, Secret, Module, Args} | NasListRest]) when ?ip4_address(NasAddress) ->
+validate_nas_list([{NasAddress, Secret, HandlerNodes, Module, Args} | NasListRest]) when ?ip4_address(NasAddress) ->
     case validate_secret(Secret) of
         E = {invalid, _} ->
             E;
         ValidSecret ->
-            case Module of
-                _ when is_atom(Module) ->
-                    case validate_nas_list(NasListRest) of
-                        E = {invalid, _} ->
-                            E;
-                        ValidNasListRest ->
-                            [{NasAddress, ValidSecret, Module, Args} | ValidNasListRest]
-                    end;
-                _Else ->
-                    {invalid, io_lib:format("bad module in NAS specifification: ~p", [Module])}
+            case validate_handler_nodes(HandlerNodes) of
+                E = {invalid, _} ->
+                    E;
+                ValidHandlerNodes ->
+                    case Module of
+                        _ when is_atom(Module) ->
+                            case validate_nas_list(NasListRest) of
+                                E = {invalid, _} ->
+                                    E;
+                                ValidNasListRest ->
+                                    [{NasAddress, ValidSecret, ValidHandlerNodes, Module, Args} | ValidNasListRest]
+                            end;
+                        _Else ->
+                            {invalid, io_lib:format("bad module in NAS specifification: ~p", [Module])}
+                    end
             end
     end;
-validate_nas_list([{InvalidAddress, _, _, _} | _NasListRest]) ->
+validate_nas_list([{InvalidAddress, _, _, _, _} | _NasListRest]) ->
     {invalid, io_lib:format("bad IP address in NAS specification: ~p", [InvalidAddress])};
 validate_nas_list([OtherTerm | _NasListRest]) ->
     {invalid, io_lib:format("bad term in NAS specification: ~p", [OtherTerm])}.
@@ -210,3 +243,26 @@ validate_secret(Secret) when is_binary(Secret) ->
     Secret;
 validate_secret(OtherTerm) ->
     {invalid, io_lib:format("bad RADIUS secret: ~p", [OtherTerm])}.
+
+validate_handler_nodes(local) ->
+    local;
+validate_handler_nodes("local") ->
+    local;
+validate_handler_nodes([]) ->
+    {invalid, "empty node list"};
+validate_handler_nodes(NodeL) when is_list(NodeL) ->
+    validate_node_list(NodeL);
+validate_handler_nodes(OtherTerm) ->
+    {invalid, io_lib:format("bad node list: ~p", [OtherTerm])}.
+
+validate_node_list([]) ->
+    [];
+validate_node_list([Node | Rest]) when is_atom(Node) ->
+    case validate_node_list(Rest) of
+        E = {invalid, _} ->
+            E;
+        ValidRest ->
+            [Node | ValidRest]
+    end;
+validate_node_list([OtherTerm | _]) ->
+    {invalid, io_lib:format("bad term in node list: ~p", [OtherTerm])}.
