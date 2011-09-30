@@ -1,5 +1,5 @@
 -module(eradius_lib).
--export([encode_request/1, encode_reply_request/1, decode_request/2, decode_request_id/1]).
+-export([get_attr/2, encode_request/1, encode_reply_request/1, decode_request/2, decode_request_id/1]).
 -export([mk_authenticator/0, pad_to/2, set_attr/3, set_attributes/2]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
@@ -30,6 +30,15 @@ set_attributes(Req = #radius_request{attrs = Attrs}, NewAttrs) ->
 -spec set_attr(#radius_request{}, eradius_dict:attribute_id(), eradius_dict:attr_value()) -> #radius_request{}.
 set_attr(Req = #radius_request{attrs = Attrs}, Id, Val) ->
     Req#radius_request{attrs = [{Id, Val} | Attrs]}.
+
+-spec get_attr(#radius_request{}, eradius_dict:attribute_id()) -> eradius_dict:attr_value() | undefined.
+get_attr(#radius_request{attrs = Attrs}, Id) ->
+    get_attr_loop(Id, Attrs).
+
+get_attr_loop(Key, [{#attribute{id = Key}, Val}|_T]) -> Val;
+get_attr_loop(Key, [{Key, Val}|_T])                  -> Val;
+get_attr_loop(Key, [_|T])                            -> get_attr_loop(Key, T);
+get_attr_loop(_, [])                                 -> undefined.
 
 %% ------------------------------------------------------------------------------------------
 %% -- Wire Encoding
