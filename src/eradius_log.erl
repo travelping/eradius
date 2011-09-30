@@ -1,7 +1,7 @@
 %% @private
 -module(eradius_log).
 -export([open/0, close/1, write_request/2]).
--export([radius_date/1, printable_attr_value/2]).
+-export([radius_date/1, printable_attr_value/2, bin_to_hexstr/1]).
 -export_type([log/0]).
 
 -include("eradius_lib.hrl").
