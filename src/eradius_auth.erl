@@ -1,8 +1,61 @@
+%% @doc user authentication helper functions
 -module(eradius_auth).
+-export([check_password/2]).
 -export([pap/2, chap/3, ms_chap/3, ms_chap_v2/4]).
 -export([des_key_from_hash/1, nt_password_hash/1, challenge_response/2, ascii_to_unicode/1]).
 
+-include("eradius_lib.hrl").
+-include("eradius_dict.hrl").
+-include("dictionary.hrl").
 -include("dictionary_microsoft.hrl").
+
+%% ------------------------------------------------------------------------------------------
+%% -- high level interface
+
+%% @doc check the request password using all available authentication mechanisms.
+%%    Tries CHAP, then MS-CHAP, then MS-CHAPv2, finally PAP.
+-spec check_password(binary(), #radius_request{}) -> {boolean(), eradius_lib:attribute_list()}.
+check_password(Password, Req = #radius_request{authenticator = Authenticator, attrs = AVPs}) ->
+    case lookup_auth_attrs(AVPs) of
+        {false, Chap_pass, false, false, false, false} ->
+            {chap(Password, Chap_pass, Authenticator), []};
+        {false, Chap_pass, Challenge, false, false, false} ->
+            {chap(Password, Chap_pass, Challenge), []};
+        {false, _, _, Challenge, Response, false} when Challenge =/= false, Response =/= false ->
+            ms_chap(Password, Challenge, Response);
+        {false, _, _, Challenge, false, Response} when Challenge =/= false, Response =/= false ->
+            Username = eradius_lib:get_attr(Req, ?User_Name),
+            ms_chap_v2(Username, Password, Challenge, Response);
+        {ReqPassword, _, _, _, _, _} when ReqPassword =/= false ->
+            {pap(Password, ReqPassword), []};
+        {_, _, _, _, _, _} ->
+            {false, []}
+    end.
+
+%% composite lookup function, retrieve User_Password, CHAP_Password and CHAP_Challenge at once
+lookup_auth_attrs(AVPs) ->
+    lookup_auth_attrs({false, false, false, false, false, false}, AVPs).
+
+lookup_auth_attrs(Attrs, [{#attribute{id = ?User_Password}, Val}|T]) ->
+    lookup_auth_attrs(setelement(1, Attrs, Val), T);
+lookup_auth_attrs(Attrs, [{#attribute{id = ?CHAP_Password}, Val}|T]) ->
+    lookup_auth_attrs(setelement(2, Attrs, Val), T);
+lookup_auth_attrs(Attrs, [{#attribute{id = ?CHAP_Challenge}, Val}|T]) ->
+    lookup_auth_attrs(setelement(3, Attrs, Val), T);
+lookup_auth_attrs(Attrs, [{#attribute{id = ?MS_CHAP_Challenge}, Val}|T]) ->
+    lookup_auth_attrs(setelement(4, Attrs, Val), T);
+lookup_auth_attrs(Attrs, [{#attribute{id = ?MS_CHAP_Response}, Val}|T]) ->
+    lookup_auth_attrs(setelement(5, Attrs, Val), T);
+lookup_auth_attrs(Attrs, [{#attribute{id = ?MS_CHAP2_Response}, Val}|T]) ->
+    lookup_auth_attrs(setelement(6, Attrs, Val), T);
+
+lookup_auth_attrs(Attrs, [{{_,_} = Id, Val}|T]) ->
+    %% fallback for undecoded AVPs
+    lookup_auth_attrs(Attrs, [{#attribute{id = Id}, Val}|T]);
+lookup_auth_attrs(Attrs, [_|T]) ->
+    lookup_auth_attrs(Attrs, T);
+lookup_auth_attrs(Attrs, []) ->
+    Attrs.
 
 %% ------------------------------------------------------------------------------------------
 %% -- PAP/CHAP
