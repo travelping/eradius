@@ -24,14 +24,19 @@ start_link() ->
 send_request(NAS, Request) ->
     send_request(NAS, Request, []).
 
--spec send_request(nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'socket_down'}.
-send_request({IP, Port, Secret}, Request = #radius_request{}, Options) ->
+-spec send_request(nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'socket_down' | 'badcmd'}.
+send_request({IP, Port, Secret}, Request = #radius_request{cmd = Cmd}, Options) when Cmd =:= 'request'; Cmd =:= 'accreq' ->
     Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
     {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, {IP, Port}}),
     SMon = erlang:monitor(process, Socket),
-    EncRequest = eradius_lib:encode_request(Request#radius_request{reqid = ReqId, secret = Secret}),
+    EncRequest = encode_request(Request#radius_request{reqid = ReqId, secret = Secret}),
     send_retry_loop(Socket, SMon, {IP, Port}, ReqId, EncRequest, Timeout, Retries).
+
+encode_request(Req = #radius_request{cmd = request}) ->
+    eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
+encode_request(Req = #radius_request{cmd = accreq}) ->
+    eradius_lib:encode_reply_request(Req#radius_request{authenticator = eradius_lib:zero_authenticator()}).
 
 send_retry_loop(_Socket, SMon, _Peer, _ReqId, _EncRequest, _Timeout, 0) ->
     erlang:demonitor(SMon, [flush]),

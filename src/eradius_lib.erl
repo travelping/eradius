@@ -1,6 +1,6 @@
 -module(eradius_lib).
 -export([get_attr/2, encode_request/1, encode_reply_request/1, decode_request/2, decode_request_id/1]).
--export([mk_authenticator/0, pad_to/2, set_attr/3, set_attributes/2]).
+-export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, set_attributes/2]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
 % -compile(bin_opt_info).
@@ -19,9 +19,11 @@
 
 %% ------------------------------------------------------------------------------------------
 %% -- Request Accessors
--spec mk_authenticator() -> authenticator().
-mk_authenticator() ->
-    crypto:rand_bytes(16).
+-spec random_authenticator() -> authenticator().
+random_authenticator() -> crypto:rand_bytes(16).
+
+-spec zero_authenticator() -> authenticator().
+zero_authenticator() -> <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>.
 
 -spec set_attributes(#radius_request{}, attribute_list()) -> #radius_request{}.
 set_attributes(Req = #radius_request{attrs = Attrs}, NewAttrs) ->
