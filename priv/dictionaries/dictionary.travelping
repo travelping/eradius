@@ -32,8 +32,11 @@ ATTRIBUTE	TP-Monitor-Session-Id			20	integer
 ATTRIBUTE	TP-Max-Input-Octets			21	integer64
 ATTRIBUTE	TP-Max-Output-Octets			22	integer64
 ATTRIBUTE	TP-Max-Total-Octets			23	integer64
-ATTRIBUTE	TP-Exit-Access-Class-Id			24      string
-ATTRIBUTE	TP-Access-Group				25	string
-ATTRIBUTE	TP-Access-Rule				26	string
+ATTRIBUTE	TP-Exit-Access-Class-Id			24	string
+ATTRIBUTE	TP-Access-Rule				25	string
+ATTRIBUTE	TP-Access-Group				26	string
+ATTRIBUTE	TP-NAT-Pool-Id				27	string
+ATTRIBUTE	TP-NAT-Port-Start			28	string
+ATTRIBUTE	TP-NAT-Port-End				29	string
 
 END-VENDOR	Travelping
