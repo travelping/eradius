@@ -1,6 +1,7 @@
 *~
 *.beam
 priv/*.map
+tetrapak/.*.cache
 include/dictionary.hrl
 include/dictionary_*.hrl
 *.log
