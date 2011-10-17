@@ -161,7 +161,7 @@ configure(State) ->
         {ok, Address} ->
             configure_address(State, ClientPortCount, Address);
         {error, _} ->
-            error_logger:error_msg("Invalid RADIUS client IP: ~p~n", [ClientIP]),
+            eradius:error_report("Invalid RADIUS client IP: ~p~n", [ClientIP]),
             {error, {bad_client_ip, ClientIP}}
     end.
 
