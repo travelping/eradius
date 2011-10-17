@@ -7,10 +7,13 @@
 %%   ``client_ports'' application environment variable, it defaults to ``20''. The number of ports should not
 %%   be set too low. If ``N'' ports are opened, the maximum number of concurrent requests is ``N * 256''.
 %%
+%%   The IP address used to send requests is read <emph>once</emph> (at startup) from the ``client_ip''
+%%   parameter. Changing it currently requires a restart. It can be given as a string or ip address tuple,
+%%   or the atom ``undefined'' (the default), which uses whatever address the OS selects.
 -module(eradius_client).
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
 %% internal
--export([socket/1, send_remote_request_loop/6]).
+-export([socket/2, send_remote_request_loop/6]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -107,6 +110,7 @@ send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
 %% ------------------------------------------------------------------------------------------
 %% -- socket process manager
 -record(state, {
+    socket_ip :: inet:ip_address(),
     no_ports = 1 :: pos_integer(),
     idcounters = dict:new() :: dict(),
     sockets = array:new() :: array()
@@ -115,13 +119,20 @@ send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
 %% @private
 init([]) ->
     {ok, ClientPortCount} = application:get_env(eradius, client_ports),
-    NewState = #state{no_ports = ClientPortCount},
-    {ok, NewState}.
+    {ok, ClientIP} = application:get_env(eradius, client_ip),
+    case parse_ip(ClientIP) of
+        {ok, Address} ->
+            NewState = #state{no_ports = ClientPortCount, socket_ip = Address},
+            {ok, NewState};
+        {error, _} ->
+            error_logger:error_msg("Invalid RADIUS client IP: ~p~n", [ClientIP]),
+            {stop, {bad_client_ip, ClientIP}}
+    end.
 
 %% @private
 handle_call({wanna_send, Peer}, _From, State) ->
     {PortIdx, ReqId, NewIdCounters} = next_port_and_req_id(Peer, State#state.no_ports, State#state.idcounters),
-    {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets),
+    {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip),
     NewState = State#state{idcounters = NewIdCounters, sockets = NewSockets},
     {reply, {SocketProcess, ReqId}, NewState};
 
@@ -152,21 +163,35 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
     NewCounters = dict:store(Peer, {NextPortIdx, NextReqId}, Counters),
     {NextPortIdx, NextReqId, NewCounters}.
 
-find_socket_process(PortIdx, Sockets) ->
+find_socket_process(PortIdx, Sockets, SocketIP) ->
     case array:get(PortIdx, Sockets) of
         undefined ->
-            Pid = proc_lib:spawn_link(?MODULE, socket, [self()]),
+            Pid = proc_lib:spawn_link(?MODULE, socket, [SocketIP, self()]),
             {Pid, array:set(PortIdx, Pid, Sockets)};
         Pid when is_pid(Pid) ->
             {Pid, Sockets}
     end.
 
+parse_ip(undefined) ->
+    {ok, undefined};
+parse_ip(Address) when is_list(Address) ->
+    inet_parse:address(Address);
+parse_ip(T = {_, _, _, _}) ->
+    {ok, T};
+parse_ip(T = {_, _, _, _, _, _}) ->
+    {ok, T}.
 
 %% ------------------------------------------------------------------------------------------
 %% -- socket process
 %% @private
-socket(Client) ->
-    {ok, Socket} = gen_udp:open(0, [{active, once}, binary]),
+socket(SocketIP, Client) ->
+    case SocketIP of
+        undefined ->
+            ExtraOptions = [];
+        SocketIP when is_tuple(SocketIP) ->
+            ExtraOptions = [{ip, SocketIP}]
+    end,
+    {ok, Socket} = gen_udp:open(0, [{active, once}, binary | ExtraOptions]),
     Pending = dict:new(),
     socket_loop(Client, Socket, Pending).
 

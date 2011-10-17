@@ -8,6 +8,7 @@
       {servers, []},
       {logfile, "./radius.log"},
       {tables, [dictionary]},
+      {client_ip, undefined},
       {client_ports, 20}
    ]}
 ]}.
