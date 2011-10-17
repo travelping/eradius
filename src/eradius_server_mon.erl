@@ -69,21 +69,9 @@ set_trace(ServerIP, ServerPort, NasIP, Trace) when is_boolean(Trace) ->
 
 init([]) ->
     ?NAS_TAB = ets:new(?NAS_TAB, [named_table, protected, {keypos, #nas.key}]),
-    {ok, ConfServList} = application:get_env(servers),
-    case validate_server_config(ConfServList) of
-        {invalid, Message} ->
-            eradius:error_report("invalid server config: ~s", [Message]),
-            {stop, invalid_config};
-        ServList ->
-            Running = lists:map(fun (Server = {{IP, Port}, _}) ->
-                                        {ok, Pid} = eradius_server_sup:start_instance(IP, Port),
-                                        ets:insert(?NAS_TAB, server_naslist(Server)),
-                                        {{IP, Port}, Pid}
-                                end, ServList),
-            AllNodes = config_nodes(ServList),
-            ping_disconnected_nodes(AllNodes),
-            timer:send_interval(?PING_INTERVAL, self(), ping_nodes),
-            {ok, #state{running = Running, nodes = AllNodes}}
+    case configure(#state{running = []}) of
+        {error, invalid_config} -> {stop, invalid_config};
+        Else                    -> Else
     end.
 
 handle_call({lookup_pid, Server}, _From, State) ->
@@ -103,7 +91,10 @@ handle_call({set_trace, NasKey, Trace}, _From, State) ->
             {reply, ok, State}
     end;
 handle_call(reconfigure, _From, State) ->
-    {reply, {error, not_implemented}, State};
+    case configure(State) of
+        {error, invalid_config} -> {reply, {error, invalid_config}, State};
+        {ok, NState}            -> {reply, ok, NState}
+    end;
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
@@ -120,6 +111,44 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %% ------------------------------------------------------------------------------------------
 %% -- helpers
+
+configure(#state{running = Running}) ->
+    {ok, ConfServList} = application:get_env(servers),
+    case validate_server_config(ConfServList) of
+        {invalid, Message} ->
+            eradius:error_report("invalid server config: ~s", [Message]),
+            {error, invalid_config};
+        ServList ->
+            NasList = lists:flatmap(fun(Server) ->
+                                            List = server_naslist(Server),
+                                            ets:insert(?NAS_TAB, List),
+                                            List
+                                    end, ServList),
+            ets:foldl(  fun(Nas, _) ->
+                                case lists:member(Nas, NasList) of
+                                    true    -> done;
+                                    false   -> ets:delete(?NAS_TAB, Nas)
+                                end
+                        end, [], ?NAS_TAB),
+            Run     = sets:from_list([element(1, T) || T <- Running]),
+            New     = sets:from_list([element(1, T) || T <- ServList]),
+            ToStart = sets:subtract(New, Run),
+            ToStop  = sets:subtract(Run, New),
+            Started = sets:fold(fun(Key, List) ->
+                                        lists:keydelete(Key, 1, List),
+                                        {_Key, Pid} = lists:keyfind(Key, 1, Running),
+                                        eradius_server_sup:stop_instance(Pid)
+                                end, Running, ToStop),
+            NRunning = sets:fold(   fun({IP, Port}, Akk) ->
+                                            {ok, Pid} = eradius_server_sup:start_instance(IP, Port),
+                                            [{{IP, Port}, Pid} | Akk]
+                                    end, Started, ToStart),
+            AllNodes = config_nodes(ServList),
+            ping_disconnected_nodes(AllNodes),
+            timer:send_interval(?PING_INTERVAL, self(), ping_nodes),
+            {ok, #state{running = NRunning, nodes = AllNodes}}
+    end.
+
 -spec server_naslist(valid_server()) -> list(#nas{}).
 server_naslist({{IP, Port}, HandlerList}) ->
     [#nas{key = {{IP, Port}, NasIP},
