@@ -1,8 +1,16 @@
+%% @doc This module contains a RADIUS client that can be used to send authentication and accounting requests.
+%%   A counter is kept for every NAS in order to determine the next request id and sender port
+%%   for each outgoing request. The implementation naively assumes that you won't send requests to a
+%%   distinct number of NASs over the lifetime of the VM, which is why the counters are not garbage-collected.
+%%
+%%   The client uses OS-assigned ports. The maximum number of open ports can be specified through the
+%%   ``client_ports'' application environment variable, it defaults to ``20''. The number of ports should not
+%%   be set too low. If ``N'' ports are opened, the maximum number of concurrent requests is ``N * 256''.
+%%
 -module(eradius_client).
--export([start_link/0, send_request/2, send_request/3]).
--export([socket/1]).
-
--compile(export_all).
+-export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
+%% internal
+-export([socket/1, send_remote_request_loop/6]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -11,37 +19,80 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_RETRIES, 3).
 -define(DEFAULT_TIMEOUT, 5000).
+-define(GOOD_CMD(Req), Req#radius_request.cmd == 'request' orelse Req#radius_request.cmd == 'accreq').
 
 -type nas_address() :: {inet:ip_address(), eradius_server:port_number(), eradius_lib:secret()}.
 -type options() :: [{retries, pos_integer()} | {timeout, timeout()}].
 
 %% ------------------------------------------------------------------------------------------
 %% -- API
+% @private
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+% @equiv send_request(NAS, Request, [])
 -spec send_request(nas_address(), #radius_request{}) -> {ok, binary()} | {error, 'timeout' | 'socket_down'}.
 send_request(NAS, Request) ->
     send_request(NAS, Request, []).
 
--spec send_request(nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'socket_down' | 'badcmd'}.
-send_request({IP, Port, Secret}, Request = #radius_request{cmd = Cmd}, Options) when Cmd =:= 'request'; Cmd =:= 'accreq' ->
-    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
-    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
+% @doc Send a radius request to the given NAS.
+%   If no answer is received within the specified timeout, the request will be sent again.
+-spec send_request(nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'socket_down'}.
+send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
     {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, {IP, Port}}),
-    SMon = erlang:monitor(process, Socket),
     EncRequest = encode_request(Request#radius_request{reqid = ReqId, secret = Secret}),
-    send_retry_loop(Socket, SMon, {IP, Port}, ReqId, EncRequest, Timeout, Retries).
+    send_request_loop(Socket, ReqId, {IP, Port}, EncRequest, Options);
+send_request(_NAS, _Request, _Options) ->
+    error(badarg).
+
+% @equiv send_remote_request(Node, NAS, Request, [])
+-spec send_remote_request(node(), nas_address(), #radius_request{}) -> {ok, binary()} | {error, 'timeout' | 'node_down' | 'socket_down'}.
+send_remote_request(Node, NAS, Request) ->
+    send_remote_request(Node, NAS, Request, []).
+
+% @doc Send a radius request to the given NAS through a socket on the specified node.
+%   If no answer is received within the specified timeout, the request will be sent again.
+%   The request will not be sent again if the remote node is unreachable.
+-spec send_remote_request(node(), nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'node_down' | 'socket_down'}.
+send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
+    try gen_server:call({?SERVER, Node}, {wanna_send, {IP, Port}}) of
+        {Socket, ReqId} ->
+            EncRequest = encode_request(Request#radius_request{reqid = ReqId, secret = Secret}),
+            SenderPid = spawn(Node, ?MODULE, send_remote_request_loop, [self(), Socket, ReqId, {IP, Port}, EncRequest, Options]),
+            SenderMonitor = monitor(process, SenderPid),
+            receive
+                {SenderPid, Result} ->
+                    erlang:demonitor(SenderMonitor, [flush]),
+                    Result;
+                {'DOWN', SenderMonitor, process, SenderPid, _Reason} ->
+                    {error, socket_down}
+            end
+    catch
+        exit:{{nodedown, Node}, _} ->
+            {error, node_down}
+    end;
+send_remote_request(_Node, _NAS, _Request, _Options) ->
+    error(badarg).
 
 encode_request(Req = #radius_request{cmd = request}) ->
     eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
 encode_request(Req = #radius_request{cmd = accreq}) ->
     eradius_lib:encode_reply_request(Req#radius_request{authenticator = eradius_lib:zero_authenticator()}).
 
-send_retry_loop(_Socket, SMon, _Peer, _ReqId, _EncRequest, _Timeout, 0) ->
+% @private
+send_remote_request_loop(ReplyPid, Socket, ReqId, Peer, EncRequest, Options) ->
+    ReplyPid ! {self(), send_request_loop(Socket, ReqId, Peer, EncRequest, Options)}.
+
+send_request_loop(Socket, ReqId, Peer, EncRequest, Options) ->
+    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
+    SMon = erlang:monitor(process, Socket),
+    send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, Retries).
+
+send_request_loop(_Socket, SMon, _Peer, _ReqId, _EncRequest, _Timeout, 0) ->
     erlang:demonitor(SMon, [flush]),
     {error, timeout};
-send_retry_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
+send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
     Socket ! {self(), send_request, Peer, ReqId, EncRequest},
     receive
         {Socket, response, ReqId, Response} ->
@@ -50,7 +101,7 @@ send_retry_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
             {error, socket_down}
     after
         Timeout ->
-            send_retry_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN - 1)
+            send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN - 1)
     end.
 
 %% ------------------------------------------------------------------------------------------
@@ -63,7 +114,6 @@ send_retry_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
 
 %% @private
 init([]) ->
-    %% we want terminate to be called...
     {ok, ClientPortCount} = application:get_env(eradius, client_ports),
     NewState = #state{no_ports = ClientPortCount},
     {ok, NewState}.
