@@ -14,7 +14,7 @@
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
 %% internal
 -export([socket/2, send_remote_request_loop/6]).
-
+-compile([export_all]).
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
@@ -118,15 +118,9 @@ send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
 
 %% @private
 init([]) ->
-    {ok, ClientPortCount} = application:get_env(eradius, client_ports),
-    {ok, ClientIP} = application:get_env(eradius, client_ip),
-    case parse_ip(ClientIP) of
-        {ok, Address} ->
-            NewState = #state{no_ports = ClientPortCount, socket_ip = Address},
-            {ok, NewState};
-        {error, _} ->
-            error_logger:error_msg("Invalid RADIUS client IP: ~p~n", [ClientIP]),
-            {stop, {bad_client_ip, ClientIP}}
+    case configure(#state{socket_ip = null}) of
+        {error, Error}  -> {stop, Error};
+        Else            -> Else
     end.
 
 %% @private
@@ -135,6 +129,13 @@ handle_call({wanna_send, Peer}, _From, State) ->
     {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip),
     NewState = State#state{idcounters = NewIdCounters, sockets = NewSockets},
     {reply, {SocketProcess, ReqId}, NewState};
+
+%% @private
+handle_call(reconfigure, _From, State) ->
+    case configure(State) of
+        {error, Error}  -> {reply, Error, State};
+        {ok, NState}    -> {reply, ok, NState}
+    end;
 
 %% @private
 handle_call(_OtherCall, _From, State) ->
@@ -148,6 +149,68 @@ handle_info(_Info, State) -> {noreply, State}.
 terminate(_Reason, _State) -> ok.
 %% @private
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
+
+configure(State) ->
+    {ok, ClientPortCount} = application:get_env(eradius, client_ports),
+    {ok, ClientIP} = application:get_env(eradius, client_ip),
+    case parse_ip(ClientIP) of
+        {ok, Address} ->
+            configureAddress(State, ClientPortCount, Address);
+        {error, _} ->
+            error_logger:error_msg("Invalid RADIUS client IP: ~p~n", [ClientIP]),
+            {error, {bad_client_ip, ClientIP}}
+    end.
+
+configureAddress(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NAdd) ->
+    case OAdd of
+        null    ->
+            {ok, #state{socket_ip = NAdd, no_ports = NPorts}};
+        NAdd    ->
+            configurePorts(State, NPorts);
+        _       ->
+            array:map(  fun(_PortIdx, Pid) ->
+                                case Pid of
+                                    undefined   -> done;
+                                    _           -> Pid ! close
+                                end
+                         end, Sockts),
+            {ok, State#state{sockets = array:new(), socket_ip = NAdd, no_ports = NPorts}}
+    end.
+
+configurePorts(State = #state{no_ports = OPorts, sockets = Sockets}, NPorts) ->
+    if
+        OPorts =< NPorts ->
+            {ok, State#state{no_ports = NPorts}};
+        true ->
+            Counters = fixCounters(NPorts, State#state.idcounters),
+            NSockets = closeSockets(NPorts, OPorts, Sockets),
+            {ok, State#state{sockets = NSockets, no_ports = NPorts, idcounters = Counters}}
+    end.
+
+fixCounters(NPorts, Counters) ->
+    dict:map(   fun(_Peer, Value = {NextPortIdx, NextReqId}) ->
+                        case NextPortIdx > NPorts of
+                            false   -> Value;
+                            true    -> {0, NextReqId}
+                        end
+                end, Counters).
+
+closeSockets(NPorts, OPorts, Sockets) ->
+    Free = OPorts - array:size(Sockets),
+    case NPorts - Free =< 0 of
+        true    ->
+            Sockets;
+        false   ->
+            List = array:to_list(Sockets),
+            {_, Rest} = lists:split(NPorts, List),
+            lists:map(  fun(Pid) ->
+                                case Pid of
+                                    undefined   -> done;
+                                    _           -> Pid ! close
+                                end
+                        end, Rest),
+            array:resize(NPorts, Sockets)
+    end.
 
 next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
     case dict:find(Peer, Counters) of
@@ -193,14 +256,16 @@ socket(SocketIP, Client) ->
     end,
     {ok, Socket} = gen_udp:open(0, [{active, once}, binary | ExtraOptions]),
     Pending = dict:new(),
-    socket_loop(Client, Socket, Pending).
+    socket_loop(Client, Socket, Pending, active, 0).
 
-socket_loop(Client, Socket, Pending) ->
+socket_loop(_Client, _Socket, _Pending, inactive, 0) -> done;
+socket_loop(Client, Socket, Pending, Mode, Counter) ->
     receive
         {SenderPid, send_request, {IP, Port}, ReqId, EncRequest} ->
             gen_udp:send(Socket, IP, Port, EncRequest),
             ReqKey = {IP, Port, ReqId},
-            socket_loop(Client, Socket, dict:store(ReqKey, SenderPid, Pending));
+            NPending = dict:store(ReqKey, SenderPid, Pending),
+            socket_loop(Client, Socket, NPending, Mode, Counter+1);
         {udp, Socket, FromIP, FromPort, EncRequest} ->
             case eradius_lib:decode_request_id(EncRequest) of
                 {ReqId, EncRequest} ->
@@ -208,15 +273,18 @@ socket_loop(Client, Socket, Pending) ->
                         error ->
                             %% discard reply because we didn't expect it
                             inet:setopts(Socket, [{active, once}]),
-                            socket_loop(Client, Socket, Pending);
+                            socket_loop(Client, Socket, Pending, Mode, Counter);
                         {ok, WaitingSender} ->
                             WaitingSender ! {self(), response, ReqId, EncRequest},
                             inet:setopts(Socket, [{active, once}]),
-                            socket_loop(Client, Socket, dict:erase({FromIP, FromPort, ReqId}, Pending))
+                            NPending = dict:erase({FromIP, FromPort, ReqId}, Pending),
+                            socket_loop(Client, Socket, NPending, Mode, Counter-1)
                     end;
                 bad_pdu ->
                     %% discard reply because it was malformed
                     inet:setopts(Socket, [{active, once}]),
-                    socket_loop(Client, Socket, Pending)
-            end
+                    socket_loop(Client, Socket, Pending, Mode, Counter)
+            end;
+        close ->
+            socket_loop(Client, Socket, Pending, inactive, Counter)
     end.
