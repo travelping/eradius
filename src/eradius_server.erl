@@ -100,11 +100,11 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
                     ets:insert(Transacts, {ReqKey, {handling, HandlerPid}});
                 [{_ReqKey, {handling, _HandlerPid}}] ->
                     %% handler process is still working on the request
-                    dbg(NasProp, "duplicate request (being handled)~p~n", [ReqKey]);
+                    dbg(NasProp, "duplicate request (being handled) ~p~n", [ReqKey]);
                 [{_ReqKey, {replied, HandlerPid}}] ->
                     %% handler process waiting for resend message
                     HandlerPid ! {self(), resend, Socket},
-                    dbg(NasProp, "duplicate request (resend)~p~n", [ReqKey])
+                    dbg(NasProp, "duplicate request (resend) ~p~n", [ReqKey])
             end;
         {discard, _Reason} ->
             ok
@@ -153,8 +153,9 @@ lookup_nas(_State, _NasIP, _Packet) ->
 %% -- Request Handler
 %% @private
 -spec do_radius(pid(), term(), eradius_server_mon:handler(), #nas_prop{}, udp_packet()) -> any().
-do_radius(ServerPid, ReqKey, Handler, NasProp, {udp, Socket, FromIP, FromPort, EncRequest}) ->
-    case run_handler(NasProp, Handler, EncRequest) of
+do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, FromIP, FromPort, EncRequest}) ->
+    Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
+    case run_handler(Nodes, NasProp, Handler, EncRequest) of
         {reply, EncReply} ->
             dbg(NasProp, "sending response for ~p~n", [ReqKey]),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
@@ -180,22 +181,31 @@ wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries) ->
             ServerPid ! {discarded, ReqKey}
     end.
 
-run_handler(NasProp = #nas_prop{handler_nodes = local}, Handler, EncRequest) ->
-    handle_request(Handler, NasProp, EncRequest);
-run_handler(NasProp = #nas_prop{handler_nodes = ['nonode@nohost']}, Handler, EncRequest) ->
-    handle_request(Handler, NasProp, EncRequest);
-run_handler(NasProp = #nas_prop{handler_nodes = NodeList}, Handler, EncRequest) when is_list(NodeList) ->
-    case ordsets:intersection(ordsets:from_list(NodeList), ordsets:from_list([node() | nodes()])) of
-        [] ->
-            {discard, no_nodes};
-        [Node] ->
-            run_remote_handler(Node, Handler, NasProp, EncRequest);
+run_handler([], _NasProp, _Handler, _EncRequest) ->
+    {discard, no_nodes};
+run_handler(NodesAvailable, NasProp = #nas_prop{handler_nodes = local}, Handler, EncRequest) ->
+    case lists:member(node(), NodesAvailable) of
+        true ->
+            handle_request(Handler, NasProp, EncRequest);
+        false ->
+            {discard, no_nodes_local}
+    end;
+run_handler(NodesAvailable, NasProp, Handler, EncRequest) ->
+    case ordsets:intersection(lists:usort(NodesAvailable), lists:usort(NasProp#nas_prop.handler_nodes)) of
+        [LocalNode] when LocalNode == node() ->
+            handle_request(Handler, NasProp, EncRequest);
+        [RemoteNode] ->
+            run_remote_handler(RemoteNode, Handler, NasProp, EncRequest);
         Nodes ->
             %% humble testing at the erlang shell indicated that phash2 distributes N
             %% very well even for small lenghts.
             N = erlang:phash2(make_ref(), length(Nodes)) + 1,
-            Node = lists:nth(N, Nodes),
-            run_remote_handler(Node, Handler, NasProp, EncRequest)
+            case lists:nth(N, Nodes) of
+                LocalNode when LocalNode == node() ->
+                    handle_request(Handler, NasProp, EncRequest);
+                RemoteNode ->
+                    run_remote_handler(RemoteNode, Handler, NasProp, EncRequest)
+            end
     end.
 
 run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, EncRequest) ->

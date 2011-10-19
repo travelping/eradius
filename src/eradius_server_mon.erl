@@ -15,7 +15,6 @@
 -include("eradius_lib.hrl").
 
 -define(SERVER, ?MODULE).
--define(PING_INTERVAL, 1000).
 -define(NAS_TAB, eradius_nas_tab).
 
 -type server()  :: {inet:ip_address(), eradius_server:port_number()}.
@@ -36,6 +35,7 @@ start_link() ->
 %%   Walks the list of configured servers and NASs,
 %%   starting and stopping servers as necessary.
 %%   If the configuration is invalid, no servers are modified.
+%%
 -spec reconfigure() -> ok | {error, invalid_config}.
 reconfigure() ->
     gen_server:call(?SERVER, reconfigure).
@@ -65,7 +65,7 @@ set_trace(ServerIP, ServerPort, NasIP, Trace) when is_boolean(Trace) ->
 
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
--record(state, {running, nodes}).
+-record(state, {running}).
 
 init([]) ->
     ?NAS_TAB = ets:new(?NAS_TAB, [named_table, protected, {keypos, #nas.key}]),
@@ -98,9 +98,6 @@ handle_call(reconfigure, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_info(ping_nodes, State = #state{nodes = Nodes}) ->
-    ping_disconnected_nodes(Nodes),
-    {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -124,29 +121,27 @@ configure(#state{running = Running}) ->
                                             ets:insert(?NAS_TAB, List),
                                             List
                                     end, ServList),
-            ets:foldl(  fun(Nas, _) ->
-                                case lists:member(Nas, NasList) of
-                                    true    -> done;
-                                    false   -> ets:delete(?NAS_TAB, Nas)
-                                end
-                        end, [], ?NAS_TAB),
+            ets:foldl(fun(Nas, _) ->
+                              case lists:member(Nas, NasList) of
+                                  true    -> done;
+                                  false   -> ets:delete(?NAS_TAB, Nas)
+                              end
+                      end, [], ?NAS_TAB),
             Run     = sets:from_list([element(1, T) || T <- Running]),
             New     = sets:from_list([element(1, T) || T <- ServList]),
             ToStart = sets:subtract(New, Run),
             ToStop  = sets:subtract(Run, New),
-            Started = sets:fold(fun(Key, List) ->
+            Started = sets:fold(fun (Key, List) ->
                                         lists:keydelete(Key, 1, List),
                                         {_Key, Pid} = lists:keyfind(Key, 1, Running),
                                         eradius_server_sup:stop_instance(Pid)
                                 end, Running, ToStop),
-            NRunning = sets:fold(   fun({IP, Port}, Akk) ->
-                                            {ok, Pid} = eradius_server_sup:start_instance(IP, Port),
-                                            [{{IP, Port}, Pid} | Akk]
-                                    end, Started, ToStart),
-            AllNodes = config_nodes(ServList),
-            ping_disconnected_nodes(AllNodes),
-            timer:send_interval(?PING_INTERVAL, self(), ping_nodes),
-            {ok, #state{running = NRunning, nodes = AllNodes}}
+            NRunning = sets:fold(fun ({IP, Port}, Akk) ->
+                                         {ok, Pid} = eradius_server_sup:start_instance(IP, Port),
+                                         [{{IP, Port}, Pid} | Akk]
+                                 end, Started, ToStart),
+            eradius_node_mon:set_nodes(config_nodes(ServList)),
+            {ok, #state{running = NRunning}}
     end.
 
 -spec server_naslist(valid_server()) -> list(#nas{}).
@@ -156,16 +151,11 @@ server_naslist({{IP, Port}, HandlerList}) ->
           prop = #nas_prop{handler_nodes = HandlerNodes, nas_ip = NasIP, secret = Secret, trace = false}}
       || {NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs} <- HandlerList].
 
--spec config_nodes(valid_config()) -> list(atom()).
+-spec config_nodes(valid_config()) -> list(node()).
 config_nodes(Config) ->
     ordsets:from_list(lists:concat([N || {_Server, HandlerList} <- Config,
                                          {_, _, N, _, _} <- HandlerList,
                                          N /= local, N /= node()])).
-
-ping_disconnected_nodes(Nodes) ->
-    lists:foreach(fun (Node) ->
-                          lists:member(Node, nodes()) orelse net_adm:ping(Node)
-                  end, Nodes).
 
 %% ------------------------------------------------------------------------------------------
 %% -- config validation
