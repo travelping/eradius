@@ -14,7 +14,7 @@
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
 %% internal
 -export([socket/2, send_remote_request_loop/6]).
--compile([export_all]).
+
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
@@ -138,6 +138,10 @@ handle_call(reconfigure, _From, State) ->
     end;
 
 %% @private
+handle_call(debug, _From, State) ->
+    {reply, {ok, State}, State};
+
+%% @private
 handle_call(_OtherCall, _From, State) ->
     {noreply, State}.
 
@@ -155,18 +159,18 @@ configure(State) ->
     {ok, ClientIP} = application:get_env(eradius, client_ip),
     case parse_ip(ClientIP) of
         {ok, Address} ->
-            configureAddress(State, ClientPortCount, Address);
+            configure_address(State, ClientPortCount, Address);
         {error, _} ->
             error_logger:error_msg("Invalid RADIUS client IP: ~p~n", [ClientIP]),
             {error, {bad_client_ip, ClientIP}}
     end.
 
-configureAddress(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NAdd) ->
+configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NAdd) ->
     case OAdd of
         null    ->
             {ok, #state{socket_ip = NAdd, no_ports = NPorts}};
         NAdd    ->
-            configurePorts(State, NPorts);
+            configure_ports(State, NPorts);
         _       ->
             array:map(  fun(_PortIdx, Pid) ->
                                 case Pid of
@@ -177,17 +181,17 @@ configureAddress(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NAd
             {ok, State#state{sockets = array:new(), socket_ip = NAdd, no_ports = NPorts}}
     end.
 
-configurePorts(State = #state{no_ports = OPorts, sockets = Sockets}, NPorts) ->
+configure_ports(State = #state{no_ports = OPorts, sockets = Sockets}, NPorts) ->
     if
         OPorts =< NPorts ->
             {ok, State#state{no_ports = NPorts}};
         true ->
-            Counters = fixCounters(NPorts, State#state.idcounters),
-            NSockets = closeSockets(NPorts, OPorts, Sockets),
+            Counters = fix_counters(NPorts, State#state.idcounters),
+            NSockets = close_sockets(NPorts, Sockets),
             {ok, State#state{sockets = NSockets, no_ports = NPorts, idcounters = Counters}}
     end.
 
-fixCounters(NPorts, Counters) ->
+fix_counters(NPorts, Counters) ->
     dict:map(   fun(_Peer, Value = {NextPortIdx, NextReqId}) ->
                         case NextPortIdx > NPorts of
                             false   -> Value;
@@ -195,9 +199,8 @@ fixCounters(NPorts, Counters) ->
                         end
                 end, Counters).
 
-closeSockets(NPorts, OPorts, Sockets) ->
-    Free = OPorts - array:size(Sockets),
-    case NPorts - Free =< 0 of
+close_sockets(NPorts, Sockets) ->
+    case array:size(Sockets) =< NPorts of
         true    ->
             Sockets;
         false   ->
@@ -243,6 +246,7 @@ parse_ip(T = {_, _, _, _}) ->
     {ok, T};
 parse_ip(T = {_, _, _, _, _, _}) ->
     {ok, T}.
+
 
 %% ------------------------------------------------------------------------------------------
 %% -- socket process
