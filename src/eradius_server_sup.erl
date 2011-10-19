@@ -1,7 +1,7 @@
 %% @private
 %% @doc Supervisor for RADIUS server processes.
 -module(eradius_server_sup).
--export([start_link/0, start_instance/2, stop_instance/2]).
+-export([start_link/0, start_instance/2, stop_instance/3]).
 
 -behaviour(supervisor).
 -export([init/1]).
@@ -13,16 +13,14 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_instance(IP = {A,B,C,D}, Port) ->
-    eradius:info_report("Starting RADIUS Listener at ~p.~p.~p.~p:~p~n", [A,B,C,D,Port]),
+start_instance(IP, Port) ->
+    IPString = inet_parse:ntoa(IP),
+    eradius:info_report("Starting RADIUS Listener at ~s:~b~n", [IPString, Port]),
     supervisor:start_child(?SERVER, [IP, Port]).
 
-stop_instance(IP = {A,B,C,D}, Port) ->
-    {ok, Pid} = eradius_server_mon:lookup_pid(IP, Port),
-    eradius:info_report("Stopping RADIUS Listener at ~p.~p.~p.~p:~p~n", [A,B,C,D,Port]),
-    stop_instance(Pid).
-
-stop_instance(Pid) when is_pid(Pid) ->
+stop_instance(IP, Port, Pid) ->
+    IPString = inet_parse:ntoa(IP),
+    eradius:info_report("Stopping RADIUS Listener at ~s:~b~n", [IPString, Port]),
     supervisor:terminate_child(?SERVER, Pid).
 
 %% ------------------------------------------------------------------------------------------

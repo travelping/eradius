@@ -41,7 +41,7 @@ trace_off(ServerIP, ServerPort, NasIP) ->
     eradius_server_mon:set_trace(ensure_ip(ServerIP), ServerPort, ensure_ip(NasIP), false).
 
 ensure_ip(IP = {_,_,_,_}) -> IP;
-ensure_ip(IP = {_,_,_,_,_,_}) -> IP;
+ensure_ip(IP = {_,_,_,_,_,_,_,_}) -> IP;
 ensure_ip(IPString) when is_list(IPString) ->
     case inet_parse:address(IPString) of
         {ok, Address}   -> Address;

@@ -133,8 +133,8 @@ configure(#state{running = Running}) ->
             ToStop  = sets:subtract(Run, New),
             Started = sets:fold(fun (Key, List) ->
                                         lists:keydelete(Key, 1, List),
-                                        {_Key, Pid} = lists:keyfind(Key, 1, Running),
-                                        eradius_server_sup:stop_instance(Pid)
+                                        {{IP, Port}, Pid} = lists:keyfind(Key, 1, Running),
+                                        eradius_server_sup:stop_instance(IP, Port, Pid)
                                 end, Running, ToStop),
             NRunning = sets:fold(fun ({IP, Port}, Akk) ->
                                          {ok, Pid} = eradius_server_sup:start_instance(IP, Port),
@@ -211,6 +211,7 @@ validate_server({IP, Port}) when is_list(IP), ?pos_int(Port) ->
 validate_server({IP, Port}) when ?ip4_address(IP), ?pos_int(Port) ->
     {IP, Port};
 validate_server(String) when is_list(String) ->
+    %% TODO: IPv6 address support
     case string:tokens(String, ":") of
         [IP, Port] ->
             validate_server({IP, Port});
