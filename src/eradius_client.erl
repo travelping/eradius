@@ -13,7 +13,7 @@
 -module(eradius_client).
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
 %% internal
--export([socket/2, send_remote_request_loop/6]).
+-export([send_remote_request_loop/6]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -113,12 +113,14 @@ send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
     socket_ip :: inet:ip_address(),
     no_ports = 1 :: pos_integer(),
     idcounters = dict:new() :: dict(),
-    sockets = array:new() :: array()
+    sockets = array:new() :: array(),
+    sup :: pid()
 }).
 
 %% @private
 init([]) ->
-    case configure(#state{socket_ip = null}) of
+    {ok, Sup} = eradius_client_sup:start(),
+    case configure(#state{socket_ip = null, sup = Sup}) of
         {error, Error}  -> {stop, Error};
         Else            -> Else
     end.
@@ -126,7 +128,7 @@ init([]) ->
 %% @private
 handle_call({wanna_send, Peer}, _From, State) ->
     {PortIdx, ReqId, NewIdCounters} = next_port_and_req_id(Peer, State#state.no_ports, State#state.idcounters),
-    {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip),
+    {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip, State#state.sup),
     NewState = State#state{idcounters = NewIdCounters, sockets = NewSockets},
     {reply, {SocketProcess, ReqId}, NewState};
 
@@ -147,10 +149,18 @@ handle_call(_OtherCall, _From, State) ->
 
 %% @private
 handle_cast(_Msg, State) -> {noreply, State}.
+
 %% @private
-handle_info(_Info, State) -> {noreply, State}.
+handle_info({PortIdx, Pid}, State = #state{sockets = Sockets}) ->
+    NSockets = update_socket_process(PortIdx, Sockets, Pid),
+    {noreply, State#state{sockets = NSockets}};
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
 %% @private
 terminate(_Reason, _State) -> ok.
+
 %% @private
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
@@ -168,7 +178,7 @@ configure(State) ->
 configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NAdd) ->
     case OAdd of
         null    ->
-            {ok, #state{socket_ip = NAdd, no_ports = NPorts}};
+            {ok, State#state{socket_ip = NAdd, no_ports = NPorts}};
         NAdd    ->
             configure_ports(State, NPorts);
         _       ->
@@ -193,7 +203,7 @@ configure_ports(State = #state{no_ports = OPorts, sockets = Sockets}, NPorts) ->
 
 fix_counters(NPorts, Counters) ->
     dict:map(   fun(_Peer, Value = {NextPortIdx, NextReqId}) ->
-                        case NextPortIdx > NPorts of
+                        case NextPortIdx >= NPorts of
                             false   -> Value;
                             true    -> {0, NextReqId}
                         end
@@ -229,14 +239,25 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
     NewCounters = dict:store(Peer, {NextPortIdx, NextReqId}, Counters),
     {NextPortIdx, NextReqId, NewCounters}.
 
-find_socket_process(PortIdx, Sockets, SocketIP) ->
+find_socket_process(PortIdx, Sockets, SocketIP, Sup) ->
     case array:get(PortIdx, Sockets) of
         undefined ->
-            Pid = proc_lib:spawn_link(?MODULE, socket, [SocketIP, self()]),
+            Res = supervisor:start_child(Sup, {PortIdx,
+                {eradius_client_socket, start, [SocketIP, self(), PortIdx]},
+                transient, brutal_kill, worker, [eradius_client_socket]}),
+            Pid = case Res of
+                {ok, P} -> P;
+                {error, already_present} ->
+                    {ok, P} = supervisor:restart_child(Sup, PortIdx),
+                    P
+            end,
             {Pid, array:set(PortIdx, Pid, Sockets)};
         Pid when is_pid(Pid) ->
             {Pid, Sockets}
     end.
+
+update_socket_process(PortIdx, Sockets, Pid) ->
+    array:set(PortIdx, Pid, Sockets).
 
 parse_ip(undefined) ->
     {ok, undefined};
@@ -248,47 +269,3 @@ parse_ip(T = {_, _, _, _, _, _}) ->
     {ok, T}.
 
 
-%% ------------------------------------------------------------------------------------------
-%% -- socket process
-%% @private
-socket(SocketIP, Client) ->
-    case SocketIP of
-        undefined ->
-            ExtraOptions = [];
-        SocketIP when is_tuple(SocketIP) ->
-            ExtraOptions = [{ip, SocketIP}]
-    end,
-    {ok, Socket} = gen_udp:open(0, [{active, once}, binary | ExtraOptions]),
-    Pending = dict:new(),
-    socket_loop(Client, Socket, Pending, active, 0).
-
-socket_loop(_Client, _Socket, _Pending, inactive, 0) -> done;
-socket_loop(Client, Socket, Pending, Mode, Counter) ->
-    receive
-        {SenderPid, send_request, {IP, Port}, ReqId, EncRequest} ->
-            gen_udp:send(Socket, IP, Port, EncRequest),
-            ReqKey = {IP, Port, ReqId},
-            NPending = dict:store(ReqKey, SenderPid, Pending),
-            socket_loop(Client, Socket, NPending, Mode, Counter+1);
-        {udp, Socket, FromIP, FromPort, EncRequest} ->
-            case eradius_lib:decode_request_id(EncRequest) of
-                {ReqId, EncRequest} ->
-                    case dict:find({FromIP, FromPort, ReqId}, Pending) of
-                        error ->
-                            %% discard reply because we didn't expect it
-                            inet:setopts(Socket, [{active, once}]),
-                            socket_loop(Client, Socket, Pending, Mode, Counter);
-                        {ok, WaitingSender} ->
-                            WaitingSender ! {self(), response, ReqId, EncRequest},
-                            inet:setopts(Socket, [{active, once}]),
-                            NPending = dict:erase({FromIP, FromPort, ReqId}, Pending),
-                            socket_loop(Client, Socket, NPending, Mode, Counter-1)
-                    end;
-                bad_pdu ->
-                    %% discard reply because it was malformed
-                    inet:setopts(Socket, [{active, once}]),
-                    socket_loop(Client, Socket, Pending, Mode, Counter)
-            end;
-        close ->
-            socket_loop(Client, Socket, Pending, inactive, Counter)
-    end.

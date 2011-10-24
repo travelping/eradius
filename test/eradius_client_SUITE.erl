@@ -16,40 +16,20 @@ all() -> [
     wanna_send,
     reconf_ports_30,
     wanna_send,
-    reconf_ports_10
+    reconf_ports_10,
+    wanna_send
     ].
 
 init_per_suite(Config) ->
     ok = tpk:s(eradius),
     startSocketCounter(),
+    io:format(standard_error, "running..~n", []),
     Config.
 
 end_per_suite(_Config) ->
     stopSocketCounter(),
     application:stop(eradius),
     ok.
-
-%% MECK'D functions
-
-socket(_SocketIP, _Client) ->
-    Pending = dict:new(),
-    addSocket(),
-    socket_loop(Pending, active, 0).
-
-socket_loop(_Pending, inactive, 0) -> done;
-socket_loop(Pending, Mode, Counter) ->
-    receive
-        {SenderPid, send_request, {IP, Port}, ReqId, _EncRequest} ->
-            ReqKey = {IP, Port, ReqId},
-            NPending = dict:store(ReqKey, SenderPid, Pending),
-            socket_loop(NPending, Mode, Counter+1);
-        close ->
-            delSocket(),
-            socket_loop(Pending, inactive, Counter);
-        {status, Pid} ->
-            Pid ! {ok, Mode},
-            socket_loop(Pending, Mode, Counter)
-    end.
 
 %% STUFF
 
@@ -84,14 +64,15 @@ testSocket(Pid) ->
         {ok, active}    -> false;
         {ok, inactive}  -> true
     after
-        1 -> true
+        50 -> true
     end.
 
 -record(state, {
     socket_ip :: inet:ip_address(),
     no_ports = 1 :: pos_integer(),
     idcounters = dict:new() :: dict(),
-    sockets = array:new() :: array()
+    sockets = array:new() :: array(),
+    sup :: pid()
 }).
 
 split(N, List) -> split2(N, [], List).
@@ -101,11 +82,17 @@ split2(_, List1, [])        -> {lists:reverse(List1), []};
 split2(N, List1, [L|List2]) -> split2(N-1, [L|List1], List2).
 
 meckStart() ->
-    ok = meck:new(eradius_client, [passthrough]),
-    ok = meck:expect(eradius_client, socket, fun(X, Y) -> socket(X, Y) end).
+    ok = meck:new(eradius_client_socket),
+    ok = meck:expect(eradius_client_socket, start, fun(X, Y, Z) -> eradius_client_socket_test:start(X, Y, Z) end),
+    ok = meck:expect(eradius_client_socket, init, fun(X) -> eradius_client_socket_test:init(X) end),
+    ok = meck:expect(eradius_client_socket, handle_call, fun(X, Y, Z) -> eradius_client_socket_test:handle_call(X, Y, Z) end),
+    ok = meck:expect(eradius_client_socket, handle_cast, fun(X, Y) -> eradius_client_socket_test:handle_cast(X, Y) end),
+    ok = meck:expect(eradius_client_socket, handle_info, fun(X, Y) -> eradius_client_socket_test:handle_info(X, Y) end),
+    ok = meck:expect(eradius_client_socket, terminate, fun(X, Y) -> eradius_client_socket_test:terminate(X, Y) end),
+    ok = meck:expect(eradius_client_socket, code_change, fun(X, Y, Z) -> eradius_client_socket_test:code_change(X, Y, Z) end).
 
 meckStop() ->
-    ok = meck:unload(eradius_client).
+    ok = meck:unload(eradius_client_socket).
 
 parse_ip(undefined) ->
     {ok, undefined};
@@ -120,7 +107,7 @@ parse_ip(T = {_, _, _, _, _, _}) ->
 
 test(true, _Msg) -> true;
 test(false, Msg) ->
-    io:format(standard_error,"~s~n",[Msg]),
+    io:format(standard_error, "~s~n", [Msg]),
     false.
 
 check(OldState, NewState = #state{no_ports = P}, null, A) -> check(OldState, NewState, P, A);
