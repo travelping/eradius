@@ -1,6 +1,6 @@
 %% @private
 -module(eradius_log).
--export([open/0, close/1, write_request/2]).
+-export([open/0, close/1, write_request/3]).
 -export([radius_date/1, printable_attr_value/2, bin_to_hexstr/1]).
 -export_type([log/0]).
 
@@ -9,6 +9,8 @@
 -define(DISK_LOG_NAME, eradius_request_log).
 
 -opaque log() :: term().
+
+-type sender() :: {inet:ip_address(), eradius_server:port_number(), eradius_server:req_id()}.
 
 %% ------------------------------------------------------------
 %% -- API
@@ -21,18 +23,25 @@ open() ->
 close(Log) ->
     disk_log:close(Log).
 
--spec write_request(log(), #radius_request{}) -> ok.
-write_request(Log, Request = #radius_request{}) ->
+-spec write_request(log(), sender(), #radius_request{}) -> ok.
+write_request(Log, Sender, Request = #radius_request{}) ->
     Time = calendar:universal_time(),
-    Msg  = format_message(Time, Request),
+    Msg  = format_message(Time, Sender, Request),
     disk_log:blog(Log, Msg).
 
 %% ------------------------------------------------------------------------------------------
 %% -- formatting
-format_message(Time, Request) ->
+format_message(Time, Sender, Request) ->
     BinTStamp = radius_date(Time),
+    BinSender = format_sender(Sender),
     BinPacket = format_packet(Request),
-    <<BinTStamp/binary, "\n", BinPacket/binary, "\n">>.
+    <<BinTStamp/binary, "\n", BinSender/binary, "\n", BinPacket/binary, "\n">>.
+
+format_sender({NASIP, NASPort, ReqID}) ->
+    <<$[, (format_ip(NASIP))/binary, $,, (i2b(NASPort))/binary, $,, (i2b(ReqID))/binary, $]>>.
+
+format_ip(IP) ->
+    list_to_binary(inet_parse:ntoa(IP)).
 
 format_packet(Request) ->
     Attrs = Request#radius_request.attrs,

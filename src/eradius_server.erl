@@ -33,6 +33,7 @@
 %%       server_ip     :: inet:ip_address(),
 %%       server_port   :: eradius_server:port_number(),
 %%       nas_ip        :: inet:ip_address(),
+%%       nas_port      :: eradius_server:port_number(),
 %%       secret        :: eradius_lib:secret(),
 %%       trace         :: boolean(),
 %%       handler_nodes :: 'local' | list(atom())
@@ -40,7 +41,7 @@
 %%   '''
 -module(eradius_server).
 -export([start_link/2, behaviour_info/1]).
--export_type([port_number/0]).
+-export_type([port_number/0, req_id/0]).
 
 %% internal
 -export([do_radius/5, handle_request/3, handle_remote_request/5]).
@@ -94,9 +95,10 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
     case lookup_nas(State, FromIP, Packet) of
         {ok, ReqID, Handler, NasProp} ->
             ReqKey = {FromIP, FromPortNo, ReqID},
+            NNasProp = NasProp#nas_prop{nas_port = FromPortNo},
             case ets:lookup(Transacts, ReqKey) of
                 [] ->
-                    HandlerPid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqKey, Handler, NasProp, ReqUDP]),
+                    HandlerPid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqKey, Handler, NNasProp, ReqUDP]),
                     ets:insert(Transacts, {ReqKey, {handling, HandlerPid}});
                 [{_ReqKey, {handling, _HandlerPid}}] ->
                     %% handler process is still working on the request
@@ -227,8 +229,9 @@ run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, EncRequest) ->
 handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest) ->
     case eradius_lib:decode_request(EncRequest, NasProp#nas_prop.secret) of
         Request = #radius_request{} ->
+            Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             {ok, RadiusLog} = eradius_log:open(),
-            eradius_log:write_request(RadiusLog, Request),
+            eradius_log:write_request(RadiusLog, Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
         bad_pdu ->
             {discard, bad_pdu}
@@ -246,13 +249,13 @@ handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasPropTuple, EncRequest
 
 nas_prop_record_to_tuple(R = #nas_prop{}) ->
     {nas_prop_v1, R#nas_prop.server_ip, R#nas_prop.server_port,
-                  R#nas_prop.nas_ip, R#nas_prop.secret,
-                  R#nas_prop.trace, R#nas_prop.handler_nodes}.
+                  R#nas_prop.nas_ip, R#nas_prop.nas_port,
+                  R#nas_prop.secret, R#nas_prop.trace, R#nas_prop.handler_nodes}.
 
-nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, Secret, Trace, Nodes}) ->
+nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, NasPort, Secret, Trace, Nodes}) ->
     #nas_prop{server_ip = ServerIP, server_port = ServerPort,
-              nas_ip = NasIP, secret = Secret,
-              trace = Trace, handler_nodes = Nodes}.
+              nas_ip = NasIP, nas_port = NasPort,
+              secret = Secret, trace = Trace, handler_nodes = Nodes}.
 
 -spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {exit, term()} | {reply, binary()}.
 apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
