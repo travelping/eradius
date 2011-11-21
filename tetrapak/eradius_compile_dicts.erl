@@ -2,10 +2,11 @@
 
 -task({"build:dicts", "Compile eradius dictionaries"}).
 -task({"clean:dicts", "Delete compiled dictionaries"}).
+-hook({"build:dicts", run_before, "build:erlang"}).
 
-check("build:dicts") ->  
-    InDir  = tetrapak:subdir("priv/dictionaries"),
-    OutDir = tetrapak:subdir("include"),
+check("build:dicts") ->
+    InDir  = tetrapak:path("priv/dictionaries"),
+    OutDir = tetrapak:path("include"),
     Files  = [{filename:join(InDir, F), filename:join(OutDir, re:replace(F, "\\.", "_", [{return, list}]) ++ ".hrl")}
                  || F <- filelib:wildcard("*", InDir)],
     tpk_util:check_files_mtime(Files).
@@ -14,8 +15,8 @@ run("build:dicts", DictFiles) ->
     lists:foreach(fun ({F, _}) -> mk_dict(F) end, DictFiles);
 
 run("clean:dicts", _) ->
-    tpk_file:delete("\\.map$", tetrapak:subdir("priv")), 
-    tpk_file:delete("dictionary.*\\.hrl", tetrapak:subdir("include")).
+    tpk_file:delete("\\.map$", tetrapak:path("priv")),
+    tpk_file:delete("dictionary.*\\.hrl", tetrapak:path("include")).
 
 
 %%% --------------------------------------------------------------------
