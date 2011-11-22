@@ -1,5 +1,6 @@
 *~
 *.beam
+/ebin/*.app
 priv/*.map
 tetrapak/.*.cache
 include/dictionary.hrl
