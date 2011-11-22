@@ -111,7 +111,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 configure(#state{running = Running}) ->
     {ok, ConfServList} = application:get_env(servers),
-    case validate_server_config(ConfServList) of
+    case validate_config(ConfServList) of
         {invalid, Message} ->
             eradius:error_report("invalid server config: ~s", [Message]),
             {error, invalid_config};
@@ -136,9 +136,15 @@ configure(#state{running = Running}) ->
                                         {{IP, Port}, Pid} = lists:keyfind(Key, 1, Running),
                                         eradius_server_sup:stop_instance(IP, Port, Pid)
                                 end, Running, ToStop),
-            NRunning = sets:fold(fun ({IP, Port}, Akk) ->
-                                         {ok, Pid} = eradius_server_sup:start_instance(IP, Port),
-                                         [{{IP, Port}, Pid} | Akk]
+            NRunning = sets:fold(fun ({IP, Port}, Acc) ->
+                                         case eradius_server_sup:start_instance(IP, Port) of
+                                             {ok, Pid} ->
+                                                 [{{IP, Port}, Pid} | Acc];
+                                             {error, Error} ->
+                                                 Host = inet_parse:ntoa(IP),
+                                                 eradius:error_report("Could not start listener ~s:~b: ~p~n", [Host, Port, Error]),
+                                                 Acc
+                                         end
                                  end, Started, ToStart),
             eradius_node_mon:set_nodes(config_nodes(ServList)),
             {ok, #state{running = NRunning}}
@@ -168,8 +174,11 @@ config_nodes(Config) ->
 -type valid_server() :: {server(), list(valid_nas())}.
 -type valid_config() :: list(valid_server()).
 
--spec validate_server_config(list(term())) -> valid_config() | {invalid, io_lib:chars()}.
+-spec validate_config(list(term())) -> valid_config() | {invalid, io_lib:chars()}.
+validate_config(Config) ->
+    validate_server_config(dedup_keys(Config)).
 
+-spec validate_server_config(list(term())) -> valid_config() | {invalid, io_lib:chars()}.
 validate_server_config([]) ->
     [];
 validate_server_config([{Server, NasList} | ConfigRest]) ->
@@ -286,3 +295,17 @@ validate_node_list([Node | Rest]) when is_atom(Node) ->
     end;
 validate_node_list([OtherTerm | _]) ->
     {invalid, io_lib:format("bad term in node list: ~p", [OtherTerm])}.
+
+dedup_keys(Proplist) ->
+    dedup_keys1(lists:keysort(1, Proplist)).
+
+dedup_keys1(Proplist) ->
+    lists:foldr(fun ({K, V1}, [{K, V2} | R]) ->
+                        [{K, plmerge(V1, V2)} | R];
+                    ({K, V}, R) ->
+                        [{K, V} | R]
+                end, [], Proplist).
+
+plmerge(List1, List2) ->
+    M1 = [{K, V} || {K, V} <- List1, not proplists:is_defined(K, List2)],
+    lists:keysort(1, M1 ++ List2).
