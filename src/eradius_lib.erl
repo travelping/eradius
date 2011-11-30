@@ -224,7 +224,7 @@ decode_value(<<Bin/binary>>, Type) ->
         abinary ->
             Bin;
         string ->
-            unicode:characters_to_list(Bin);
+            Bin;
         integer ->
             decode_integer(Bin);
         integer64 ->

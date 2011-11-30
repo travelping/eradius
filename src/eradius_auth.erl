@@ -60,9 +60,21 @@ lookup_auth_attrs(Attrs, []) ->
 %% ------------------------------------------------------------------------------------------
 %% -- PAP/CHAP
 %% @doc PAP authentication
--spec pap(binary(), string()) -> boolean().
-pap(Password, ReqPassword) ->
-    Password == list_to_binary(string:strip(ReqPassword, right, 0)).
+-spec pap(binary(), binary()) -> boolean().
+pap(<<C, PasswdRest/binary>>, <<C, ReqRest/binary>>) ->
+    pap(PasswdRest, ReqRest);
+pap(<<_C, _/binary>>, <<_OtherChar, _/binary>>) ->
+    false;
+pap(<<>>, <<ReqRest/binary>>) ->
+    only_null(ReqRest).
+
+-compile({inline, only_null/1}).
+only_null(<<0, R/binary>>) ->
+    only_null(R);
+only_null(<<_, _/binary>>) ->
+    false;
+only_null(<<>>) ->
+    true.
 
 %% @doc CHAP authentication
 -spec chap(binary(), binary(), binary()) -> boolean().

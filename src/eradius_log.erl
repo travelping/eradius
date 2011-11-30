@@ -71,7 +71,7 @@ printable_attr_value(Attr = #attribute{type = {tagged, RealType}}, {Tag, RealVal
              end,
     <<TagBin/binary, ValBin/binary>>;
 printable_attr_value(#attribute{type = string}, Value) ->
-    escape_string(Value);
+    << <<(escape_char(C))/binary>> || <<C:8>> <= Value >>;
 printable_attr_value(#attribute{type = ipaddr}, {A, B, C, D}) ->
     <<(i2b(A))/binary, ".", (i2b(B))/binary, ".", (i2b(C))/binary, ".", (i2b(D))/binary>>;
 printable_attr_value(#attribute{id = ID, type = integer}, Val) ->
@@ -105,9 +105,6 @@ format_unknown(Id) when is_integer(Id) ->
 escape_char($") -> <<"\\\"">>;
 escape_char(C) when C >= 32, C < 127 -> <<C>>;
 escape_char(C) -> <<"\\", (i2b(C))/binary>>.
-
-escape_string(Str) ->
-    << <<(escape_char(C))/binary>> || C <- lists:flatten(Str) >>.
 
 day(1) -> "Mon";
 day(2) -> "Tue";
