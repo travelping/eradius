@@ -34,11 +34,19 @@ write_request(Log, Sender, Request = #radius_request{}) ->
 format_message(Time, Sender, Request) ->
     BinTStamp = radius_date(Time),
     BinSender = format_sender(Sender),
+    BinCommand = format_cmd(Request#radius_request.cmd),
     BinPacket = format_packet(Request),
-    <<BinTStamp/binary, "\n", BinSender/binary, "\n", BinPacket/binary, "\n">>.
+    <<BinTStamp/binary, " ", BinSender/binary, " ", BinCommand/binary, "\n", BinPacket/binary, "\n">>.
 
 format_sender({NASIP, NASPort, ReqID}) ->
-    <<$[, (format_ip(NASIP))/binary, $,, (i2b(NASPort))/binary, $,, (i2b(ReqID))/binary, $]>>.
+    <<(format_ip(NASIP))/binary, $:, (i2b(NASPort))/binary, " [", (i2b(ReqID))/binary, $]>>.
+
+format_cmd(request)   -> <<"Access-Request">>;
+format_cmd(accept)    -> <<"Access-Accept">>;
+format_cmd(reject)    -> <<"Access-Reject">>;
+format_cmd(challenge) -> <<"Access-Challenge">>;
+format_cmd(accreq)    -> <<"Accounting-Request">>;
+format_cmd(accresp)   -> <<"Accounting-Response">>.
 
 format_ip(IP) ->
     list_to_binary(inet_parse:ntoa(IP)).
