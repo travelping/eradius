@@ -3,7 +3,7 @@
 -export([load_tables/1, load_tables/2, modules_ready/1, modules_ready/2, trace_on/3, trace_off/3]).
 
 -behaviour(application).
--export([start/2, stop/1]).
+-export([start/2, stop/1, config_change/3]).
 
 %% internal use
 -export([error_report/2, info_report/2]).
@@ -51,6 +51,19 @@ ensure_ip(IP) ->
     error(badarg, [IP]).
 
 %% @private
+%% @doc Log an error using error_logger
+error_report(Fmt, Vals) ->
+    error_logger:error_report(lists:flatten(io_lib:format(Fmt, Vals))).
+
+%% @private
+%% @doc Log a message using error_logger
+info_report(Fmt, Vals) ->
+    error_logger:info_report(lists:flatten(io_lib:format(Fmt, Vals))).
+
+%% ----------------------------------------------------------------------------------------------------
+%% -- application callbacks
+
+%% @private
 start(_StartType, _StartArgs) ->
     eradius_sup:start_link().
 
@@ -59,11 +72,14 @@ stop(_State) ->
     ok.
 
 %% @private
-%% @doc Log an error using error_logger
-error_report(Fmt, Vals) ->
-    error_logger:error_report(lists:flatten(io_lib:format(Fmt, Vals))).
+config_change(Added, Changed, _Removed) ->
+    lists:foreach(fun do_config_change/1, Added),
+    lists:foreach(fun do_config_change/1, Changed),
+    eradius_client:reconfigure().
 
-%% @private
-%% @doc Log an error using error_logger
-info_report(Fmt, Vals) ->
-    error_logger:info_report(lists:flatten(io_lib:format(Fmt, Vals))).
+do_config_change({tables, NewTables}) ->
+    eradius_dict:load_tables(NewTables);
+do_config_change({servers, _}) ->
+    eradius_server_mon:reconfigure();
+do_config_change({_, _}) ->
+    ok.

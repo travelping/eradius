@@ -13,7 +13,7 @@
 -module(eradius_client).
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
 %% internal
--export([send_remote_request_loop/6]).
+-export([reconfigure/0, send_remote_request_loop/6]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -22,6 +22,7 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_RETRIES, 3).
 -define(DEFAULT_TIMEOUT, 5000).
+-define(RECONFIGURE_TIMEOUT, 15000).
 -define(GOOD_CMD(Req), Req#radius_request.cmd == 'request' orelse Req#radius_request.cmd == 'accreq').
 
 -type nas_address() :: {inet:ip_address(), eradius_server:port_number(), eradius_lib:secret()}.
@@ -107,6 +108,10 @@ send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
             send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN - 1)
     end.
 
+%% @private
+reconfigure() ->
+    catch gen_server:call(?SERVER, reconfigure, ?RECONFIGURE_TIMEOUT).
+
 %% ------------------------------------------------------------------------------------------
 %% -- socket process manager
 -record(state, {
@@ -182,6 +187,7 @@ configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NA
         NAdd    ->
             configure_ports(State, NPorts);
         _       ->
+            eradius:info_report("Reopening RADIUS client sockets (client_ip changed)~n", []),
             array:map(  fun(_PortIdx, Pid) ->
                                 case Pid of
                                     undefined   -> done;
@@ -267,5 +273,3 @@ parse_ip(T = {_, _, _, _}) ->
     {ok, T};
 parse_ip(T = {_, _, _, _, _, _}) ->
     {ok, T}.
-
-
