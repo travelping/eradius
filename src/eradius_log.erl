@@ -26,8 +26,13 @@ close(Log) ->
 -spec write_request(log(), sender(), #radius_request{}) -> ok.
 write_request(Log, Sender, Request = #radius_request{}) ->
     Time = calendar:universal_time(),
-    Msg  = format_message(Time, Sender, Request),
-    disk_log:blog(Log, Msg).
+    case catch format_message(Time, Sender, Request) of
+        {'EXIT', Error} ->
+            eradius:error_report("Failed to log RADIUS request: ~p~n~p", [Error, Request]),
+            ok;
+        Msg ->
+            disk_log:blog(Log, Msg)
+    end.
 
 %% ------------------------------------------------------------------------------------------
 %% -- formatting
@@ -78,11 +83,13 @@ printable_attr_value(Attr = #attribute{type = {tagged, RealType}}, {Tag, RealVal
                  Int       -> <<(i2b(Int))/binary, ":">>
              end,
     <<TagBin/binary, ValBin/binary>>;
-printable_attr_value(#attribute{type = string}, Value) ->
+printable_attr_value(#attribute{type = string}, Value) when is_binary(Value) ->
     << <<(escape_char(C))/binary>> || <<C:8>> <= Value >>;
+printable_attr_value(#attribute{type = string}, Value) when is_list(Value) ->
+    << <<(escape_char(C))/binary>> || <<C:8>> <= iolist_to_binary(Value) >>;
 printable_attr_value(#attribute{type = ipaddr}, {A, B, C, D}) ->
     <<(i2b(A))/binary, ".", (i2b(B))/binary, ".", (i2b(C))/binary, ".", (i2b(D))/binary>>;
-printable_attr_value(#attribute{id = ID, type = integer}, Val) ->
+printable_attr_value(#attribute{id = ID, type = integer}, Val) when is_integer(Val) ->
     case eradius_dict:lookup({ID, Val}) of
         [#value{name = VName}] -> list_to_binary(VName);
         _                      -> i2b(Val)
