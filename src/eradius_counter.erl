@@ -23,9 +23,13 @@
 %% API
 
 %% @doc initialize a counter structure
-init_counter(server) -> #server_counter{upTime = now(), resetTime = now()};
+init_counter(Key = {_ServerIP, ServerPort}) when is_integer(ServerPort) ->
+	#server_counter{key = Key, upTime = now(), resetTime = now()};
 init_counter(#nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP}) ->
-    #nas_counter{key = {ServerIP, ServerPort, NasIP}}.
+    #nas_counter{key = {{ServerIP, ServerPort}, NasIP}};
+init_counter({{ServerIP, ServerPort}, NasIP})
+  when is_tuple(ServerIP), is_integer(ServerPort), is_tuple(NasIP) ->
+    #nas_counter{key = {{ServerIP, ServerPort}, NasIP}}.
 
 %% @doc reset counters
 reset_counter(#server_counter{upTime = Up}) -> #server_counter{upTime = Up, resetTime = now()};
@@ -54,9 +58,8 @@ read() ->
 %% @doc calculate the per server sum of all counters of a per NAS list of counters
 -spec aggregate(stats()) -> stats().
 aggregate({Servers, {ResetTS, Nass}}) ->
-    NSums = lists:foldl(fun(Nas = #nas_counter{key = {ServerIP, ServerPort, _}}, Acc) ->
-                                Key = {ServerIP, ServerPort},
-                                orddict:update(Key, fun(Value) -> add_counter(Value, Nas) end, Nas#nas_counter{key = Key}, Acc)
+    NSums = lists:foldl(fun(Nas = #nas_counter{key = {ServerId, _}}, Acc) ->
+                                orddict:update(ServerId, fun(Value) -> add_counter(Value, Nas) end, Nas#nas_counter{key = ServerId}, Acc)
                         end,
                         orddict:new(), Nass),
     NSum1 = [Value || {_Key, Value} <- orddict:to_list(NSums)],
@@ -98,7 +101,7 @@ handle_call(reset, _From, State) ->
 
 %% @private
 handle_cast({inc_counter, Counter, Nas = #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP}}, State) ->
-    Key = {ServerIP, ServerPort, NasIP},
+    Key = {{ServerIP, ServerPort}, NasIP},
     Cnt0 = case ets:lookup(?MODULE, Key) of
                [] -> init_counter(Nas);
                [Cnt] -> Cnt

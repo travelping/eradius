@@ -59,6 +59,7 @@
          }).
 
 -record(server_counter, {
+          key                  :: term(),
           upTime               :: erlang:timestamp(),
           resetTime            :: erlang:timestamp(),
           invalidRequests = 0  :: non_neg_integer(),

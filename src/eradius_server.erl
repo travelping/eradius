@@ -90,7 +90,7 @@ init({IP, Port}) ->
             {ok, #state{socket = Socket,
                         ip = IP, port = Port,
                         transacts = ets:new(transacts, []),
-                        counter = eradius_counter:init_counter(server)}};
+                        counter = eradius_counter:init_counter({IP, Port})}};
         {error, Reason} ->
             {stop, Reason}
     end.
