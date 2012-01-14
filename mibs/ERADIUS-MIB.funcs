@@ -1,0 +1,2 @@
+{eradiusServerTable, {eradius_mib, eradius_server_table, []}}.
+{eradiusClientTable, {eradius_mib, eradius_client_table, []}}.

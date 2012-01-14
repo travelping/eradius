@@ -1,7 +1,7 @@
 %% @private
 %% @doc Supervisor for RADIUS server processes.
 -module(eradius_server_sup).
--export([start_link/0, start_instance/2, stop_instance/3]).
+-export([start_link/0, start_instance/2, stop_instance/3, all/0]).
 
 -behaviour(supervisor).
 -export([init/1]).
@@ -22,6 +22,9 @@ stop_instance(IP, Port, Pid) ->
     IPString = inet_parse:ntoa(IP),
     eradius:info_report("Stopping RADIUS Listener at ~s:~b~n", [IPString, Port]),
     supervisor:terminate_child(?SERVER, Pid).
+
+all() ->
+    lists:map(fun({_, Child, _, _}) -> Child end, supervisor:which_children(?SERVER)).
 
 %% ------------------------------------------------------------------------------------------
 %% -- supervisor callbacks

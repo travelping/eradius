@@ -44,7 +44,7 @@
 -export_type([port_number/0, req_id/0]).
 
 %% internal
--export([do_radius/5, handle_request/3, handle_remote_request/5]).
+-export([do_radius/5, handle_request/3, handle_remote_request/5, stats/2]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -64,7 +64,8 @@
     socket         :: udp_socket(),      % Socket Reference of opened UDP port
     ip = {0,0,0,0} :: inet:ip_address(), % IP to which this socket is bound
     port = 0       :: port_number(),     % Port number we are listening on
-    transacts      :: ets:tid()          % ETS table containing current transactions
+    transacts      :: ets:tid(),         % ETS table containing current transactions
+    counter        :: #server_counter{}  % statistics counter
 }).
 
 -spec behaviour_info('callbacks') -> [{module(), non_neg_integer()}].
@@ -76,6 +77,9 @@ start_link(IP = {A,B,C,D}, Port) ->
     Name = list_to_atom(lists:flatten(io_lib:format("eradius_server_~b.~b.~b.~b:~b", [A,B,C,D,Port]))),
     gen_server:start_link({local, Name}, ?MODULE, {IP, Port}, []).
 
+stats(Server, Function) ->
+    gen_server:call(Server, {stats, Function}).
+
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server Callbacks
 %% @private
@@ -85,7 +89,8 @@ init({IP, Port}) ->
         {ok, Socket} ->
             {ok, #state{socket = Socket,
                         ip = IP, port = Port,
-                        transacts = ets:new(transacts, [])}};
+                        transacts = ets:new(transacts, []),
+                        counter = eradius_counter:init_counter({IP, Port})}};
         {error, Reason} ->
             {stop, Reason}
     end.
@@ -99,20 +104,26 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
             case ets:lookup(Transacts, ReqKey) of
                 [] ->
                     HandlerPid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqKey, Handler, NNasProp, ReqUDP]),
-                    ets:insert(Transacts, {ReqKey, {handling, HandlerPid}});
+                    ets:insert(Transacts, {ReqKey, {handling, HandlerPid}}),
+                    eradius_counter:inc_counter(requests, NasProp);
                 [{_ReqKey, {handling, _HandlerPid}}] ->
                     %% handler process is still working on the request
-                    dbg(NasProp, "duplicate request (being handled) ~p~n", [ReqKey]);
+                    dbg(NasProp, "duplicate request (being handled) ~p~n", [ReqKey]),
+                    eradius_counter:inc_counter(dupRequests, NasProp);
                 [{_ReqKey, {replied, HandlerPid}}] ->
                     %% handler process waiting for resend message
                     HandlerPid ! {self(), resend, Socket},
-                    dbg(NasProp, "duplicate request (resend) ~p~n", [ReqKey])
-            end;
+                    dbg(NasProp, "duplicate request (resend) ~p~n", [ReqKey]),
+                    eradius_counter:inc_counter(dupRequests, NasProp)
+            end,
+            NewState = State;
+        {discard, Reason} when Reason == no_nodes_local, Reason == no_nodes ->
+            NewState = State#state{counter = eradius_counter:inc_counter(discardNoHandler, State#state.counter)};
         {discard, _Reason} ->
-            ok
+            NewState = State#state{counter = eradius_counter:inc_counter(invalidRequests, State#state.counter)}
     end,
     inet:setopts(Socket, [{active, once}]),
-    {noreply, State};
+    {noreply, NewState};
 handle_info({replied, ReqKey, HandlerPid}, State = #state{transacts = Transacts}) ->
     ets:insert(Transacts, {ReqKey, {replied, HandlerPid}}),
     {noreply, State};
@@ -132,9 +143,15 @@ terminate(_Reason, State) ->
     gen_udp:close(State#state.socket),
     ok.
 
-%% -- unused callbacks
 %% @private
-handle_call(_Request, _From, State) -> {noreply, State}.
+handle_call({stats, pull}, _From, State = #state{counter = Counter}) ->
+    {reply, Counter, State#state{counter = eradius_counter:reset_counter(Counter)}};
+handle_call({stats, read}, _From, State = #state{counter = Counter}) ->
+    {reply, Counter, State};
+handle_call({stats, reset}, _From, State = #state{counter = Counter}) ->
+    {reply, ok, State#state{counter = eradius_counter:reset_counter(Counter)}}.
+
+%% -- unused callbacks
 %% @private
 handle_cast(_Msg, State)            -> {noreply, State}.
 %% @private
@@ -162,14 +179,23 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
             dbg(NasProp, "sending response for ~p~n", [ReqKey]),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             ServerPid ! {replied, ReqKey, self()},
+            eradius_counter:inc_counter(replies, NasProp),
             wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, ?RESEND_RETRIES);
         {discard, Reason} ->
             dbg(NasProp, "discarding request ~p: ~1000.p~n", [ReqKey, Reason]),
+            discard_inc_counter(Reason, NasProp),
             ServerPid ! {discarded, ReqKey};
         {exit, Reason} ->
             dbg(NasProp, "discarding request (handler EXIT) ~p: ~p~n", [ReqKey, Reason]),
+            eradius_counter:inc_counter(handlerFailure, NasProp),
             ServerPid ! {discarded, ReqKey}
     end.
+
+%% @TODO: extend for other failures
+discard_inc_counter(bad_pdu, NasProp) ->
+    eradius_counter:inc_counter(malformedRequests, NasProp);
+discard_inc_counter(_Reason, NasProp) ->
+    eradius_counter:inc_counter(packetsDropped, NasProp).
 
 wait_resend(ServerPid, ReqKey, _FromIP, _FromPort, _EncReply, 0) ->
     ServerPid ! {discarded, ReqKey};
@@ -229,6 +255,7 @@ run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, EncRequest) ->
 handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest) ->
     case eradius_lib:decode_request(EncRequest, NasProp#nas_prop.secret) of
         Request = #radius_request{} ->
+            request_inc_counter(Request#radius_request.cmd, NasProp),
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             {ok, RadiusLog} = eradius_log:open(),
             eradius_log:write_request(RadiusLog, Sender, Request),
@@ -263,6 +290,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, RadiusLog) ->
         {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs}} ->
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             EncReply = eradius_lib:encode_reply_request(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs}),
+            reply_inc_counter(ReplyCmd, NasProp),
             eradius_log:write_request(RadiusLog, Sender, Reply),
             {reply, EncReply};
         noreply ->
@@ -285,3 +313,21 @@ printable_date() ->
     {_ , _, MicroSecs} = Now = now(),
     {{Y, Mo, D}, {H, M, S}} = calendar:now_to_local_time(Now),
     io_lib:format("~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b:~4..0b", [Y,Mo,D,H,M,S,MicroSecs div 1000]).
+
+request_inc_counter(request, NasProp) ->
+    eradius_counter:inc_counter(accessRequests, NasProp);
+request_inc_counter(accreq, NasProp) ->
+    eradius_counter:inc_counter(accountRequests, NasProp);
+request_inc_counter(_Cmd, _NasProp) ->
+    ok.
+
+reply_inc_counter(accept, NasProp) ->
+    eradius_counter:inc_counter(accessAccepts, NasProp);
+reply_inc_counter(reject, NasProp) ->
+    eradius_counter:inc_counter(accessRejects, NasProp);
+reply_inc_counter(challenge, NasProp) ->
+    eradius_counter:inc_counter(accessChallenges, NasProp);
+reply_inc_counter(accresp, NasProp) ->
+    eradius_counter:inc_counter(accountResponses, NasProp);
+reply_inc_counter(_Cmd, _NasProp) ->
+    ok.

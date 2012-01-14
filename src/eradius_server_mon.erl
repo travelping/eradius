@@ -6,7 +6,7 @@
 %%   then sends ping requests to all nodes that are part of the configuration in order
 %%   to keep them connected.
 -module(eradius_server_mon).
--export([start_link/0, reconfigure/0, lookup_handler/3, lookup_pid/2, set_trace/4]).
+-export([start_link/0, reconfigure/0, lookup_handler/3, lookup_pid/2, set_trace/4, all_nas_keys/0]).
 -export_type([handler/0]).
 
 -behaviour(gen_server).
@@ -57,6 +57,11 @@ lookup_handler(IP, Port, NasIP) ->
 -spec lookup_pid(inet:ip_address(), eradius_server:port_number()) -> {ok, pid()} | {error, not_found}.
 lookup_pid(ServerIP, ServerPort) ->
     gen_server:call(?SERVER, {lookup_pid, {ServerIP, ServerPort}}).
+
+%% @doc returns the list of all currently configured NASs
+-spec all_nas_keys() -> [term()].
+all_nas_keys() ->
+	ets:select(?NAS_TAB, [{#nas{key = '$1', _ = '_'}, [], ['$1']}]).
 
 %% @doc Set or clear the trace flag for a given Server/NAS combination.
 -spec set_trace(inet:ip_address(), eradius_server:port_number(), inet:ip_address(), boolean()) -> ok.

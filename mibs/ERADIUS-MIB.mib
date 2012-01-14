@@ -1,0 +1,700 @@
+ERADIUS-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+       MODULE-IDENTITY, OBJECT-TYPE, OBJECT-IDENTITY,
+       enterprises,
+       Counter64, Integer32,
+       IpAddress, TimeTicks, mib-2      FROM SNMPv2-SMI
+       SnmpAdminString                  FROM SNMP-FRAMEWORK-MIB
+       InetAddressType, InetAddress     FROM INET-ADDRESS-MIB
+       MODULE-COMPLIANCE, OBJECT-GROUP  FROM SNMPv2-CONF;
+
+eradiusMIB MODULE-IDENTITY
+       LAST-UPDATED "201112120000Z"  -- 12 December 2011
+       ORGANIZATION "Travelping GmbH."
+       CONTACT-INFO
+              " Travelping GmbH
+                Röntgenstr. 13
+                39108 Magdeburg
+                Germany
+
+                Phone: +49 391 819099 0
+                EMail: info@travelping.com"
+       DESCRIPTION
+             "The MIB module for the eRADIUS server."
+       REVISION "201112120000Z"  -- 12 December 2011
+       DESCRIPTION "Initial version."
+       ::= { orgTravelping 2 }
+
+orgTravelping  OBJECT IDENTIFIER
+       ::= { enterprises 18681 }
+
+eradiusServerMIB  OBJECT IDENTIFIER ::= {eradiusMIB 1}
+eradiusServer  OBJECT IDENTIFIER ::= {eradiusServerMIB 1}
+eradiusServerTable OBJECT-TYPE
+       SYNTAX     SEQUENCE OF RadiusServerEntry
+       MAX-ACCESS not-accessible
+       STATUS     current
+       DESCRIPTION
+             "The (conceptual) table listing the RADIUS accounting
+              server."
+       ::= { eradiusServer 1 }
+
+eradiusServerEntry OBJECT-TYPE
+       SYNTAX     RadiusServerEntry
+       MAX-ACCESS not-accessible
+       STATUS     current
+       DESCRIPTION
+             "An entry (conceptual row) representing a RADIUS
+              server."
+       INDEX      { eradiusServerInetAddressType, eradiusServerInetAddress, eradiusServerInetPort }
+       ::= { eradiusServerTable 1 }
+
+RadiusServerEntry ::= SEQUENCE {
+       eradiusServerInetAddressType               InetAddressType,
+       eradiusServerInetAddress                   InetAddress,
+       eradiusServerInetPort                      Integer32,
+       eradiusServerIdent                         SnmpAdminString,
+       eradiusServerUpTime                        TimeTicks,
+       eradiusServerResetTime                     TimeTicks,
+       eradiusServerConfigReset                   INTEGER,
+       eradiusServerTotalInvalidRequests          Counter64,
+       eradiusServerTotalDiscardNoHandler         Counter64,
+       eradiusServerTotalRequests                 Counter64,
+       eradiusServerTotalReplies                  Counter64,
+       eradiusServerTotalDupRequests              Counter64,
+       eradiusServerTotalMalformedRequests        Counter64,
+       eradiusServerTotalAccessRequests           Counter64,
+       eradiusServerTotalAccessAccepts            Counter64,
+       eradiusServerTotalAccessRejects            Counter64,
+       eradiusServerTotalAccessChallenges         Counter64,
+       eradiusServerTotalAccountRequests          Counter64,
+       eradiusServerTotalAccountResponses         Counter64,
+       eradiusServerTotalNoRecords                Counter64,
+       eradiusServerTotalBadAuthenticators        Counter64,
+       eradiusServerTotalPacketsDropped           Counter64,
+       eradiusServerTotalUnknownTypes             Counter64,
+       eradiusServerTotalHandlerFailure           Counter64,
+       eradiusServerTotalCounterDiscontinuity     TimeTicks
+}
+
+eradiusServerInetAddressType OBJECT-TYPE
+       SYNTAX     InetAddressType
+       MAX-ACCESS not-accessible
+       STATUS     current
+       DESCRIPTION
+             "The type of address format used for the
+              eradiusClientInetAddress object."
+       ::= { eradiusServerEntry 1 }
+
+eradiusServerInetAddress OBJECT-TYPE
+       SYNTAX     InetAddress
+       MAX-ACCESS not-accessible
+       STATUS     current
+       DESCRIPTION
+             "The IP address of the RADIUS accounting
+              client referred to in this table entry, using
+              the IPv6 address format."
+       ::= { eradiusServerEntry 2 }
+
+eradiusServerInetPort OBJECT-TYPE
+       SYNTAX Integer32 (1..65535)
+       MAX-ACCESS  not-accessible
+       STATUS      current
+       DESCRIPTION
+	     "The Port this Server is listening on"
+       ::= { eradiusServerEntry 3 }
+
+eradiusServerIdent OBJECT-TYPE
+       SYNTAX      SnmpAdminString
+       MAX-ACCESS  read-only
+       STATUS      current
+       DESCRIPTION
+             "The implementation identification string for the
+              RADIUS accounting server software in use on the
+              system, for example, 'FNS-2.1'."
+       ::= { eradiusServerEntry 4 }
+
+eradiusServerUpTime OBJECT-TYPE
+       SYNTAX      TimeTicks
+       MAX-ACCESS  read-only
+       STATUS      current
+       DESCRIPTION
+             "If the server has a persistent state (e.g., a
+              process), this value will be the time elapsed (in
+              hundredths of a second) since the server process was
+              started.  For software without persistent state, this
+              value will be zero."
+       ::= { eradiusServerEntry 5 }
+
+eradiusServerResetTime OBJECT-TYPE
+       SYNTAX      TimeTicks
+       MAX-ACCESS  read-only
+       STATUS      current
+       DESCRIPTION
+             "If the server has a persistent state (e.g., a process)
+              and supports a 'reset' operation (e.g., can be told to
+              re-read configuration files), this value will be the
+              time elapsed (in hundredths of a second) since the
+              server was 'reset.'  For software that does not
+              have persistence or does not support a 'reset'
+              operation, this value will be zero."
+       ::= { eradiusServerEntry 6 }
+
+eradiusServerConfigReset OBJECT-TYPE
+       SYNTAX INTEGER { other(1),
+                        reset(2),
+                        initializing(3),
+                        running(4)}
+       MAX-ACCESS  read-write
+       STATUS      current
+       DESCRIPTION
+              "Status/action object to reinitialize any persistent
+               server state.  When set to reset(2), any persistent
+               server state (such as a process) is reinitialized as
+               if the server had just been started.  This value will
+               never be returned by a read operation.  When read,
+               one of the following values will be returned:
+                   other(1) - server in some unknown state;
+                   initializing(3) - server (re)initializing;
+                   running(4) - server currently running."
+       ::= { eradiusServerEntry 7 }
+
+eradiusServerTotalInvalidRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Request packets
+              received from unknown addresses."
+       REFERENCE "RFC 2866 sections 2, 4.1"
+       ::= { eradiusServerEntry 8 }
+
+eradiusServerTotalDiscardNoHandler OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Request packets discarded
+              due to an internal handler failure."
+       ::= { eradiusServerEntry 9 }
+
+eradiusServerTotalRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of packets received from this client."
+       ::= { eradiusServerEntry  10 }
+
+eradiusServerTotalReplies OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of replies packets sent to this client."
+       ::= { eradiusServerEntry  11 }
+
+eradiusServerTotalDupRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of duplicate RADIUS requests received from 
+	      this client."
+       ::= { eradiusServerEntry  12 }
+
+eradiusServerTotalMalformedRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of malformed RADIUS request
+              packets that were received from this client.
+              Bad authenticators and unknown types are not
+              included as malformed requests."
+       ::= { eradiusServerEntry  13 }
+
+eradiusServerTotalAccessRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of packets received on the authentication"
+       ::= { eradiusServerEntry  14 }
+
+eradiusServerTotalAccessAccepts OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Access-Accept packets
+              sent to this client."
+       ::= { eradiusServerEntry  15 }
+
+eradiusServerTotalAccessRejects OBJECT-TYPE
+      SYNTAX Counter64
+      UNITS "packets"
+      MAX-ACCESS read-only
+       STATUS current
+      DESCRIPTION
+             "The number of RADIUS Access-Reject packets
+              sent to this client."
+       ::= { eradiusServerEntry  16 }
+
+eradiusServerTotalAccessChallenges OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Access-Challenge packets
+              sent to this client."
+       ::= { eradiusServerEntry  17 }
+
+eradiusServerTotalAccountRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Accounting-Request packets
+              received from this client."
+       ::= { eradiusServerEntry  18 }
+
+eradiusServerTotalAccountResponses OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Accounting-Response packets
+              sent to this client."
+       ::= { eradiusServerEntry  19 }
+
+eradiusServerTotalNoRecords OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Accounting-Request packets
+              that were received and responded to but not
+              recorded."
+       ::= { eradiusServerEntry  20 }
+
+eradiusServerTotalBadAuthenticators OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Accounting-Request packets
+              that contained invalid authenticators received
+              from this client."
+       ::= { eradiusServerEntry  21 }
+
+eradiusServerTotalPacketsDropped OBJECT-TYPE
+      SYNTAX Counter64
+      UNITS "packets"
+      MAX-ACCESS read-only
+      STATUS current
+      DESCRIPTION
+           "The number of incoming packets received from this
+            client and silently discarded for a reason other
+            than malformed, bad authenticators, or unknown types."
+     ::= { eradiusServerEntry  22 }
+
+eradiusServerTotalUnknownTypes OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS packets of unknown type that
+              were received from this client."
+       ::= { eradiusServerEntry  23 }
+
+eradiusServerTotalHandlerFailure OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS request that resulted in a
+	      handler failure (internal server error)."
+       ::= { eradiusServerEntry  24 }
+
+eradiusServerTotalCounterDiscontinuity OBJECT-TYPE
+         SYNTAX TimeTicks
+         UNITS "centiseconds"
+         MAX-ACCESS read-only
+         STATUS current
+         DESCRIPTION
+               "The number of centiseconds since the last
+                discontinuity in the RADIUS Server counters.
+		A discontinuity may be the result of
+                a reinitialization of the RADIUS Server
+                module within the managed entity."
+         ::= { eradiusServerEntry 25 }
+
+eradiusClientTable OBJECT-TYPE
+       SYNTAX     SEQUENCE OF RadiusClientEntry
+       MAX-ACCESS not-accessible
+       STATUS     current
+       DESCRIPTION
+             "The (conceptual) table listing the RADIUS accounting
+              clients with which the server shares a secret."
+       ::= { eradiusServer 2 }
+
+eradiusClientEntry OBJECT-TYPE
+       SYNTAX     RadiusClientEntry
+       MAX-ACCESS not-accessible
+       STATUS     current
+       DESCRIPTION
+             "An entry (conceptual row) representing a RADIUS
+              accounting client with which the server shares a
+              secret."
+       INDEX      { eradiusServerInetAddressType, eradiusServerInetAddress, eradiusServerInetPort, eradiusClientInetAddressType, eradiusClientInetAddress }
+       ::= { eradiusClientTable 1 }
+
+RadiusClientEntry ::= SEQUENCE {
+       eradiusClientInetAddressType          InetAddressType,
+       eradiusClientInetAddress              InetAddress,
+       eradiusClientID                       SnmpAdminString,
+       eradiusServerRequests                 Counter64,
+       eradiusServerReplies                  Counter64,
+       eradiusServerDupRequests              Counter64,
+       eradiusServerMalformedRequests        Counter64,
+       eradiusServerAccessRequests           Counter64,
+       eradiusServerAccessAccepts            Counter64,
+       eradiusServerAccessRejects            Counter64,
+       eradiusServerAccessChallenges         Counter64,
+       eradiusServerAccountRequests          Counter64,
+       eradiusServerAccountResponses         Counter64,
+       eradiusServerNoRecords                Counter64,
+       eradiusServerBadAuthenticators        Counter64,
+       eradiusServerPacketsDropped           Counter64,
+       eradiusServerUnknownTypes             Counter64,
+       eradiusServerHandlerFailure           Counter64,
+       eradiusServerCounterDiscontinuity     TimeTicks
+}
+
+eradiusClientInetAddressType OBJECT-TYPE
+       SYNTAX     InetAddressType
+       MAX-ACCESS not-accessible
+       STATUS     current
+       DESCRIPTION
+             "The type of address format used for the
+              eradiusClientInetAddress object."
+       ::= { eradiusClientEntry 1 }
+
+eradiusClientInetAddress OBJECT-TYPE
+       SYNTAX     InetAddress
+       MAX-ACCESS not-accessible
+       STATUS     current
+       DESCRIPTION
+             "The IP address of the RADIUS accounting
+              client referred to in this table entry, using
+              the IPv6 address format."
+       ::= { eradiusClientEntry 2 }
+
+eradiusClientID OBJECT-TYPE
+       SYNTAX     SnmpAdminString
+       MAX-ACCESS read-only
+       STATUS     current
+       DESCRIPTION
+             "The NAS-Identifier of the RADIUS accounting client
+              referred to in this table entry.  This is not
+              necessarily the same as sysName in MIB II."
+       REFERENCE "RFC 2865 section 5.32"
+       ::= { eradiusClientEntry 3 }
+
+-- Server Counters
+
+eradiusServerRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of packets received from this client."
+       ::= { eradiusClientEntry  4 }
+
+eradiusServerReplies OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of replies packets sent to this client."
+       ::= { eradiusClientEntry  5 }
+
+eradiusServerDupRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of duplicate RADIUS requests received from 
+	      this client."
+       ::= { eradiusClientEntry  6 }
+
+eradiusServerMalformedRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of malformed RADIUS request
+              packets that were received from this client.
+              Bad authenticators and unknown types are not
+              included as malformed requests."
+       ::= { eradiusClientEntry  7 }
+
+eradiusServerAccessRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of packets received on the authentication"
+       ::= { eradiusClientEntry  8 }
+
+eradiusServerAccessAccepts OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Access-Accept packets
+              sent to this client."
+       ::= { eradiusClientEntry  9 }
+
+eradiusServerAccessRejects OBJECT-TYPE
+      SYNTAX Counter64
+      UNITS "packets"
+      MAX-ACCESS read-only
+       STATUS current
+      DESCRIPTION
+             "The number of RADIUS Access-Reject packets
+              sent to this client."
+       ::= { eradiusClientEntry  10 }
+
+eradiusServerAccessChallenges OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Access-Challenge packets
+              sent to this client."
+       ::= { eradiusClientEntry  11 }
+
+eradiusServerAccountRequests OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Accounting-Request packets
+              received from this client."
+       ::= { eradiusClientEntry  12 }
+
+eradiusServerAccountResponses OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Accounting-Response packets
+              sent to this client."
+       ::= { eradiusClientEntry  13 }
+
+
+eradiusServerNoRecords OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Accounting-Request packets
+              that were received and responded to but not
+              recorded."
+       ::= { eradiusClientEntry  14 }
+
+eradiusServerBadAuthenticators OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS Accounting-Request packets
+              that contained invalid authenticators received
+              from this client."
+       ::= { eradiusClientEntry  15 }
+
+eradiusServerPacketsDropped OBJECT-TYPE
+      SYNTAX Counter64
+      UNITS "packets"
+      MAX-ACCESS read-only
+      STATUS current
+      DESCRIPTION
+           "The number of incoming packets received from this
+            client and silently discarded for a reason other
+            than malformed, bad authenticators, or unknown types."
+     ::= { eradiusClientEntry  16 }
+
+eradiusServerUnknownTypes OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS packets of unknown type that
+              were received from this client."
+       ::= { eradiusClientEntry  17 }
+
+eradiusServerHandlerFailure OBJECT-TYPE
+       SYNTAX Counter64
+       UNITS "packets"
+       MAX-ACCESS read-only
+       STATUS current
+       DESCRIPTION
+             "The number of RADIUS request that resulted in a
+	      handler failure (internal server error)."
+       ::= { eradiusClientEntry  18 }
+
+eradiusServerCounterDiscontinuity OBJECT-TYPE
+         SYNTAX TimeTicks
+         UNITS "centiseconds"
+         MAX-ACCESS read-only
+         STATUS current
+         DESCRIPTION
+               "The number of centiseconds since the last
+                discontinuity in the RADIUS Server counters.
+		A discontinuity may be the result of
+                a reinitialization of the RADIUS Server
+                module within the managed entity."
+         ::= { eradiusClientEntry 19 }
+
+-- conformance information
+
+eradiusServerMIBConformance  OBJECT IDENTIFIER
+       ::= { eradiusServerMIB 2 }
+
+eradiusServerMIBCompliances  OBJECT IDENTIFIER
+       ::= { eradiusServerMIBConformance 1 }
+
+eradiusServerMIBGroups  OBJECT IDENTIFIER
+       ::= { eradiusServerMIBConformance 2 }
+
+-- compliance statements
+
+eradiusServerMIBCompliance MODULE-COMPLIANCE
+       STATUS  deprecated
+       DESCRIPTION
+            "The compliance statement for accounting servers
+            implementing the RADIUS Accounting Server MIB.
+            Implementation of this module is for IPv4-only
+            entities, or for backwards compatibility use with
+            entities that support both IPv4 and IPv6."
+       MODULE  -- this module
+       MANDATORY-GROUPS { eradiusServerMIBGroup }
+
+       OBJECT        eradiusServerConfigReset
+       WRITE-SYNTAX  INTEGER { reset(2) }
+       DESCRIPTION  "The only SETable value is 'reset' (2)."
+       ::= { eradiusServerMIBCompliances 1 }
+
+eradiusServerMIBCompliance MODULE-COMPLIANCE
+       STATUS  current
+       DESCRIPTION
+            "The compliance statement for accounting
+            servers implementing the RADIUS Accounting
+            Server IPv6 ensions MIB.  Implementation of
+            this module is for entities that support IPv6,
+            or support IPv4 and IPv6."
+       MODULE  -- this module
+       MANDATORY-GROUPS { eradiusServerMIBGroup }
+
+       OBJECT        eradiusServerConfigReset
+       WRITE-SYNTAX  INTEGER { reset(2) }
+       DESCRIPTION  "The only SETable value is 'reset' (2)."
+
+       OBJECT eradiusClientInetAddressType
+        SYNTAX InetAddressType -- { ipv4(1), ipv6(2) }
+        DESCRIPTION
+              "An implementation is only required to support
+               IPv4 and globally unique IPv6 addresses."
+
+        OBJECT eradiusClientInetAddress
+        SYNTAX InetAddress ( SIZE (4|16) )
+        DESCRIPTION
+              "An implementation is only required to support
+               IPv4 and globally unique IPv6 addresses."
+       ::= { eradiusServerMIBCompliances 2 }
+
+-- units of conformance
+
+eradiusServerMIBGroup OBJECT-GROUP
+      OBJECTS {eradiusServerInetAddressType,
+               eradiusServerInetAddress,
+	       eradiusServerInetPort,
+               eradiusServerIdent,
+               eradiusServerUpTime,
+               eradiusServerResetTime,
+               eradiusServerConfigReset,
+	       eradiusServerTotalInvalidRequests,
+	       eradiusServerTotalDiscardNoHandler,
+	       eradiusServerTotalRequests,
+	       eradiusServerTotalReplies,
+	       eradiusServerTotalDupRequests,
+	       eradiusServerTotalMalformedRequests,
+	       eradiusServerTotalAccessRequests,
+	       eradiusServerTotalAccessAccepts,
+	       eradiusServerTotalAccessRejects,
+	       eradiusServerTotalAccessChallenges,
+	       eradiusServerTotalAccountRequests,
+	       eradiusServerTotalAccountResponses,
+	       eradiusServerTotalNoRecords,
+	       eradiusServerTotalBadAuthenticators,
+	       eradiusServerTotalPacketsDropped,
+	       eradiusServerTotalUnknownTypes,
+	       eradiusServerTotalHandlerFailure,
+	       eradiusServerTotalCounterDiscontinuity,
+               eradiusClientInetAddressType,
+               eradiusClientInetAddress,
+               eradiusClientID,
+               eradiusServerRequests,
+               eradiusServerReplies,
+               eradiusServerDupRequests,
+               eradiusServerMalformedRequests,
+               eradiusServerAccessRequests,
+               eradiusServerAccessAccepts,
+               eradiusServerAccessRejects,
+               eradiusServerAccessChallenges,
+               eradiusServerAccountRequests,
+               eradiusServerAccountResponses,
+               eradiusServerNoRecords,
+               eradiusServerBadAuthenticators,
+               eradiusServerPacketsDropped,
+               eradiusServerUnknownTypes,
+               eradiusServerHandlerFailure,
+               eradiusServerCounterDiscontinuity
+              }
+      STATUS  current
+      DESCRIPTION
+            "The collection of objects providing management of
+             a RADIUS Accounting Server."
+      ::= { eradiusServerMIBGroups 1 }
+
+END

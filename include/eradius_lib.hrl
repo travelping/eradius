@@ -39,6 +39,33 @@
 -define(RTCNAS_Request,     10).
 -define(RTCNAS_Reboot,      11).
 
+-record(nas_counter, {
+          key                          :: term(),
+          requests                 = 0 :: non_neg_integer(),
+          replies                  = 0 :: non_neg_integer(),
+          dupRequests              = 0 :: non_neg_integer(),
+          malformedRequests        = 0 :: non_neg_integer(),
+          accessRequests           = 0 :: non_neg_integer(),
+          accessAccepts            = 0 :: non_neg_integer(),
+          accessRejects            = 0 :: non_neg_integer(),
+          accessChallenges         = 0 :: non_neg_integer(),
+          accountRequests          = 0 :: non_neg_integer(),
+          accountResponses         = 0 :: non_neg_integer(),
+          noRecords                = 0 :: non_neg_integer(),
+          badAuthenticators        = 0 :: non_neg_integer(),
+          packetsDropped           = 0 :: non_neg_integer(),
+          unknownTypes             = 0 :: non_neg_integer(),
+          handlerFailure           = 0 :: non_neg_integer()
+         }).
+
+-record(server_counter, {
+          key                  :: term(),
+          upTime               :: erlang:timestamp(),
+          resetTime            :: erlang:timestamp(),
+          invalidRequests = 0  :: non_neg_integer(),
+          discardNoHandler = 0 :: non_neg_integer()
+}).
+
 -record(nas_prop, {
     server_ip     :: inet:ip_address(),
     server_port   :: eradius_server:port_number(),
