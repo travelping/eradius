@@ -1,13 +1,14 @@
 *~
 *.beam
 /ebin/*.app
-priv/*.map
-tetrapak/.*.cache
+/priv/*.map
+/priv/mibs/
 include/dictionary.hrl
 include/dictionary_*.hrl
+include/ERADIUS-MIB.hrl
+tetrapak/.*.cache
 *.log
 /dist/
-/ebin/eradius.app
 /test-log/
 
 /doc/*
