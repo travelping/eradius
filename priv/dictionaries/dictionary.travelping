@@ -36,7 +36,8 @@ ATTRIBUTE	TP-Exit-Access-Class-Id			24	string
 ATTRIBUTE	TP-Access-Rule				25	string
 ATTRIBUTE	TP-Access-Group				26	string
 ATTRIBUTE	TP-NAT-Pool-Id				27	string
-ATTRIBUTE	TP-NAT-Port-Start			28	string
-ATTRIBUTE	TP-NAT-Port-End				29	string
+ATTRIBUTE	TP-NAT-Port-Start			28	integer
+ATTRIBUTE	TP-NAT-Port-End				29	integer
+ATTRIBUTE	TP-Keep-Alive-Timeout			30	integer
 
 END-VENDOR	Travelping
