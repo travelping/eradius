@@ -76,6 +76,9 @@ print_attr(Id, Val) ->
             print_attr(#attribute{id = Id, name = Name, type = octets}, Val)
     end.
 
+printable_attr_value(#attribute{id = ?RMessage_Authenticator}, {_Pos, Value})
+  when is_binary(Value) ->
+    <<"0x", (bin_to_hexstr(Value))/binary>>;
 printable_attr_value(Attr = #attribute{type = {tagged, RealType}}, {Tag, RealVal}) ->
     ValBin = printable_attr_value(Attr#attribute{type = RealType}, RealVal),
     TagBin = case Tag of

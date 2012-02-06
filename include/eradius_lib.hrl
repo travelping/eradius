@@ -22,6 +22,7 @@
 -define(RSession_Id,      44).
 -define(RSession_Time,    46).
 -define(RTerminate_Cause, 49).
+-define(RMessage_Authenticator, 80).
 
 %%- attribute values
 -define(RStatus_Type_Start,  1).
@@ -77,9 +78,10 @@
 }).
 
 -record(radius_request, {
-    reqid = 0     :: byte(),
-    cmd = request :: eradius_lib:command(),
-    attrs = []    :: eradius_lib:attribute_list(),
-    secret        :: eradius_lib:secret(),
-    authenticator :: eradius_lib:authenticator()
+    reqid = 0        :: byte(),
+    cmd = request    :: eradius_lib:command(),
+    attrs = []       :: eradius_lib:attribute_list(),
+    secret           :: eradius_lib:secret(),
+    authenticator    :: eradius_lib:authenticator(),
+    msg_hmac = false :: boolean()  
 }).
