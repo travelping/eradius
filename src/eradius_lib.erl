@@ -210,7 +210,7 @@ decode_attributes(Request, As) ->
 
 -spec decode_attributes(#radius_request{}, binary(), non_neg_integer(), attribute_list()) -> attribute_list().
 decode_attributes(_Req, <<>>, _Pos, Acc) ->
-    Acc;
+    lists:reverse(Acc);
 decode_attributes(Req, <<Type:8, ChunkLength:8, ChunkRest/binary>>, Pos, Acc) ->
     ValueLength = ChunkLength - 2,
     <<Value:ValueLength/binary, PacketRest/binary>> = ChunkRest,
