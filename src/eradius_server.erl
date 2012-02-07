@@ -26,7 +26,9 @@
 %%       cmd           :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
 %%       attrs         :: eradius_lib:attribute_list(),
 %%       secret        :: eradius_lib:secret(),
-%%       authenticator :: eradius_lib:authenticator()
+%%       authenticator :: eradius_lib:authenticator(),
+%%       msg_hmac      :: boolean(),
+%%       eap_msg       :: binary()
 %%   }).
 %%
 %%   -record(nas_prop, {
