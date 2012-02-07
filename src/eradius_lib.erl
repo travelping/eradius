@@ -150,6 +150,12 @@ encode_value(date, Date = {{_,_,_},{_,_,_}}) ->
 
 %% ------------------------------------------------------------------------------------------
 %% -- Wire Decoding
+
+-record(decoder_state, {
+	  attrs = []       :: eradius_lib:attribute_list(),
+	  hmac_pos         :: 'undefined' | non_neg_integer(),
+}).
+
 -spec decode_request_id(binary()) -> {0..255, binary()} | bad_pdu.
 decode_request_id(Req = <<_Cmd:8, ReqId:8, _Rest/binary>>) -> {ReqId, Req};
 decode_request_id(_Req) -> bad_pdu.
@@ -175,16 +181,18 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, Auth:16/binary, Body0/binary>>, Secret
            end,
 
     Command = decode_command(Cmd),
-    PartialReq = #radius_request{cmd = Command, reqid = ReqId, authenticator = Auth, secret = Secret, msg_hmac = false},
-    Request =  PartialReq#radius_request{attrs = decode_attributes(PartialReq, Body)},
-    case get_attr(Request, ?RMessage_Authenticator) of
-	undefined    -> Request;
-	{Pos, Value} -> validate_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Value, Secret),
-			Request#radius_request{msg_hmac = true}
+    PartialRequest = #radius_request{cmd = Command, reqid = ReqId, authenticator = Auth, secret = Secret, msg_hmac = false},
+    DecodedState = decode_attributes(PartialRequest, Body),
+    Request = PartialRequest#radius_request{attrs = lists:reverse(DecodedState#decoder_state.attrs)},
+    if
+	is_integer(DecodedState#decoder_state.hmac_pos) ->
+	    validate_authenticator(Cmd, ReqId, Len, Auth, Body, DecodedState#decoder_state.hmac_pos, Secret),
+	    Request#radius_request{msg_hmac = true};
+	true -> Request
     end.
 
--spec validate_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), binary(), non_neg_integer(), binary(), binary()) -> ok.
-validate_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Value, Secret) ->
+-spec validate_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), non_neg_integer(), binary(), binary()) -> ok.
+validate_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
     case Body of
 	<<Before:Pos/bytes, Value:16/bytes, After/binary>> ->
 	    case crypto:md5_mac(Secret, [<<Cmd:8, ReqId:8, Len:16>>, Auth, Before, zero_authenticator(), After]) of
@@ -204,42 +212,46 @@ decode_command(?RAccounting_Request)  -> accreq;
 decode_command(?RAccounting_Response) -> accresp;
 decode_command(_)                     -> error(bad_pdu).
 
--spec decode_attributes(#radius_request{}, binary()) -> attribute_list().
-decode_attributes(Request, As) ->
-    decode_attributes(Request, As, 0, []).
+append_attr(Attr, State) ->
+    State#decoder_state{attrs = [Attr | State#decoder_state.attrs]}.
 
--spec decode_attributes(#radius_request{}, binary(), non_neg_integer(), attribute_list()) -> attribute_list().
-decode_attributes(_Req, <<>>, _Pos, Acc) ->
-    lists:reverse(Acc);
-decode_attributes(Req, <<Type:8, ChunkLength:8, ChunkRest/binary>>, Pos, Acc) ->
+-spec decode_attributes(#radius_request{}, binary()) -> #decoder_state{}.
+decode_attributes(Req, As) ->
+    decode_attributes(Req, As, 0, #decoder_state{}).
+
+-spec decode_attributes(#radius_request{}, binary(), non_neg_integer(), #decoder_state{}) -> #decoder_state{}.
+decode_attributes(_Req, <<>>, _Pos, State) ->
+    State;
+decode_attributes(Req, <<Type:8, ChunkLength:8, ChunkRest/binary>>, Pos, State) ->
     ValueLength = ChunkLength - 2,
     <<Value:ValueLength/binary, PacketRest/binary>> = ChunkRest,
-    case eradius_dict:lookup(Type) of
-        [AttrRec = #attribute{}] ->
-            decode_attributes(Req, PacketRest, Pos + ChunkLength, decode_attribute(Value, Req, AttrRec, Pos + 2) ++ Acc);
-        _ ->
-            decode_attributes(Req, PacketRest, Pos + ChunkLength, [{Type, Value} | Acc])
-    end.
+    NewState = case eradius_dict:lookup(Type) of
+		   [AttrRec = #attribute{}] ->
+		       decode_attribute(Value, Req, AttrRec, Pos + 2, State);
+		   _ ->
+		       append_attr({Type, Value}, State)
+    end,
+    decode_attributes(Req, PacketRest, Pos + ChunkLength, NewState).
 
 %% gotcha: the function returns a LIST of attribute-value pairs because
 %% a vendor-specific attribute blob might contain more than one attribute.
--spec decode_attribute(binary(), #radius_request{}, #attribute{}, non_neg_integer()) -> attribute_list().
-decode_attribute(<<VendorID:32/integer, ValueBin/binary>>, Req, #attribute{id = ?RVendor_Specific}, Pos) ->
-    decode_vendor_specific_attribute(Req, VendorID, ValueBin, Pos);
-decode_attribute(<<Value/binary>>, _Req, Attr = #attribute{id = ?RMessage_Authenticator}, Pos) ->
-    [{Attr, {Pos, Value}}];
-decode_attribute(<<EncValue/binary>>, Req, Attr = #attribute{type = Type, enc = Encryption}, _Pos) when is_atom(Type) ->
-    [{Attr, decode_value(decrypt_value(Req, EncValue, Encryption), Type)}];
-decode_attribute(WholeBin = <<Tag:8, Bin/binary>>, Req, Attr = #attribute{type = {tagged, Type}}, _Pos) ->
+-spec decode_attribute(binary(), #radius_request{}, #attribute{}, non_neg_integer(), #decoder_state{}) -> #decoder_state{}.
+decode_attribute(<<VendorID:32/integer, ValueBin/binary>>, Req, #attribute{id = ?RVendor_Specific}, Pos, State) ->
+    decode_vendor_specific_attribute(Req, VendorID, ValueBin, Pos + 4, State);
+decode_attribute(<<EncValue/binary>>, Req, Attr = #attribute{id = ?RMessage_Authenticator, type = Type, enc = Encryption}, Pos, State) ->
+    append_attr({Attr, decode_value(decrypt_value(Req, EncValue, Encryption), Type)}, State#decoder_state{hmac_pos = Pos});
+decode_attribute(<<EncValue/binary>>, Req, Attr = #attribute{type = Type, enc = Encryption}, _Pos, State) when is_atom(Type) ->
+    append_attr({Attr, decode_value(decrypt_value(Req, EncValue, Encryption), Type)}, State);
+decode_attribute(WholeBin = <<Tag:8, Bin/binary>>, Req, Attr = #attribute{type = {tagged, Type}}, _Pos, State) ->
     case {decode_tag_value(Tag), Attr#attribute.enc} of
         {0, no} ->
             % decode including tag byte if tag is out of range
-            [{Attr, {0, decode_value(WholeBin, Type)}}];
+            append_attr({Attr, {0, decode_value(WholeBin, Type)}}, State);
         {TagV, no} ->
-            [{Attr, {TagV, decode_value(Bin, Type)}}];
+            append_attr({Attr, {TagV, decode_value(Bin, Type)}}, State);
         {TagV, Encryption} ->
             % for encrypted attributes, tag byte is never part of the value
-            [{Attr, {TagV, decode_value(decrypt_value(Req, Bin, Encryption), Type)}}]
+            append_attr({Attr, {TagV, decode_value(decrypt_value(Req, Bin, Encryption), Type)}}, State)
     end.
 
 -compile({inline, decode_tag_value/1}).
@@ -293,19 +305,20 @@ decrypt_value(Req,  <<Val/binary>>, scramble)   -> scramble(Req#radius_request.s
 decrypt_value(Req,  <<Val/binary>>, salt_crypt) -> salt_decrypt(Req#radius_request.secret, Req#radius_request.authenticator, Val);
 decrypt_value(_Req, <<Val/binary>>, no)         -> Val.
 
--spec decode_vendor_specific_attribute(#radius_request{}, non_neg_integer(), binary(), non_neg_integer()) -> attribute_list().
-decode_vendor_specific_attribute(_Req, _VendorID, <<>>, _Pos) ->
-    [];
-decode_vendor_specific_attribute(Req, VendorID, <<Type:8, ChunkLength:8, ChunkRest/binary>>, Pos) ->
+-spec decode_vendor_specific_attribute(#radius_request{}, non_neg_integer(), binary(), non_neg_integer(), #decoder_state{}) -> #decoder_state{}.
+decode_vendor_specific_attribute(_Req, _VendorID, <<>>, _Pos, State) ->
+    State;
+decode_vendor_specific_attribute(Req, VendorID, <<Type:8, ChunkLength:8, ChunkRest/binary>>, Pos, State) ->
     ValueLength = ChunkLength - 2,
     <<Value:ValueLength/binary, PacketRest/binary>> = ChunkRest,
     VendorAttrKey = {VendorID, Type},
-    case eradius_dict:lookup(VendorAttrKey) of
-        [AttrRec = #attribute{}] ->
-            decode_attribute(Value, Req, AttrRec, Pos + 2) ++ decode_vendor_specific_attribute(Req, VendorID, PacketRest, Pos + ChunkLength);
-        _ ->
-            [{VendorAttrKey, Value} | decode_vendor_specific_attribute(Req, VendorID, PacketRest, Pos + ChunkLength)]
-    end.
+    NewState = case eradius_dict:lookup(VendorAttrKey) of
+		   [AttrRec = #attribute{}] ->
+		       decode_attribute(Value, Req, AttrRec, Pos + 2, State);
+		   _ ->
+		       append_attr({VendorAttrKey, Value}, State)
+    end,
+    decode_vendor_specific_attribute(Req, VendorID, PacketRest, Pos + ChunkLength, NewState).
 
 %% ------------------------------------------------------------------------------------------
 %% -- Attribute Encryption
