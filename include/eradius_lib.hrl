@@ -22,6 +22,7 @@
 -define(RSession_Id,      44).
 -define(RSession_Time,    46).
 -define(RTerminate_Cause, 49).
+-define(REAP_Message,     79).
 -define(RMessage_Authenticator, 80).
 
 %%- attribute values
@@ -83,5 +84,6 @@
     attrs = []       :: eradius_lib:attribute_list(),
     secret           :: eradius_lib:secret(),
     authenticator    :: eradius_lib:authenticator(),
-    msg_hmac = false :: boolean()  
+    msg_hmac = false :: boolean(),
+    eap_msg = <<>>   :: binary()
 }).

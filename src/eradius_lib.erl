@@ -48,7 +48,9 @@ get_attr_loop(_, [])                                 -> undefined.
 %% @doc Convert a RADIUS request to the wire format.
 -spec encode_request(#radius_request{}) -> binary().
 encode_request(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, attrs = Attributes}) ->
-    {Body, BodySize} = encode_attributes(Req, Attributes),
+    EncReq1 = encode_attributes(Req, Attributes),
+    EncReq2 = encode_eap_message(Req, EncReq1),
+    {Body, BodySize} = encode_message_authenticator(Req, EncReq2),
     <<(encode_command(Command)):8, ReqID:8, (BodySize + 20):16, Authenticator:16/binary, Body/binary>>.
 
 %% @doc Convert a RADIUS reply to the wire format.
@@ -56,12 +58,13 @@ encode_request(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator
 %%   except that it includes the authenticator substitution required for replies.
 -spec encode_reply_request(#radius_request{}) -> binary().
 encode_reply_request(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, attrs = Attributes}) ->
-    {Body, BodySize} = encode_attributes(Req, Attributes),
-    {Body1, BodySize1} = encode_message_authenticator(Req, {Body, BodySize}),
-    Head = <<(encode_command(Command)):8, ReqID:8, (BodySize1 + 20):16>>,
+    EncReq1 = encode_attributes(Req, Attributes),
+    EncReq2 = encode_eap_message(Req, EncReq1),
+    {Body, BodySize} = encode_message_authenticator(Req, EncReq2),
+    Head = <<(encode_command(Command)):8, ReqID:8, (BodySize + 20):16>>,
     ReqAuth = <<Authenticator:16/binary>>,
-    ReplyAuth = crypto:md5([Head, ReqAuth, Body1, Req#radius_request.secret]),
-    <<Head/binary, ReplyAuth:16/binary, Body1/binary>>.
+    ReplyAuth = crypto:md5([Head, ReqAuth, Body, Req#radius_request.secret]),
+    <<Head/binary, ReplyAuth:16/binary, Body/binary>>.
 
 -spec encode_command(command()) -> byte().
 encode_command(request)   -> ?RAccess_Request;
@@ -80,6 +83,26 @@ encode_message_authenticator(Req = #radius_request{reqid = ReqID, cmd = Command,
     HMAC = crypto:md5_mac(Req#radius_request.secret, [Head, ReqAuth, Body, <<?RMessage_Authenticator,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>]),
     {<<Body/binary, ?RMessage_Authenticator, 18, HMAC/binary>>, BodySize + 2 + 16}.
 
+chunk(Bin, Length) ->
+    case Bin of
+	<<First:Length/bytes, Rest/binary>> -> {First, Rest};
+	_ -> {Bin, <<>>}
+    end.
+
+encode_eap_attribute({<<>>, _}, EncReq) ->
+    EncReq;
+encode_eap_attribute({Value, Rest}, {Body, BodySize}) ->
+    EncAttr = <<?REAP_Message, (byte_size(Value) + 2):8, Value/binary>>,
+    EncReq = {<<Body/binary, EncAttr/binary>>, BodySize + byte_size(EncAttr)},
+    encode_eap_attribute(chunk(Rest, 253), EncReq).
+
+-spec encode_eap_message(#radius_request{}, {binary(), non_neg_integer()}) -> {binary(), non_neg_integer()}.
+encode_eap_message(#radius_request{eap_msg = EAP}, EncReq)
+  when is_binary(EAP); size(EAP) > 0 ->
+    encode_eap_attribute(chunk(EAP, 253), EncReq);
+encode_eap_message(#radius_request{eap_msg = <<>>}, EncReq) ->
+    EncReq.
+    
 -spec encode_attributes(#radius_request{}, attribute_list()) -> {binary(), non_neg_integer()}.
 encode_attributes(Req, Attributes) ->
     F = fun ({A = #attribute{}, Val}, {Body, BodySize}) ->
@@ -99,6 +122,9 @@ encode_attributes(Req, Attributes) ->
 -spec encode_attribute(#radius_request{}, #attribute{}, term()) -> binary().
 encode_attribute(_Req, _Attr = #attribute{id = ?RMessage_Authenticator}, _) ->
     %% message authenticator is handled through the msg_hmac flag
+    <<>>;
+encode_attribute(_Req, _Attr = #attribute{id = ?REAP_Message}, _) ->
+    %% EAP-Message attributes are handled through the eap_msg field
     <<>>;
 encode_attribute(Req, Attr = #attribute{id = {Vendor, ID}}, Value) ->
     EncValue = encode_attribute(Req, Attr#attribute{id = ID}, Value),
@@ -154,6 +180,7 @@ encode_value(date, Date = {{_,_,_},{_,_,_}}) ->
 -record(decoder_state, {
 	  attrs = []       :: eradius_lib:attribute_list(),
 	  hmac_pos         :: 'undefined' | non_neg_integer(),
+	  eap_msg = []     :: [binary()]
 }).
 
 -spec decode_request_id(binary()) -> {0..255, binary()} | bad_pdu.
@@ -183,7 +210,8 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, Auth:16/binary, Body0/binary>>, Secret
     Command = decode_command(Cmd),
     PartialRequest = #radius_request{cmd = Command, reqid = ReqId, authenticator = Auth, secret = Secret, msg_hmac = false},
     DecodedState = decode_attributes(PartialRequest, Body),
-    Request = PartialRequest#radius_request{attrs = lists:reverse(DecodedState#decoder_state.attrs)},
+    Request = PartialRequest#radius_request{attrs = lists:reverse(DecodedState#decoder_state.attrs),
+					    eap_msg = list_to_binary(lists:reverse(DecodedState#decoder_state.eap_msg))},
     if
 	is_integer(DecodedState#decoder_state.hmac_pos) ->
 	    validate_authenticator(Cmd, ReqId, Len, Auth, Body, DecodedState#decoder_state.hmac_pos, Secret),
@@ -238,6 +266,9 @@ decode_attributes(Req, <<Type:8, ChunkLength:8, ChunkRest/binary>>, Pos, State) 
 -spec decode_attribute(binary(), #radius_request{}, #attribute{}, non_neg_integer(), #decoder_state{}) -> #decoder_state{}.
 decode_attribute(<<VendorID:32/integer, ValueBin/binary>>, Req, #attribute{id = ?RVendor_Specific}, Pos, State) ->
     decode_vendor_specific_attribute(Req, VendorID, ValueBin, Pos + 4, State);
+decode_attribute(<<Value/binary>>, _Req, Attr = #attribute{id = ?REAP_Message}, _Pos, State) ->
+    NewState = State#decoder_state{eap_msg = [Value | State#decoder_state.eap_msg]},
+    append_attr({Attr, Value}, NewState);
 decode_attribute(<<EncValue/binary>>, Req, Attr = #attribute{id = ?RMessage_Authenticator, type = Type, enc = Encryption}, Pos, State) ->
     append_attr({Attr, decode_value(decrypt_value(Req, EncValue, Encryption), Type)}, State#decoder_state{hmac_pos = Pos});
 decode_attribute(<<EncValue/binary>>, Req, Attr = #attribute{type = Type, enc = Encryption}, _Pos, State) when is_atom(Type) ->

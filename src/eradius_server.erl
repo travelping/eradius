@@ -287,9 +287,11 @@ nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, NasPort, Sec
 -spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}, eradius_log:log()) -> {discard, term()} | {exit, term()} | {reply, binary()}.
 apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, RadiusLog) ->
     try HandlerMod:radius_request(Request, NasProp, HandlerArg) of
-        {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs}} ->
+        {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs, msg_hmac = MsgHMAC, eap_msg = EAPmsg}} ->
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
-            EncReply = eradius_lib:encode_reply_request(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs}),
+            EncReply = eradius_lib:encode_reply_request(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
+									       msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
+									       eap_msg = EAPmsg}),
             reply_inc_counter(ReplyCmd, NasProp),
             eradius_log:write_request(RadiusLog, Sender, Reply),
             {reply, EncReply};
