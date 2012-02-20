@@ -1,0 +1,6 @@
+-define(EAP_MD5,   4).
+-define(EAP_OTP,   5).
+-define(EAP_GTC,   6).
+-define(EAP_PEAP, 25).
+-define(EAP_MSCHAPv2, 26).
+-define(EAP_TLV,  33).

@@ -91,15 +91,15 @@ chunk(Bin, Length) ->
 
 encode_eap_attribute({<<>>, _}, EncReq) ->
     EncReq;
-encode_eap_attribute({Value, Rest}, {Body, BodySize}) ->
+encode_eap_attribute({Value, Rest}, EncReq) ->
     EncAttr = <<?REAP_Message, (byte_size(Value) + 2):8, Value/binary>>,
-    EncReq = {<<Body/binary, EncAttr/binary>>, BodySize + byte_size(EncAttr)},
-    encode_eap_attribute(chunk(Rest, 253), EncReq).
+    encode_eap_attribute(chunk(Rest, 253), <<EncReq/binary, EncAttr/binary>>).
 
 -spec encode_eap_message(#radius_request{}, {binary(), non_neg_integer()}) -> {binary(), non_neg_integer()}.
-encode_eap_message(#radius_request{eap_msg = EAP}, EncReq)
+encode_eap_message(#radius_request{eap_msg = EAP}, {Body, BodySize})
   when is_binary(EAP); size(EAP) > 0 ->
-    encode_eap_attribute(chunk(EAP, 253), EncReq);
+    EncAttr = encode_eap_attribute(chunk(EAP, 253), <<>>),
+    {<<Body/binary, EncAttr/binary>>, BodySize + byte_size(EncAttr)};
 encode_eap_message(#radius_request{eap_msg = <<>>}, EncReq) ->
     EncReq.
     
@@ -123,9 +123,8 @@ encode_attributes(Req, Attributes) ->
 encode_attribute(_Req, _Attr = #attribute{id = ?RMessage_Authenticator}, _) ->
     %% message authenticator is handled through the msg_hmac flag
     <<>>;
-encode_attribute(_Req, _Attr = #attribute{id = ?REAP_Message}, _) ->
-    %% EAP-Message attributes are handled through the eap_msg field
-    <<>>;
+encode_attribute(_Req, _Attr = #attribute{id = ?REAP_Message}, Value) ->
+    encode_eap_attribute(chunk(Value, 253), <<>>);
 encode_attribute(Req, Attr = #attribute{id = {Vendor, ID}}, Value) ->
     EncValue = encode_attribute(Req, Attr#attribute{id = ID}, Value),
     <<?RVendor_Specific:8, (byte_size(EncValue) + 6):8, Vendor:32, EncValue/binary>>;

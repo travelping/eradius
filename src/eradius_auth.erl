@@ -1,7 +1,7 @@
 %% @doc user authentication helper functions
 -module(eradius_auth).
 -export([check_password/2]).
--export([pap/2, chap/3, ms_chap/3, ms_chap_v2/4]).
+-export([pap/2, chap/3, ms_chap/3, ms_chap_v2/4, eap_ms_chap_v2/6]).
 -export([des_key_from_hash/1, nt_password_hash/1, challenge_response/2, ascii_to_unicode/1]).
 
 -include("eradius_lib.hrl").
@@ -200,6 +200,21 @@ ms_chap_v2_attrs(UserName, PasswdHash, AuthenticatorChallenge, Ident, PeerChalle
      {?MS_MPPE_Encryption_Policy, EncPolicy},
      {?MS_MPPE_Encryption_Types, <<0:29, SFlag:1, LFlag:1, 0:1>>},
      {?MS_CHAP2_Success, <<Ident/binary , AuthResponse/binary>>}].
+
+%% @doc EAP MS-CHAP-V2 authentication
+-spec eap_ms_chap_v2(binary(), binary(), binary(), binary(), binary(), non_neg_integer()) -> false | {binary(), {binary(), binary()}}.
+eap_ms_chap_v2(UserName, Passwd, Challenge, PeerChallenge, NTResponse, _Flag) ->
+    PasswdHash = nt_password_hash(Passwd),
+    ExpectedResponse = v2_generate_nt_response(Challenge, PeerChallenge, UserName, PasswdHash),
+
+    if
+        ExpectedResponse == NTResponse ->
+	    Keys = mppe_generate_session_keys(PasswdHash, NTResponse, 128),
+	    AuthResponse = v2_generate_authenticator_response(PasswdHash, NTResponse, PeerChallenge, Challenge, UserName),
+	    {AuthResponse, Keys};
+        true ->
+            false
+    end.
 
 %% ------------------------------------------------------------------------------------------
 %% -- MS-CHAP-V2 MPPE key functions

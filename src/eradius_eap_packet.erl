@@ -2,60 +2,27 @@
 %%  This module implements the EAP RFC-3748 message encoder and decoder functions
 -module(eradius_eap_packet).
 
--export([start/0, lookup_type/1, register_type/2, unregister_type/1]).
--export([decode/1, encode/3, decode_eap_type/2, encode_eap_type/1]).
+-export([decode/1, encode/3, decode_eap_type/2, encode_eap_type/1, decode_hexstr/1]).
 
-%% -- gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
-
--behaviour(gen_server).
-
--define(NAME, ?MODULE).
-
-%% ------------------------------------------------------------------------------------------
-%% -- API
-start() ->
-    gen_server:start({local, ?NAME}, ?MODULE, []).
-
-%% @doc lookup the handler module for an extended EAP type
-lookup_type(Type) ->
-    ets:lookup(?NAME, Type).
-
-%% @doc register the handler module for an extended EAP type
-register_type(Type, Module) ->
-    gen_server:call(?NAME, {register, Type, Module}).
-
-%% @doc unregister the handler module for an extended EAP type
-unregister_type(Type) ->
-    gen_server:call(?NAME, {unregister, Type}).
-
-%% ------------------------------------------------------------------------------------------
-%% -- gen_server callbacks
-%% @private
-init([]) ->
-    Table = ets:new(?NAME, [ordered_set, protected, named_table, {read_concurrency, true}]),
-    {ok, Table}.
-
-%% @private
-handle_call({register, Type, Module}, _From, Table) ->
-    ets:insert(Table, {Type, Module}),
-    {reply, ok, Table};
-
-handle_call({unregister, Type}, _From, Table) ->
-    ets:delete(Type, Table),
-    {reply, ok, Table}.
-
-%% @private
-handle_cast(_Request, State) -> {noreply, State}.
-%% @private
-handle_info(_Info, State) -> {noreply, State}.
-%% @private
-terminate(_Reason, _State) -> ok.
-%% @private
-code_change(_OldVsn, State, _Extra) -> {ok, State}.
+-include("eradius_eap.hrl").
 
 %% ------------------------------------------------------------------------------------------
 %% -- decoder functions
+
+int(C) when $0 =< C, C =< $9 ->
+    C - $0;
+int(C) when $A =< C, C =< $F ->
+    C - $A + 10;
+int(C) when $a =< C, C =< $f ->
+    C - $a + 10.
+
+hexstr_to_list([X,Y|T]) ->
+    [int(X)*16 + int(Y) | hexstr_to_list(T)];
+hexstr_to_list([]) ->
+    [].
+
+decode_hexstr(HexStr) ->
+    decode(list_to_binary(hexstr_to_list(HexStr))).
 
 %% @doc decode a EPA message
 decode(<<Code:8, Id:8, Len:16, Rest/binary>>) ->
@@ -71,7 +38,7 @@ decode(<<Code:8, Id:8, Len:16, Rest/binary>>) ->
 encode(Code, Id, Msg) ->
     Data = encode_payload(Code, Msg),
     Len = size(Data) + 4,
-    <<Code:8, Id:8, Len:16, Data/binary>>.
+    <<(code(Code)):8, Id:8, Len:16, Data/binary>>.
 
 do_decode_payload(Code, Id, Data) ->
     try
@@ -130,10 +97,9 @@ decode_eap_type({0, 3}, Data) ->
     {nak_ext, [{Vendor,Type} || <<_T:8, Vendor:24, Type:32>> <= Data]};
 
 decode_eap_type(Type, Data) ->
-	case lookup_type(Type) of
-	    [Module] ->
-		Module:decode_eap_type(Type, Data);
-	    _ -> {Type, Data}
+	case eradius_eap:lookup_type(Type) of
+	    undefined -> {Type, Data};
+	    Module    -> Module:decode_eap_type(Type, Data)
 	end.
 
 encode_payload(Code, Msg)
@@ -191,9 +157,15 @@ encode_eap_type({nak_ext, Data})
     encode_eap_type({{0, 3}, << <<254:8, Vendor:24, Type:32>> || {Vendor, Type} <- Data >>});
 
 encode_eap_type(Msg)
+  when is_binary(Msg) ->
+    Msg;
+
+encode_eap_type(Msg)
   when is_tuple(Msg) ->
-    [Module] = lookup_type(element(1, Msg)),
-    Module:encode_eap_type(Msg).
+    case eradius_eap:lookup_type(element(1, Msg)) of
+	undefined -> <<>>;
+	Module    -> Module:encode_eap_type(Msg)
+    end.
 
 code(1) -> request;
 code(2) -> response;

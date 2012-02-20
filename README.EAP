@@ -1,0 +1,50 @@
+eradius EAP support
+-------------------
+
+Support for en-/decoding EAP attributes is stable, all the
+rest is in 'prove-of-concept' stage.
+
+Current state
+-------------
+
+* all credentials are hard coded to as/as
+* EAP MD5 is implemented partially, but not tested.
+* EAP MS-CHAP-v2 is implemented, but only tested as inner
+  protocol for EAP PEAP.
+
+PEAP/TLS/TTLS
+-------------
+
+TLS over RADIUS requires a modified SSL library. The goal
+is to push the required changes upstream once the design
+if finished.
+
+TLS uses two proxy processes, the transport proxy (eradius_ssl_proxy)
+which replaces the normal socket interface. It decoded EAP frames,
+passes them to the SSL library and get the return data. And the
+inner tunnel handler (eradius_ssl_tunnel) which handles the
+encapsulated EAP traffic.
+
+The two process design is required to avoid deadlocks between inner
+and outer send calls (ssl:send/2 is blocking!).
+
+TODO: It might be possible to relax that and use just one process.
+Also, driving ssl_connection without it's own gen_fsm might simplify
+the call interaction and avoid the blocking
+
+eradius_ssl_tunnel currently not only handles the payload, but
+also parts of the logical EAP implementation (PEAPv1 only for the
+moment). This needs to be changed for TLS and TTLS support.
+Also PEAPv0 and PEAPv2 are not handled.
+
+PEAPv0 might work, PEAPv1 needs configurable per NAS handling for
+the PRF label and PEAPv2 needs crypto binding TLV support.
+
+required SSL/TLS library changes
+--------------------------------
+
+The TLS library assumes the transport socket is a real inet socket.
+For EAP the socket is actually a process.
+
+EAP TLS must use the TLS session PRF to calculate some key material,
+the PRF needs to be exported through ssl_connection.
