@@ -41,7 +41,7 @@ chat_run(ReqId, Args, State) ->
 %% ----------------------------------------------------------------------------------------
 
 init_state() ->
-    {ok, Tunnel} = eradius_ssl_proxy:start(),
+    {ok, Tunnel} = eradius_tls_tunnel:start(),
     #state{pending = <<>>, recv_q = [], tunnel = Tunnel, verdict = challenge}.
 
 handle_msg(ReqId, <<>>, State = #state{tunnel = Tunnel}) ->
@@ -49,8 +49,8 @@ handle_msg(ReqId, <<>>, State = #state{tunnel = Tunnel}) ->
 	done ->
 	    %% there is not more data to send and we got an empty response from the peer
 	    %% so it's our turn to generate something to send.....
-	    eradius_ssl_proxy:activate(Tunnel, ReqId),
-	    {Verdict, Msg, ReplyAttrs} = eradius_ssl_proxy:transport_recv(Tunnel),
+	    eradius_tls_tunnel:activate(Tunnel, ReqId),
+	    {Verdict, Msg, ReplyAttrs} = eradius_tls_tunnel:transport_recv(Tunnel),
 	    send_msg(ReqId, Msg, ReplyAttrs, State#state{verdict = Verdict});
 
 	Repl ->
@@ -58,9 +58,9 @@ handle_msg(ReqId, <<>>, State = #state{tunnel = Tunnel}) ->
     end;
 
 handle_msg(ReqId, Data, State = #state{tunnel = Tunnel}) ->
-    eradius_ssl_proxy:transport_send(Tunnel, Data),
+    eradius_tls_tunnel:transport_send(Tunnel, ReqId, Data),
     case send_more(ReqId, State) of
-	done -> {Verdict, Msg, ReplyAttrs} = eradius_ssl_proxy:transport_recv(Tunnel),
+	done -> {Verdict, Msg, ReplyAttrs} = eradius_tls_tunnel:transport_recv(Tunnel),
 		send_msg(ReqId, Msg, ReplyAttrs, State#state{verdict = Verdict});
 	Repl -> Repl
     end.

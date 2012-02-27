@@ -24,5 +24,6 @@ init([]) ->
     NodeMon      = {node_mon, {eradius_node_mon, start_link, []}, permanent, brutal_kill, worker, [eradius_node_mon]},
     ServerTopSup = {server_top_sup, {eradius_server_top_sup, start_link, []}, permanent, infinity, supervisor, [eradius_server_top_sup]},
     Client       = {client, {eradius_client, start_link, []}, permanent, 500, worker, [eradius_client]}, 
+    SslConnSup   = {eradius_ssl_connection_sup, {eradius_ssl_connection_sup, start_link, []}, permanent, 4000, supervisor, [eradius_ssl_connection]},
 
-    {ok, {SupFlags, [DictServer, NodeMon, StatsServer, ServerTopSup, Client]}}.
+    {ok, {SupFlags, [DictServer, NodeMon, StatsServer, ServerTopSup, SslConnSup, Client]}}.

@@ -24,15 +24,16 @@
 
 -module(eradius_ssl_stream).
 
--export([start/0, start/1, stop/0, transport_create/3,
+-export([start/0, start/1, stop/0, transport_create/2,
 	 ssl_accept/1, ssl_accept/2,
 	 cipher_suites/0, cipher_suites/1, close/1, shutdown/2,
 	 connection_info/1,
 	 controlling_process/2, listen/2, peercert/1,
-	 recv/2, recv/3, send/2,
+	 recv/2, recv/3, send/3,
 	 versions/0, session_info/1, format_error/1,
 	 renegotiate/1,
-	 transport_recv/2, security_parameters/1]).
+	 transport_recv/2, transport_send/1, finish/3,
+	 security_parameters/1]).
 
 -include_lib("ssl/src/ssl_internal.hrl").
 -include_lib("ssl/src/ssl_record.hrl").
@@ -150,16 +151,16 @@ listen(Port, Options0) ->
 %% 	    {error, Reason}
 %%     end.
 
--spec transport_create(pid(), term(), list()) -> {ok, #sslsocket{}} |
-						 {error, reason()}.
-transport_create(HandlerState, CbInfo, SslOpts) ->
-    
+-spec transport_create(pid(), list()) -> {ok, #sslsocket{}} |
+					 {error, reason()}.
+transport_create(HandlerState, SslOpts) ->
+    CbInfo = {eradius_ssl_connection, tcp, tcp_closed, tcp_error},
     try
         {ok, Config} = handle_options(SslOpts, server),
 	{CbModule,_,_, _} = CbInfo,    
 	ConnArgs = [server, "localhost", 0, HandlerState,
 		    {Config, internal_inet_values()}, self(), CbInfo],
-	case ssl_connection_sup:start_child(ConnArgs) of
+	case eradius_ssl_connection_sup:start_child(ConnArgs) of
 	    {ok, Pid} ->
 		ssl_connection:socket_control(HandlerState, Pid, CbModule);
 	    {error, Reason} ->
@@ -212,12 +213,12 @@ close(#sslsocket{pid = Pid}) ->
     ssl_connection:close(Pid).
 
 %%--------------------------------------------------------------------
--spec send(#sslsocket{}, iodata()) -> ok | {error, reason()}.
+-spec send(#sslsocket{}, term(), iodata()) -> ok | {error, reason()}.
 %% 
 %% Description: Sends data over the ssl connection
 %%--------------------------------------------------------------------
-send(#sslsocket{pid = Pid}, Data) ->
-    ssl_connection:send(Pid, Data).
+send(#sslsocket{pid = Pid}, Verdict, Data) ->
+    eradius_ssl_connection:send(Pid, Verdict, Data).
 
 %%--------------------------------------------------------------------
 -spec recv(#sslsocket{}, integer()) -> {ok, binary()| list()} | {error, reason()}.
@@ -245,6 +246,17 @@ security_parameters(#sslsocket{pid = Pid, fd = new_ssl}) ->
 %%--------------------------------------------------------------------
 transport_recv(#sslsocket{pid = Pid}, Data) ->
     Pid ! {tcp, transport, Data}.
+
+%%--------------------------------------------------------------------
+-spec transport_send(#sslsocket{}) -> ok | {error, reason()}.
+%% 
+%% Description: Retrieve transport session data to the ssl connection
+%%--------------------------------------------------------------------
+transport_send(#sslsocket{pid = Pid}) ->
+    eradius_ssl_connection:transport_recv(Pid).
+
+finish(#sslsocket{pid = Pid}, Verdict, ReplyAttrs) ->
+    eradius_ssl_connection:finish(Pid, Verdict, ReplyAttrs).
 
 %%--------------------------------------------------------------------
 -spec controlling_process(#sslsocket{}, pid()) -> ok | {error, reason()}.
@@ -324,7 +336,7 @@ renegotiate(#sslsocket{pid = Pid, fd = new_ssl}) ->
 %%
 %% Description: Creates error string.
 %%--------------------------------------------------------------------
-format_error(Error) -> ssl:format_error().
+format_error(Error) -> ssl:format_error(Error).
 
 %%%--------------------------------------------------------------
 %%% Internal functions

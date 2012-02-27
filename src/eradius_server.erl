@@ -178,7 +178,7 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
     Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
     case run_handler(Nodes, NasProp, Handler, EncRequest) of
         {reply, EncReply} ->
-            dbg(NasProp, "sending response for ~p~n", [ReqKey]),
+            dbg(NasProp, "sending response for ~p (~w)~n", [ReqKey, size(EncReply)]),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             ServerPid ! {replied, ReqKey, self()},
             eradius_counter:inc_counter(replies, NasProp),

@@ -1,8 +1,12 @@
--module(eradius_ssl_tunnel).
+-module(eradius_tls_tunnel).
 -behavior(gen_fsm).
 
--export([start/2, accept/1, activate/2]).
--export([init/1, handle_info/3, handshake/2, running/2, tlv_acked/2]).
+-export([start/0, activate/2]).
+-export([init/1, handle_info/3, handle_event/3, handle_sync_event/4, code_change/4, terminate/3]).
+-export([handshake/2, running/2, tlv_acked/2]).
+
+%% transport helper
+-export([transport_recv/1, transport_send/3]).
 
 -include("eradius_lib.hrl").
 -include("eradius_eap.hrl").
@@ -11,25 +15,44 @@
 -include("dictionary_microsoft.hrl").
 -include_lib("ssl/src/ssl_record.hrl").
 
--record(state, {proxy, socket, inner_state, eap_state}).
+-record(state, {socket, reqid, inner_state, eap_state}).
 
 -define(EAP_TLV_SUCCESS, 1).
 -define(EAP_TLV_ACK_RESULT, 3).
 
-start(Proxy, Socket) ->
-    gen_fsm:start(?MODULE, {Proxy, Socket}, []).
+start() ->
+    {ok, Socket} = eradius_ssl_stream:transport_create(self(),
+						       [{ssl_imp, new},
+							{active, false},
+							{verify, 0},
+							{mode,binary},
+							{reuseaddr, true},
+							{ciphers, [{rsa,rc4_128,sha}, {rsa,rc4_128,md5}]},
+							{cacertfile, "certs/etc/server/cacerts.pem"},
+							{certfile, "certs/etc/server/cert.pem"},
+							{keyfile, "certs/etc/server/key.pem"}
+						       ]),
+    {ok, Tunnel} = gen_fsm:start(?MODULE, {Socket}, []),
+    eradius_ssl_stream:controlling_process(Socket, Tunnel),
+    gen_fsm:send_event(Tunnel, accept),
+    {ok, {Socket, Tunnel}}.
 
-accept(Tunnel) ->
-    gen_fsm:send_event(Tunnel, accept).
-
-activate(Tunnel, ReqId) ->
+activate({_Socket, Tunnel}, ReqId) ->
     gen_fsm:send_event(Tunnel, {activate, ReqId}).
+
+%% transport helper
+transport_recv({Socket, _Tunnel}) ->
+    eradius_ssl_stream:transport_send(Socket).
+
+transport_send({Socket, Tunnel}, ReqId, Data) ->
+    gen_fsm:send_all_state_event(Tunnel, {reqid, ReqId}),
+    eradius_ssl_stream:transport_recv(Socket, Data).
 
 %% ------------------------------------------------------------------------------------------
 %% -- gen_fsm Callbacks
 %% @private
-init({Proxy, Socket}) ->
-    {ok, handshake, #state{proxy = Proxy, socket = Socket, inner_state = challenge}}.
+init({Socket}) ->
+    {ok, handshake, #state{socket = Socket, inner_state = challenge}}.
 
 handshake(accept, State = #state{socket = Socket}) ->
     Reply = eradius_ssl_stream:ssl_accept(Socket),
@@ -44,32 +67,30 @@ running({activate, _ReqId}, State) ->
     NewState = State#state{eap_state = eradius_eap:new([?EAP_MSCHAPv2])},
     send_request({identity, <<>>}, running, NewState);
 
-running(Data, State = #state{proxy = Proxy, socket = Socket, inner_state = challenge, eap_state = StateEAP})
+running(Data, State = #state{socket = Socket, inner_state = challenge, eap_state = StateEAP})
   when is_binary(Data) ->
 %%    {ok, EAP} = eradius_eap_packet:decode(Data),
     case eradius_eap:run(Data, StateEAP) of
 	{ReplyType, ReplyAttrs, NewStateEAP} ->
 	    Reply = proplists:get_value(?REAP_Message, ReplyAttrs, <<>>),
 	    io:format("Tunneled response: ~p~n", [ReplyAttrs]),
-	    eradius_ssl_proxy:verdict(Proxy, challenge),
-	    eradius_ssl_stream:send(Socket, Reply),
+	    eradius_ssl_stream:send(Socket, challenge, Reply),
 	    {next_state, running, State#state{inner_state = ReplyType, eap_state = NewStateEAP}};
 	R ->
 	    io:format("unexpected return from RUN: ~w~n", [R]),
 	    {next_state, running, State}
     end;
 
-running(Data, State = #state{proxy = Proxy, socket = Socket})
+running(Data, State = #state{socket = Socket})
   when is_binary(Data) ->
     {ok, EAP} = eradius_eap_packet:decode(Data),
     {_, ReqId, _} = EAP,
     io:format("inner state finished: ~w, got: ~w~n", [State#state.inner_state, EAP]),
     Reply = eradius_eap_packet:encode(request, ReqId + 1, <<?EAP_TLV:8, 16#80:8, ?EAP_TLV_ACK_RESULT, 2:16/integer, 0, ?EAP_TLV_SUCCESS>>),
-    eradius_ssl_proxy:verdict(Proxy, challenge),
-    eradius_ssl_stream:send(Socket, Reply),
+    eradius_ssl_stream:send(Socket, challenge, Reply),
     {next_state, tlv_acked, State}.
 
-tlv_acked(Data, State = #state{proxy = Proxy, socket = Socket, eap_state = _StateEAP})
+tlv_acked(Data, State = #state{socket = Socket, eap_state = _StateEAP})
   when is_binary(Data) ->
     {ok, EAP} = eradius_eap_packet:decode(Data),
     io:format("TLV ACK send: ~w, got: ~w~n", [State#state.inner_state, EAP]),
@@ -79,14 +100,14 @@ tlv_acked(Data, State = #state{proxy = Proxy, socket = Socket, eap_state = _Stat
     {RecvKey, SendKey} = mppe_keys(PrfLabel, Socket),
     ReplyAttrs = [{?MS_MPPE_Send_Key, SendKey},
 		  {?MS_MPPE_Recv_Key, RecvKey}],
-    eradius_ssl_proxy:finish(Proxy, State#state.inner_state, ReplyAttrs),
+    eradius_ssl_stream:finish(Socket, State#state.inner_state, ReplyAttrs),
 
     %% we need to tell the outer session that we are done
     %%  - send Success, Failure on outer session
     %%  - add RADIUS crypto attributes....
     %% but we also need to keep TLS session information....
 
-    %% eradius_ssl_proxy:verdict might be redundant, we always do an explicit EAP TLV ack, then discard the TLS session, (keep the session state though)
+    %% Verdict handling might be redundant, we always do an explicit EAP TLV ack, then discard the TLS session, (keep the session state though)
     %% and return Success/Failure on the externl EAP session.....
 
     {next_state, tlv_acked, State}.
@@ -99,13 +120,25 @@ handle_info(Info, StateName, State) ->
     io:format("got Info ~w in ~w~n", [Info, StateName]),
     {next_state, StateName, State}.
 
+handle_event({reqid, ReqId}, StateName, State) ->
+    {next_state, StateName, State#state{reqid = ReqId}}.
+
+handle_sync_event(Event, From, _StateName, State) ->
+    {stop, {invalid_sync_event, Event, From}, State}.
+
+terminate(_Reason, _StateName, #state{socket = Socket}) ->
+    (catch eradius_ssl_stream:close(Socket)),
+    ok.
+
+code_change(_OldVsn, _StateName, State, _Extra) ->
+    State.
+
 %% ------------------------------------------------------------------------------------------
 
-send_request(Msg, NextStateName, NextState = #state{proxy = Proxy, socket = Socket}) ->
-    ReqId = eradius_ssl_proxy:reqid(Proxy),
+send_request(Msg, NextStateName, NextState = #state{socket = Socket, reqid = ReqId}) ->
     EAP = eradius_eap_packet:encode(request, ReqId + 1, Msg),
     io:format("inner PayLoad: ~w~n", [EAP]),
-    eradius_ssl_stream:send(Socket, EAP),
+    eradius_ssl_stream:send(Socket, challenge, EAP),
     {next_state, NextStateName, NextState}.
 
 %%
