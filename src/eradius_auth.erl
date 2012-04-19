@@ -65,6 +65,8 @@ pap(<<C, PasswdRest/binary>>, <<C, ReqRest/binary>>) ->
     pap(PasswdRest, ReqRest);
 pap(<<_C, _/binary>>, <<_OtherChar, _/binary>>) ->
     false;
+pap(<<_C, _/binary>>, <<>>) ->
+    false;
 pap(<<>>, <<ReqRest/binary>>) ->
     only_null(ReqRest).
 
