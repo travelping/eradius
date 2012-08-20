@@ -16,7 +16,7 @@
 
 -define(SERVER, ?MODULE).
 -define(NAS_TAB, eradius_nas_tab).
-
+-export_type([server/0]).
 -type server()  :: {inet:ip_address(), eradius_server:port_number()}.
 -type handler() :: {module(), term()}.
 
@@ -116,7 +116,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 configure(#state{running = Running}) ->
     {ok, ConfServList} = application:get_env(servers),
-    case validate_config(ConfServList) of
+    case eradius_config:validate_config(ConfServList) of
         {invalid, Message} ->
             eradius:error_report("invalid server config: ~s", [Message]),
             {error, invalid_config};
@@ -155,162 +155,15 @@ configure(#state{running = Running}) ->
             {ok, #state{running = NRunning}}
     end.
 
--spec server_naslist(valid_server()) -> list(#nas{}).
+%-spec server_naslist(valid_server()) -> list(#nas{}).
 server_naslist({{IP, Port}, HandlerList}) ->
     [#nas{key = {{IP, Port}, NasIP},
           handler = {HandlerMod, HandlerArgs},
           prop = #nas_prop{handler_nodes = HandlerNodes, nas_ip = NasIP, secret = Secret, trace = false}}
       || {NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs} <- HandlerList].
 
--spec config_nodes(valid_config()) -> list(node()).
+%-spec config_nodes(valid_config()) -> list(node()).
 config_nodes(Config) ->
     ordsets:from_list(lists:concat([N || {_Server, HandlerList} <- Config,
                                          {_, _, N, _, _} <- HandlerList,
                                          N /= local, N /= node()])).
-
-%% ------------------------------------------------------------------------------------------
-%% -- config validation
--define(pos_int(X), is_integer(X), X >= 0).
--define(ip4_address_num(X), ?pos_int(X), X < 256).
--define(ip4_address(T), ?ip4_address_num(element(1, T)), ?ip4_address_num(element(2, T)),
-                        ?ip4_address_num(element(3, T)), ?ip4_address_num(element(4, T))).
-
--type valid_nas()    :: {inet:ip_address(), binary(), list(atom()), module(), term()}.
--type valid_server() :: {server(), list(valid_nas())}.
--type valid_config() :: list(valid_server()).
-
--spec validate_config(list(term())) -> valid_config() | {invalid, io_lib:chars()}.
-validate_config(Config) ->
-    validate_server_config(dedup_keys(Config)).
-
--spec validate_server_config(list(term())) -> valid_config() | {invalid, io_lib:chars()}.
-validate_server_config([]) ->
-    [];
-validate_server_config([{Server, NasList} | ConfigRest]) ->
-    case validate_server(Server) of
-        E = {invalid, _} ->
-            E;
-        ValidServer ->
-            case validate_nas_list(NasList) of
-                E = {invalid, _} ->
-                    E;
-                ValidNasList ->
-                    case validate_server_config(ConfigRest) of
-                        E = {invalid, _} ->
-                            E;
-                        ValidConfigRest ->
-                            [{ValidServer, ValidNasList} | ValidConfigRest]
-                    end
-            end
-    end;
-validate_server_config([InvalidTerm | _ConfigRest]) ->
-    {invalid, io_lib:format("bad term in server list: ~p", [InvalidTerm])}.
-
-validate_server({IP, Port}) when is_list(Port) ->
-    case (catch list_to_integer(Port)) of
-        {'EXIT', _} ->
-            {invalid, io_lib:format("bad port number: ~p", [Port])};
-        Num when ?pos_int(Num) ->
-            validate_server({IP, Num});
-        Num ->
-            {invalid, io_lib:format("port number out of range: ~p", [Num])}
-    end;
-validate_server({IP, Port}) when is_list(IP), ?pos_int(Port) ->
-    case inet_parse:ipv4_address(IP) of
-        {ok, Address} ->
-            {Address, Port};
-        {error, einval} ->
-            {invalid, io_lib:format("bad IP address: ~p", [IP])}
-    end;
-validate_server({IP, Port}) when ?ip4_address(IP), ?pos_int(Port) ->
-    {IP, Port};
-validate_server(String) when is_list(String) ->
-    %% TODO: IPv6 address support
-    case string:tokens(String, ":") of
-        [IP, Port] ->
-            validate_server({IP, Port});
-        _ ->
-            {invalid, io_lib:format("bad address/port combination: ~p", [String])}
-    end;
-validate_server(X) ->
-    {invalid, io_lib:format("bad address/port combination: ~p", [X])}.
-
-validate_nas_list([]) ->
-    [];
-validate_nas_list([{NasAddress, Secret, HandlerNodes, Module, Args} | NasListRest]) when is_list(NasAddress) ->
-    case inet_parse:ipv4_address(NasAddress) of
-        {ok, ValidAddress} ->
-            validate_nas_list([{ValidAddress, Secret, HandlerNodes, Module, Args} | NasListRest]);
-        {error, einval} ->
-            {invalid, io_lib:format("bad IP address in NAS specification: ~p", [NasAddress])}
-    end;
-validate_nas_list([{NasAddress, Secret, HandlerNodes, Module, Args} | NasListRest]) when ?ip4_address(NasAddress) ->
-    case validate_secret(Secret) of
-        E = {invalid, _} ->
-            E;
-        ValidSecret ->
-            case validate_handler_nodes(HandlerNodes) of
-                E = {invalid, _} ->
-                    E;
-                ValidHandlerNodes ->
-                    case Module of
-                        _ when is_atom(Module) ->
-                            case validate_nas_list(NasListRest) of
-                                E = {invalid, _} ->
-                                    E;
-                                ValidNasListRest ->
-                                    [{NasAddress, ValidSecret, ValidHandlerNodes, Module, Args} | ValidNasListRest]
-                            end;
-                        _Else ->
-                            {invalid, io_lib:format("bad module in NAS specifification: ~p", [Module])}
-                    end
-            end
-    end;
-validate_nas_list([{InvalidAddress, _, _, _, _} | _NasListRest]) ->
-    {invalid, io_lib:format("bad IP address in NAS specification: ~p", [InvalidAddress])};
-validate_nas_list([OtherTerm | _NasListRest]) ->
-    {invalid, io_lib:format("bad term in NAS specification: ~p", [OtherTerm])}.
-
-validate_secret(Secret) when is_list(Secret) ->
-    unicode:characters_to_binary(Secret);
-validate_secret(Secret) when is_binary(Secret) ->
-    Secret;
-validate_secret(OtherTerm) ->
-    {invalid, io_lib:format("bad RADIUS secret: ~p", [OtherTerm])}.
-
-validate_handler_nodes(local) ->
-    local;
-validate_handler_nodes("local") ->
-    local;
-validate_handler_nodes([]) ->
-    {invalid, "empty node list"};
-validate_handler_nodes(NodeL) when is_list(NodeL) ->
-    validate_node_list(NodeL);
-validate_handler_nodes(OtherTerm) ->
-    {invalid, io_lib:format("bad node list: ~p", [OtherTerm])}.
-
-validate_node_list([]) ->
-    [];
-validate_node_list([Node | Rest]) when is_atom(Node) ->
-    case validate_node_list(Rest) of
-        E = {invalid, _} ->
-            E;
-        ValidRest ->
-            [Node | ValidRest]
-    end;
-validate_node_list([OtherTerm | _]) ->
-    {invalid, io_lib:format("bad term in node list: ~p", [OtherTerm])}.
-
-dedup_keys(Proplist) ->
-    dedup_keys1(lists:keysort(1, Proplist)).
-
-dedup_keys1(Proplist) ->
-    lists:foldr(fun ({K, V1}, [{K, V2} | R]) ->
-                        [{K, plmerge(V1, V2)} | R];
-                    ({K, V}, R) ->
-                        [{K, V} | R]
-                end, [], Proplist).
-
-plmerge(List1, List2) ->
-    M1 = [{K, V} || {K, V} <- List1, not proplists:is_defined(K, List2)],
-    lists:keysort(1, M1 ++ List2).
