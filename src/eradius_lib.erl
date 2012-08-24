@@ -1,6 +1,6 @@
 -module(eradius_lib).
 -export([get_attr/2, encode_request/1, encode_reply_request/1, decode_request/2, decode_request_id/1]).
--export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, set_attributes/2]).
+-export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, get_attributes/1, set_attributes/2]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
 % -compile(bin_opt_info).
@@ -28,6 +28,10 @@ zero_authenticator() -> <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>.
 -spec set_attributes(#radius_request{}, attribute_list()) -> #radius_request{}.
 set_attributes(Req = #radius_request{attrs = Attrs}, NewAttrs) ->
     Req#radius_request{attrs = NewAttrs ++ Attrs}.
+
+-spec get_attributes(#radius_request{}) -> attribute_list().
+get_attributes(#radius_request{attrs = Attrs}) ->
+    Attrs.
 
 -spec set_attr(#radius_request{}, eradius_dict:attribute_id(), eradius_dict:attr_value()) -> #radius_request{}.
 set_attr(Req = #radius_request{attrs = Attrs}, Id, Val) ->
@@ -102,7 +106,7 @@ encode_eap_message(#radius_request{eap_msg = EAP}, EncReq)
     encode_eap_attribute(chunk(EAP, 253), EncReq);
 encode_eap_message(#radius_request{eap_msg = <<>>}, EncReq) ->
     EncReq.
-    
+
 -spec encode_attributes(#radius_request{}, attribute_list()) -> {binary(), non_neg_integer()}.
 encode_attributes(Req, Attributes) ->
     F = fun ({A = #attribute{}, Val}, {Body, BodySize}) ->

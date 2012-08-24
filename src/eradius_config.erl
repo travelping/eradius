@@ -1,5 +1,9 @@
 -module(eradius_config).
+% Eradius API's:
 -export([validate_new_config/0, validate_new_config/2, validate_config/1]).
+% Config validating API functions:
+-export([get_app_env/2, validate_ip/1, validate_port/1, validate_ports/1,
+         map_helper/3, map_helper/2, ok_error_helper/2, validate_secret/1]).
 
 %% ------------------------------------------------------------------------------------------
 %% -- config validation
