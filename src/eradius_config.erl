@@ -122,7 +122,8 @@ build_nas_behavior_list({Module, Nas, Args}, ListOfNases) ->
 build_nasname(Nas, {A, B, C, D}) ->
     build_nasname(Nas, <<"_", (tob(A))/binary, ".", (tob(B))/binary, ".",(tob(C))/binary, ".",(tob(D))/binary>>);
 build_nasname(Nas, IP) ->
-    <<Nas/binary, IP/binary>>.
+    NasBinary = tob(Nas),
+    <<NasBinary/binary, IP/binary>>.
 
 tob(Integer) when is_integer(Integer) -> tob(integer_to_list(Integer));
 tob(List) when is_list(List) -> list_to_binary(List);
