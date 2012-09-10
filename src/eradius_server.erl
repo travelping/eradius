@@ -300,10 +300,16 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, RadiusLog) ->
         noreply ->
             {discard, handler_returned_noreply};
         OtherReturn ->
+            error_logger:error_report([radius_handler, {type, bad_return},
+                                                       {return, OtherReturn}]),
             {discard, {bad_return, OtherReturn}}
     catch
-        Reason ->
-            {exit, Reason}
+        Class:Reason ->
+            error_logger:error_report([radius_handler, {type, 'CRASH'},
+                                                       {class, Class},
+                                                       {reason, Reason},
+                                                       {stacktrace, erlang:get_stacktrace()}]),
+            {exit, {Class, Reason}}
     end.
 
 -spec dbg(#nas_prop{}, string(), list()) -> ok.
