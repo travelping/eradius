@@ -31,10 +31,15 @@ handle_cast(_Msg, State) ->
 
 handle_info({SenderPid, send_request, {IP, Port}, ReqId, EncRequest},
         State = #state{socket = Socket, pending = Pending, counter = Counter}) ->
-    gen_udp:send(Socket, IP, Port, EncRequest),
-    ReqKey = {IP, Port, ReqId},
-    NPending = dict:store(ReqKey, SenderPid, Pending),
-    {noreply, State#state{pending = NPending, counter = Counter+1}};
+    case gen_udp:send(Socket, IP, Port, EncRequest) of
+        ok ->
+            ReqKey = {IP, Port, ReqId},
+            NPending = dict:store(ReqKey, SenderPid, Pending),
+            {noreply, State#state{pending = NPending, counter = Counter+1}};
+        {error, Reason} ->
+            SenderPid ! {error, Reason},
+            {noreply, State}
+    end;
 
 handle_info({udp, Socket, FromIP, FromPort, EncRequest},
         State = #state{socket = Socket, pending = Pending, mode = Mode, counter = Counter}) ->

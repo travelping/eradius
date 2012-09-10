@@ -102,7 +102,9 @@ send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
         {Socket, response, ReqId, Response} ->
             {ok, Response};
         {'DOWN', SMon, process, Socket, _} ->
-            {error, socket_down}
+            {error, socket_down};
+        {Socket, error, Error} ->
+            {error, Error}
     after
         Timeout ->
             send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN - 1)
