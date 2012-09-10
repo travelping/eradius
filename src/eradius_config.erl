@@ -53,6 +53,10 @@ validate_behavior_nases(_, {invalid, _} = Invalid) -> Invalid;
 validate_behavior_nases(Behavior, Nases) ->
     build_nas_behavior_list(Behavior, Nases).
 
+validate_behavior({Nas, Args}) ->
+    validate_behavior({get_app_env(radius_callback), Nas, Args});
+validate_behavior({{invalid, _} = Invalid, _Nas, _Args}) ->
+    Invalid;
 validate_behavior({Module, Nas, _Args} = Value) when is_atom(Module) andalso ?is_io(Nas) ->
     Value;
 validate_behavior({Module, _, _}) when is_atom(Module) ->
