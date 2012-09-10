@@ -131,7 +131,18 @@ tob(Binary) -> Binary.
 
 -spec validate_config(list(term())) -> valid_config() | {invalid, io_lib:chars()}.
 validate_config(Config) ->
-    validate_server_config(dedup_keys(Config)).
+    case Config of
+        [Server | _] ->
+            case Server of
+                {List, SecondList} when is_list(List) and is_list(SecondList) ->
+                    validate_server_config(dedup_keys(Config));
+                %% Check format of new command
+                {_Name, ServerConf} when is_tuple(ServerConf) ->
+                    validate_new_config()
+            end;
+        [] ->
+            validate_server_config(dedup_keys(Config))
+    end.
 
 -spec validate_server_config(list(term())) -> valid_config() | {invalid, io_lib:chars()}.
 validate_server_config([]) ->
