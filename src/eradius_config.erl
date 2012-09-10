@@ -116,7 +116,7 @@ check_root(Nodes) ->
 
 build_nas_behavior_list({Module, Nas, Args}, ListOfNases) ->
     lists:map(fun({IP, Secret, Nodes}) ->
-                      {IP, Secret, Nodes, Module, build_nasname(Nas, IP), Args}
+                      {IP, Secret, Nodes, Module, {Args, build_nasname(Nas, IP)}}
               end, ListOfNases).
 
 build_nasname(Nas, {A, B, C, D}) ->
