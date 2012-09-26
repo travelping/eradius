@@ -45,10 +45,10 @@ set_attr(Req = #radius_request{attrs = Attrs}, Id, Val) ->
 get_attr(#radius_request{attrs = Attrs}, Id) ->
     get_attr_loop(Id, Attrs).
 
-del_attr(#radius_request{attrs = Attrs}, Id) ->
-    lists:reverse(lists:foldl(fun(Attr, Acc) when ?IS_ATTR(Id, Attr) -> Acc;
-                                 (Attr, Acc) -> [Attr | Acc]
-                              end, [], Attrs)).
+del_attr(Req = #radius_request{attrs = Attrs}, Id) ->
+    Req#radius_request{attrs = lists:reverse(lists:foldl(fun(Attr, Acc) when ?IS_ATTR(Id, Attr) -> Acc;
+                                                            (Attr, Acc) -> [Attr | Acc]
+                                                         end, [], Attrs))}.
 
 get_attr_loop(Key, [{Id, Val}|_T]) when ?IS_KEY(Key, Id) -> Val;
 get_attr_loop(Key, [_|T])                                -> get_attr_loop(Key, T);
