@@ -1,5 +1,5 @@
 -module(eradius_lib).
--export([get_attr/2, encode_request/1, encode_reply_request/1, decode_request/2, decode_request_id/1]).
+-export([del_attr/2, get_attr/2, encode_request/1, encode_reply_request/1, decode_request/2, decode_request_id/1]).
 -export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, get_attributes/1, set_attributes/2]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
@@ -17,6 +17,10 @@
 -type salt() :: binary().
 -type attribute_list() :: list({eradius_dict:attribute(), term()}).
 
+-define(IS_ATTR(Key, Attr), ?IS_KEY(Key, element(1, Attr))).
+-define(IS_KEY(Key, Attr), ((is_record(Attr, attribute) andalso (element(2, Attr) == Key))
+                           orelse
+                           (Attr == Key)) ).
 %% ------------------------------------------------------------------------------------------
 %% -- Request Accessors
 -spec random_authenticator() -> authenticator().
@@ -41,10 +45,14 @@ set_attr(Req = #radius_request{attrs = Attrs}, Id, Val) ->
 get_attr(#radius_request{attrs = Attrs}, Id) ->
     get_attr_loop(Id, Attrs).
 
-get_attr_loop(Key, [{#attribute{id = Key}, Val}|_T]) -> Val;
-get_attr_loop(Key, [{Key, Val}|_T])                  -> Val;
-get_attr_loop(Key, [_|T])                            -> get_attr_loop(Key, T);
-get_attr_loop(_, [])                                 -> undefined.
+del_attr(#radius_request{attrs = Attrs}, Id) ->
+    lists:reverse(lists:foldl(fun(Attr, Acc) when ?IS_ATTR(Id, Attr) -> Acc;
+                                 (Attr, Acc) -> [Attr | Acc]
+                              end, [], Attrs)).
+
+get_attr_loop(Key, [{Id, Val}|_T]) when ?IS_KEY(Key, Id) -> Val;
+get_attr_loop(Key, [_|T])                                -> get_attr_loop(Key, T);
+get_attr_loop(_, [])                                     -> undefined.
 
 %% ------------------------------------------------------------------------------------------
 %% -- Wire Encoding
