@@ -6,6 +6,7 @@
    {mod, {eradius, []}},
    {env, [
       {servers, []},
+      {logging, true},
       {logfile, "./radius.log"},
       {tables, [dictionary]},
       {client_ip, undefined},

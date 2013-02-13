@@ -25,13 +25,18 @@ close(Log) ->
 
 -spec write_request(log(), sender(), #radius_request{}) -> ok.
 write_request(Log, Sender, Request = #radius_request{}) ->
-    Time = calendar:universal_time(),
-    case catch format_message(Time, Sender, Request) of
-        {'EXIT', Error} ->
-            eradius:error_report("Failed to log RADIUS request: ~p~n~p", [Error, Request]),
-            ok;
-        Msg ->
-            disk_log:blog(Log, Msg)
+    case application:get_env(eradius, logging) of
+        true ->
+            Time = calendar:universal_time(),
+            case catch format_message(Time, Sender, Request) of
+                {'EXIT', Error} ->
+                    eradius:error_report("Failed to log RADIUS request: ~p~n~p", [Error, Request]),
+                    ok;
+                Msg ->
+                    disk_log:blog(Log, Msg)
+            end;
+        _ ->
+            ok
     end.
 
 %% ------------------------------------------------------------------------------------------
