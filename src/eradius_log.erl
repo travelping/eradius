@@ -26,7 +26,7 @@ close(Log) ->
 -spec write_request(log(), sender(), #radius_request{}) -> ok.
 write_request(Log, Sender, Request = #radius_request{}) ->
     case application:get_env(eradius, logging) of
-        true ->
+        {ok, true} ->
             Time = calendar:universal_time(),
             case catch format_message(Time, Sender, Request) of
                 {'EXIT', Error} ->
