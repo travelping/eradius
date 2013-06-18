@@ -92,6 +92,8 @@ parse_dict(File) when is_list(File) ->
     {_, L} = lists:foldl(F,{undefined, []},string:tokens(b2l(B),"\n")),
     L.
 
+paa(Attr = #attribute{type = integer}, ["has_tag"]) ->
+    Attr#attribute{ type = {tagged, integer24} };
 paa(Attr, ["has_tag"]) ->
     Attr#attribute{ type = {tagged, Attr#attribute.type} };
 

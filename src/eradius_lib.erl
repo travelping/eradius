@@ -164,6 +164,8 @@ encode_value(binary, V) ->
     V;
 encode_value(integer, V) ->
     <<V:32>>;
+encode_value(integer24, V) ->
+    <<V:24>>;
 encode_value(integer64, V) ->
     <<V:64>>;
 encode_value(ipaddr, {A,B,C,D}) ->
