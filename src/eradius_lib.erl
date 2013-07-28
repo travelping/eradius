@@ -11,7 +11,7 @@
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
 
--type command() :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp'.
+-type command() :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp' | 'coareq' | 'coaack' | 'coanak' | 'discreq' | 'discack' | 'discnak'.
 -type secret() :: binary().
 -type authenticator() :: <<_:128>>.
 -type salt() :: binary().
@@ -84,7 +84,13 @@ encode_command(accept)    -> ?RAccess_Accept;
 encode_command(challenge) -> ?RAccess_Challenge;
 encode_command(reject)    -> ?RAccess_Reject;
 encode_command(accreq)    -> ?RAccounting_Request;
-encode_command(accresp)   -> ?RAccounting_Response.
+encode_command(accresp)   -> ?RAccounting_Response;
+encode_command(coareq)    -> ?RCoa_Request;
+encode_command(coaack)    -> ?RCoa_Ack;
+encode_command(coanak)    -> ?RCoa_Nak;
+encode_command(discreq)   -> ?RDisconnect_Request;
+encode_command(discack)   -> ?RDisconnect_Ack;
+encode_command(discnak)   -> ?RDisconnect_Nak.
 
 -spec encode_message_authenticator(#radius_request{}, {binary(), non_neg_integer()}) -> {binary(), non_neg_integer()}.
 encode_message_authenticator(_Req = #radius_request{msg_hmac = false}, Request) ->
@@ -252,6 +258,12 @@ decode_command(?RAccess_Reject)       -> reject;
 decode_command(?RAccess_Challenge)    -> challenge;
 decode_command(?RAccounting_Request)  -> accreq;
 decode_command(?RAccounting_Response) -> accresp;
+decode_command(?RCoa_Request)         -> coareq;
+decode_command(?RCoa_Ack)             -> coaack;
+decode_command(?RCoa_Nak)             -> coanak;
+decode_command(?RDisconnect_Request)  -> discreq;
+decode_command(?RDisconnect_Ack)      -> discack;
+decode_command(?RDisconnect_Nak)      -> discnak;
 decode_command(_)                     -> error(bad_pdu).
 
 append_attr(Attr, State) ->

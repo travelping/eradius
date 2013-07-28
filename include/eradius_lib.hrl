@@ -7,6 +7,12 @@
 -define(RAccounting_Request,   4).
 -define(RAccounting_Response,  5).
 -define(RAccess_Challenge,    11).
+-define(RDisconnect_Request,  40).
+-define(RDisconnect_Ack,      41).
+-define(RDisconnect_Nak,      42).
+-define(RCoa_Request,         43).
+-define(RCoa_Ack,             44).
+-define(RCoa_Nak,             45).
 
 %%- attribs
 -define(RUser_Name,        1).
@@ -57,7 +63,13 @@
           badAuthenticators        = 0 :: non_neg_integer(),
           packetsDropped           = 0 :: non_neg_integer(),
           unknownTypes             = 0 :: non_neg_integer(),
-          handlerFailure           = 0 :: non_neg_integer()
+          handlerFailure           = 0 :: non_neg_integer(),
+          coaRequests              = 0 :: non_neg_integer(),
+          coaAcks                  = 0 :: non_neg_integer(),
+          coaNaks                  = 0 :: non_neg_integer(),
+          discRequests             = 0 :: non_neg_integer(),
+          discAcks                 = 0 :: non_neg_integer(),
+          discNaks                 = 0 :: non_neg_integer()
          }).
 
 -record(server_counter, {
