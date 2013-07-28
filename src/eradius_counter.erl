@@ -148,7 +148,13 @@ do_inc_counter(noRecords,               Counters = #nas_counter{noRecords = Valu
 do_inc_counter(badAuthenticators,       Counters = #nas_counter{badAuthenticators = Value})       -> Counters#nas_counter{badAuthenticators = Value + 1};
 do_inc_counter(packetsDropped,          Counters = #nas_counter{packetsDropped = Value})          -> Counters#nas_counter{packetsDropped = Value + 1};
 do_inc_counter(unknownTypes,            Counters = #nas_counter{unknownTypes = Value})            -> Counters#nas_counter{unknownTypes = Value + 1};
-do_inc_counter(handlerFailure,          Counters = #nas_counter{handlerFailure = Value})          -> Counters#nas_counter{handlerFailure = Value + 1}.
+do_inc_counter(handlerFailure,          Counters = #nas_counter{handlerFailure = Value})          -> Counters#nas_counter{handlerFailure = Value + 1};
+do_inc_counter(coaRequests,             Counters = #nas_counter{coaRequests = Value})             -> Counters#nas_counter{coaRequests = Value + 1};
+do_inc_counter(coaAcks,                 Counters = #nas_counter{coaAcks = Value})                 -> Counters#nas_counter{coaAcks = Value + 1};
+do_inc_counter(coaNaks,                 Counters = #nas_counter{coaNaks = Value})                 -> Counters#nas_counter{coaNaks = Value + 1};
+do_inc_counter(discRequests,            Counters = #nas_counter{discRequests = Value})            -> Counters#nas_counter{discRequests = Value + 1};
+do_inc_counter(discAcks,                Counters = #nas_counter{discAcks = Value})                -> Counters#nas_counter{discAcks = Value + 1};
+do_inc_counter(discNaks,                Counters = #nas_counter{discNaks = Value})                -> Counters#nas_counter{discNaks = Value + 1}.
 
 
 add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
@@ -168,5 +174,11 @@ add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
              badAuthenticators        = Cnt1#nas_counter.badAuthenticators         + Cnt2#nas_counter.badAuthenticators,
              packetsDropped           = Cnt1#nas_counter.packetsDropped            + Cnt2#nas_counter.packetsDropped,
              unknownTypes             = Cnt1#nas_counter.unknownTypes              + Cnt2#nas_counter.unknownTypes,
-             handlerFailure           = Cnt1#nas_counter.handlerFailure            + Cnt2#nas_counter.handlerFailure
+             handlerFailure           = Cnt1#nas_counter.handlerFailure            + Cnt2#nas_counter.handlerFailure,
+             coaRequests              = Cnt1#nas_counter.coaRequests               + Cnt2#nas_counter.coaRequests,
+             coaAcks                  = Cnt1#nas_counter.coaAcks                   + Cnt2#nas_counter.coaAcks,
+             coaNaks                  = Cnt1#nas_counter.coaNaks                   + Cnt2#nas_counter.coaNaks,
+             discRequests             = Cnt1#nas_counter.discRequests              + Cnt2#nas_counter.discRequests,
+             discAcks                 = Cnt1#nas_counter.discAcks                  + Cnt2#nas_counter.discAcks,
+             discNaks                 = Cnt1#nas_counter.discNaks                  + Cnt2#nas_counter.discNaks
             }.

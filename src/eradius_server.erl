@@ -23,7 +23,7 @@
 %%   ```
 %%   -record(radius_request, {
 %%       reqid         :: byte(),
-%%       cmd           :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp',
+%%       cmd           :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp' | 'coareq' | 'coaack' | 'coanak' | 'discreq' | 'discack' | 'discnak'm
 %%       attrs         :: eradius_lib:attribute_list(),
 %%       secret        :: eradius_lib:secret(),
 %%       authenticator :: eradius_lib:authenticator(),
@@ -328,6 +328,10 @@ request_inc_counter(request, NasProp) ->
     eradius_counter:inc_counter(accessRequests, NasProp);
 request_inc_counter(accreq, NasProp) ->
     eradius_counter:inc_counter(accountRequests, NasProp);
+request_inc_counter(coareq, NasProp) ->
+    eradius_counter:inc_counter(coaRequests, NasProp);
+request_inc_counter(discreq, NasProp) ->
+    eradius_counter:inc_counter(disconnectRequests, NasProp);
 request_inc_counter(_Cmd, _NasProp) ->
     ok.
 
@@ -339,5 +343,13 @@ reply_inc_counter(challenge, NasProp) ->
     eradius_counter:inc_counter(accessChallenges, NasProp);
 reply_inc_counter(accresp, NasProp) ->
     eradius_counter:inc_counter(accountResponses, NasProp);
+reply_inc_counter(coaack, NasProp) ->
+    eradius_counter:inc_counter(coaAcks, NasProp);
+reply_inc_counter(coanak, NasProp) ->
+    eradius_counter:inc_counter(coaNaks, NasProp);
+reply_inc_counter(discack, NasProp) ->
+    eradius_counter:inc_counter(discAcks, NasProp);
+reply_inc_counter(discnak, NasProp) ->
+    eradius_counter:inc_counter(discNaks, NasProp);
 reply_inc_counter(_Cmd, _NasProp) ->
     ok.

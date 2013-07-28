@@ -56,7 +56,13 @@ format_cmd(accept)    -> <<"Access-Accept">>;
 format_cmd(reject)    -> <<"Access-Reject">>;
 format_cmd(challenge) -> <<"Access-Challenge">>;
 format_cmd(accreq)    -> <<"Accounting-Request">>;
-format_cmd(accresp)   -> <<"Accounting-Response">>.
+format_cmd(accresp)   -> <<"Accounting-Response">>;
+format_cmd(coareq)    -> <<"Coa-Request">>;
+format_cmd(coaack)    -> <<"Coa-Ack">>;
+format_cmd(coanak)    -> <<"Coa-Nak">>;
+format_cmd(discreq)   -> <<"Disconnect-Request">>;
+format_cmd(discack)   -> <<"Disconnect-Ack">>;
+format_cmd(discnak)   -> <<"Disconnect-Nak">>.
 
 format_ip(IP) ->
     list_to_binary(inet_parse:ntoa(IP)).
