@@ -23,7 +23,10 @@
 -define(DEFAULT_RETRIES, 3).
 -define(DEFAULT_TIMEOUT, 5000).
 -define(RECONFIGURE_TIMEOUT, 15000).
--define(GOOD_CMD(Req), Req#radius_request.cmd == 'request' orelse Req#radius_request.cmd == 'accreq').
+-define(GOOD_CMD(Req), Req#radius_request.cmd == 'request' orelse 
+                       Req#radius_request.cmd == 'accreq' orelse
+                       Req#radius_request.cmd == 'coareq' orelse
+                       Req#radius_request.cmd == 'discreq').
 
 -type nas_address() :: {inet:ip_address(), eradius_server:port_number(), eradius_lib:secret()}.
 -type options() :: [{retries, pos_integer()} | {timeout, timeout()}].
@@ -79,6 +82,10 @@ send_remote_request(_Node, _NAS, _Request, _Options) ->
     error(badarg).
 
 encode_request(Req = #radius_request{cmd = request}) ->
+    eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
+encode_request(Req = #radius_request{cmd = coareq}) ->
+    eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
+encode_request(Req = #radius_request{cmd = discreq}) ->
     eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
 encode_request(Req = #radius_request{cmd = accreq}) ->
     eradius_lib:encode_reply_request(Req#radius_request{authenticator = eradius_lib:zero_authenticator()}).
