@@ -84,9 +84,9 @@ send_remote_request(_Node, _NAS, _Request, _Options) ->
 encode_request(Req = #radius_request{cmd = request}) ->
     eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
 encode_request(Req = #radius_request{cmd = coareq}) ->
-    eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
+    eradius_lib:encode_reply_request(Req#radius_request{authenticator = eradius_lib:zero_authenticator()});
 encode_request(Req = #radius_request{cmd = discreq}) ->
-    eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
+    eradius_lib:encode_reply_request(Req#radius_request{authenticator = eradius_lib:zero_authenticator()});
 encode_request(Req = #radius_request{cmd = accreq}) ->
     eradius_lib:encode_reply_request(Req#radius_request{authenticator = eradius_lib:zero_authenticator()}).
 
