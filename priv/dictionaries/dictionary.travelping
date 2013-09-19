@@ -41,6 +41,19 @@ ATTRIBUTE	TP-NAT-Port-End				29	integer
 ATTRIBUTE	TP-Keep-Alive-Timeout			30	integer
 ATTRIBUTE	TP-TLS-Auth-Type			31	integer
 ATTRIBUTE	TP-TLS-Pre-Shared-Key			32	string
+ATTRIBUTE	TP-CAPWAP-Timestamp			33	integer
+ATTRIBUTE	TP-CAPWAP-WTP-Version			34	string
+ATTRIBUTE	TP-CAPWAP-Session-Id			35	octets
+ATTRIBUTE	TP-CAPWAP-Radio-Id			36	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-Id			37	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-RAT			38	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-RSSi			39	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-CREG			40	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-LAC			41	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-Latency			42	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-MCC			43	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-MNC			44	integer
+ATTRIBUTE	TP-CAPWAP-WWAN-Cell-Id			45	integer
 
 VALUE           TP-TLS-Auth-Type        Pre-Shared-Key           0
 VALUE           TP-TLS-Auth-Type        X509-Subject-CommonName  1
