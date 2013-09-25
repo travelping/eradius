@@ -1,6 +1,9 @@
 %% @doc Main module of the eradius application.
 -module(eradius).
--export([load_tables/1, load_tables/2, modules_ready/1, modules_ready/2, trace_on/3, trace_off/3]).
+-export([load_tables/1, load_tables/2,
+	 modules_ready/1, modules_ready/2,
+	 trace_on/3, trace_off/3,
+	 statistics/1]).
 
 -behaviour(application).
 -export([start/2, stop/1, config_change/3]).
@@ -39,6 +42,17 @@ trace_on(ServerIP, ServerPort, NasIP) ->
 %% @doc Stop tracing requests from the given NAS.
 trace_off(ServerIP, ServerPort, NasIP) ->
     eradius_server_mon:set_trace(ensure_ip(ServerIP), ServerPort, ensure_ip(NasIP), false).
+
+%% @doc manipulate server statistics
+%%    * reset: reset all counters to zero
+%%    * pull:  read counters and reset to zero
+%%    * read:  read counters
+statistics(reset) ->
+    eradius_counter_aggregator:reset();
+statistics(pull) ->
+    eradius_counter_aggregator:pull();
+statistics(read) ->
+    eradius_counter_aggregator:read().
 
 ensure_ip(IP = {_,_,_,_}) -> IP;
 ensure_ip(IP = {_,_,_,_,_,_,_,_}) -> IP;
