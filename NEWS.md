@@ -3,6 +3,12 @@ eradius
 
 A generic RADIUS client and server.
 
+
+Version 0.3.3 - 18 Okt 2013
+---------------------------
+
+* Add possiblity to rate limit the incoming requests per server
+
 Version 0.3.2 - 25 Sep 2013
 ---------------------------
 

@@ -136,13 +136,14 @@ configure(#state{running = Running}) ->
             New     = sets:from_list([element(1, T) || T <- ServList]),
             ToStart = sets:subtract(New, Run),
             ToStop  = sets:subtract(Run, New),
-            Started = sets:fold(fun (Key, List) ->
+            Started = sets:fold(fun ({IP, Port, _Options}, List) ->
+                                        Key = {IP, Port},
                                         lists:keydelete(Key, 1, List),
                                         {{IP, Port}, Pid} = lists:keyfind(Key, 1, Running),
                                         eradius_server_sup:stop_instance(IP, Port, Pid)
                                 end, Running, ToStop),
-            NRunning = sets:fold(fun ({IP, Port}, Acc) ->
-                                         case eradius_server_sup:start_instance(IP, Port) of
+            NRunning = sets:fold(fun ({IP, Port, Options}, Acc) ->
+                                         case eradius_server_sup:start_instance(IP, Port, Options) of
                                              {ok, Pid} ->
                                                  [{{IP, Port}, Pid} | Acc];
                                              {error, Error} ->
@@ -156,6 +157,8 @@ configure(#state{running = Running}) ->
     end.
 
 %-spec server_naslist(valid_server()) -> list(#nas{}).
+server_naslist({{IP, Port, _Options}, HandlerList}) ->
+    server_naslist({{IP, Port}, HandlerList});
 server_naslist({{IP, Port}, HandlerList}) ->
     [#nas{key = {{IP, Port}, NasIP},
           handler = {HandlerMod, HandlerArgs},

@@ -42,11 +42,11 @@
 %%   }).
 %%   '''
 -module(eradius_server).
--export([start_link/2, behaviour_info/1]).
+-export([start_link/3, behaviour_info/1]).
 -export_type([port_number/0, req_id/0]).
 
 %% internal
--export([do_radius/5, handle_request/3, handle_remote_request/5, stats/2]).
+-export([do_radius_queue/6, handle_request/3, handle_remote_request/5, stats/2]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -57,12 +57,16 @@
 -define(RESEND_RETRIES, 3).             % how often a reply may be resent
 -define(HANDLER_REPLY_TIMEOUT, 15000).  % how long to wait before a remote handler is considered dead
 
+-type name()        :: atom().
 -type port_number() :: 1..65535.
 -type req_id()      :: byte().
 -type udp_socket()  :: port().
 -type udp_packet()  :: {udp, udp_socket(), inet:ip_address(), port_number(), binary()}.
+-type options()     :: [option()].
+-type option()      :: {rate_config, list()}.
 
 -record(state, {
+    name           :: atom(),            % Generated server name
     socket         :: udp_socket(),      % Socket Reference of opened UDP port
     ip = {0,0,0,0} :: inet:ip_address(), % IP to which this socket is bound
     port = 0       :: port_number(),     % Port number we are listening on
@@ -74,10 +78,10 @@
 behaviour_info(callbacks) -> [{radius_request,3}].
 
 %% @private
--spec start_link(inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
-start_link(IP = {A,B,C,D}, Port) ->
+-spec start_link(inet:ip4_address(), port_number(), options()) -> {ok, pid()} | {error, term()}.
+start_link(IP = {A,B,C,D}, Port, Options) ->
     Name = list_to_atom(lists:flatten(io_lib:format("eradius_server_~b.~b.~b.~b:~b", [A,B,C,D,Port]))),
-    gen_server:start_link({local, Name}, ?MODULE, {IP, Port}, []).
+    gen_server:start_link({local, Name}, ?MODULE, {Name, IP, Port, Options}, []).
 
 stats(Server, Function) ->
     gen_server:call(Server, {stats, Function}).
@@ -85,11 +89,13 @@ stats(Server, Function) ->
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server Callbacks
 %% @private
-init({IP, Port}) ->
+init({Name, IP, Port, Options}) ->
     process_flag(trap_exit, true),
+    eradius_jobs:start(Name, proplists:get_value(rate_config, Options)),
     case gen_udp:open(Port, [{active, once}, {ip, IP}, binary]) of
         {ok, Socket} ->
-            {ok, #state{socket = Socket,
+            {ok, #state{name = Name,
+                        socket = Socket,
                         ip = IP, port = Port,
                         transacts = ets:new(transacts, []),
                         counter = eradius_counter:init_counter({IP, Port})}};
@@ -98,32 +104,32 @@ init({IP, Port}) ->
     end.
 
 %% @private
-handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{transacts = Transacts}) ->
-    case lookup_nas(State, FromIP, Packet) of
-        {ok, ReqID, Handler, NasProp} ->
-            ReqKey = {FromIP, FromPortNo, ReqID},
-            NNasProp = NasProp#nas_prop{nas_port = FromPortNo},
-            case ets:lookup(Transacts, ReqKey) of
-                [] ->
-                    HandlerPid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqKey, Handler, NNasProp, ReqUDP]),
-                    ets:insert(Transacts, {ReqKey, {handling, HandlerPid}}),
-                    eradius_counter:inc_counter(requests, NasProp);
-                [{_ReqKey, {handling, _HandlerPid}}] ->
-                    %% handler process is still working on the request
-                    dbg(NasProp, "duplicate request (being handled) ~p~n", [ReqKey]),
-                    eradius_counter:inc_counter(dupRequests, NasProp);
-                [{_ReqKey, {replied, HandlerPid}}] ->
-                    %% handler process waiting for resend message
-                    HandlerPid ! {self(), resend, Socket},
-                    dbg(NasProp, "duplicate request (resend) ~p~n", [ReqKey]),
-                    eradius_counter:inc_counter(dupRequests, NasProp)
-            end,
-            NewState = State;
-        {discard, Reason} when Reason == no_nodes_local, Reason == no_nodes ->
-            NewState = State#state{counter = eradius_counter:inc_counter(discardNoHandler, State#state.counter)};
-        {discard, _Reason} ->
-            NewState = State#state{counter = eradius_counter:inc_counter(invalidRequests, State#state.counter)}
-    end,
+handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{name = Name, transacts = Transacts}) ->
+    NewState = case lookup_nas(State, FromIP, Packet) of
+                   {ok, ReqID, Handler, NasProp} ->
+                       ReqKey = {FromIP, FromPortNo, ReqID},
+                       NNasProp = NasProp#nas_prop{nas_port = FromPortNo},
+                       case ets:lookup(Transacts, ReqKey) of
+                           [] ->
+                               HandlerPid = proc_lib:spawn_link(?MODULE, do_radius_queue, [Name, self(), ReqKey, Handler, NNasProp, ReqUDP]),
+                               ets:insert(Transacts, {ReqKey, {handling, HandlerPid}}),
+                               eradius_counter:inc_counter(requests, NasProp);
+                           [{_ReqKey, {handling, _HandlerPid}}] ->
+                               %% handler process is still working on the request
+                               dbg(NasProp, "duplicate request (being handled) ~p~n", [ReqKey]),
+                               eradius_counter:inc_counter(dupRequests, NasProp);
+                           [{_ReqKey, {replied, HandlerPid}}] ->
+                               %% handler process waiting for resend message
+                               HandlerPid ! {self(), resend, Socket},
+                               dbg(NasProp, "duplicate request (resend) ~p~n", [ReqKey]),
+                               eradius_counter:inc_counter(dupRequests, NasProp)
+                       end,
+                       State;
+                   {discard, Reason} when Reason == no_nodes_local, Reason == no_nodes ->
+                       State#state{counter = eradius_counter:inc_counter(discardNoHandler, State#state.counter)};
+                   {discard, _Reason} ->
+                       State#state{counter = eradius_counter:inc_counter(invalidRequests, State#state.counter)}
+               end,
     inet:setopts(Socket, [{active, once}]),
     {noreply, NewState};
 handle_info({replied, ReqKey, HandlerPid}, State = #state{transacts = Transacts}) ->
@@ -172,8 +178,20 @@ lookup_nas(_State, _NasIP, _Packet) ->
 
 %% ------------------------------------------------------------------------------------------
 %% -- Request Handler
+
 %% @private
--spec do_radius(pid(), term(), eradius_server_mon:handler(), #nas_prop{}, udp_packet()) -> any().
+-spec do_radius_queue(name(), pid(), term(), eradius_server_mon:handler(), #nas_prop{}, udp_packet()) -> any().
+do_radius_queue(Name, ServerPid, ReqKey, Handler, NasProp, ReqUDP) ->
+    case jobs:ask(Name) of
+        {ok, Opaque} ->
+            MayBeResend = (catch do_radius(ServerPid, ReqKey, Handler, NasProp, ReqUDP)),
+            jobs:done(Opaque),
+            is_function(MayBeResend) andalso MayBeResend();
+        {error, _Reason} ->
+            eradius_counter:inc_counter(packetsDropped, NasProp)
+    end.
+
+%% @private
 do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, FromIP, FromPort, EncRequest}) ->
     Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
     case run_handler(Nodes, NasProp, Handler, EncRequest) of
@@ -182,7 +200,7 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             ServerPid ! {replied, ReqKey, self()},
             eradius_counter:inc_counter(replies, NasProp),
-            wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, ?RESEND_RETRIES);
+            fun() -> wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, ?RESEND_RETRIES) end;
         {discard, Reason} ->
             dbg(NasProp, "discarding request ~p: ~1000.p~n", [ReqKey, Reason]),
             discard_inc_counter(Reason, NasProp),
