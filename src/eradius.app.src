@@ -9,7 +9,7 @@
       {logging, true},
       {logfile, "./radius.log"},
       {tables, [dictionary]},
-      {client_ip, "127.0.0.1"},
+      {client_ip, "0.0.0.0"},
       {client_ports, 40},
 
       {session_nodes, ['nonode@nohost']},
