@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.3.4 - 24 Jan 2014
+---------------------------
+
+* Fix default client_ip
+
 Version 0.3.2 - 25 Sep 2013
 ---------------------------
 
