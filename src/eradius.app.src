@@ -94,6 +94,5 @@
     %%                  [ {"72.18.14.3", <<"secret2">>, [{group, "NodeGroup2"}]} ] }
     %%
     %%           ]}
->>>>>>> 2259927... [eradius] use 0.0.0.0 as a default client_ip, due to errors
    ]}
 ]}.
