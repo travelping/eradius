@@ -29,3 +29,4 @@ ATTRIBUTE	WISPr-Bandwidth-Max-Down		8	integer	WISPr
 ATTRIBUTE	WISPr-Session-Terminate-Time		9	string	WISPr
 ATTRIBUTE	WISPr-Session-Terminate-End-Of-Day	10	string	WISPr
 ATTRIBUTE	WISPr-Billing-Class-Of-Service		11	string	WISPr
+ATTRIBUTE	WISPr-WISP-Carrier-Code			14	string	WISPr
