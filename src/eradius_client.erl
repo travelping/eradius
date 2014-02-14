@@ -23,7 +23,7 @@
 -define(DEFAULT_RETRIES, 3).
 -define(DEFAULT_TIMEOUT, 5000).
 -define(RECONFIGURE_TIMEOUT, 15000).
--define(GOOD_CMD(Req), Req#radius_request.cmd == 'request' orelse 
+-define(GOOD_CMD(Req), Req#radius_request.cmd == 'request' orelse
                        Req#radius_request.cmd == 'accreq' orelse
                        Req#radius_request.cmd == 'coareq' orelse
                        Req#radius_request.cmd == 'discreq').
@@ -45,7 +45,7 @@ send_request(NAS, Request) ->
 % @doc Send a radius request to the given NAS.
 %   If no answer is received within the specified timeout, the request will be sent again.
 -spec send_request(nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'socket_down'}.
-send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
+send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
     {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, {IP, Port}}),
     EncRequest = encode_request(Request#radius_request{reqid = ReqId, secret = Secret}),
     send_request_loop(Socket, ReqId, {IP, Port}, EncRequest, Options);
