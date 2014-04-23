@@ -9,6 +9,6 @@ We should probably rename it to avoid confusion.
 
 ## Building eradius
 
-We use [tetrapak](github.com/fjl/tetrapak) to build eradius.
+We use [tetrapak](https://github.com/fjl/tetrapak) to build eradius.
 Tetrapak is required to build the dictionaries.
 
