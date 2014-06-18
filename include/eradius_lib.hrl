@@ -83,6 +83,7 @@
 -record(nas_prop, {
     server_ip     :: inet:ip_address(),
     server_port   :: eradius_server:port_number(),
+    nas_id        :: term(),
     nas_ip        :: inet:ip_address(),
     nas_port      :: eradius_server:port_number(),
     secret        :: eradius_lib:secret(),

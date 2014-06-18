@@ -68,21 +68,35 @@ validate_behavior(Term) ->
 
 validate_naslist(ListOfNases, Nodes) -> map_helper(fun(Nas) -> validate_nas(Nas, Nodes) end, ListOfNases).
 
-validate_nas({IP, Secret}, {root, Nodes}) -> validate_nas(validate_ip(IP), Secret, root, Nodes);
-validate_nas({IP, Secret, Name}, Nodes)  -> validate_nas(validate_ip(IP), Secret, Name, proplists:get_value(Name, Nodes));
-validate_nas(Term, _) -> ?invalid("bad term in NAS specification: ~p", [Term]).
+validate_nas({IP, Secret}, Nodes) ->
+    validate_nas({IP, Secret, []}, Nodes);
+validate_nas({IP, Secret, Options}, Nodes) ->
+    validate_nas({proplists:get_value(nas_id, Options), IP, Secret, proplists:get_value(group, Options)}, Nodes);
+validate_nas({NasId, IP, Secret, undefined}, {root, Nodes}) ->
+    validate_nas(NasId, validate_ip(IP), Secret, root, Nodes);
+validate_nas({NasId, IP, Secret, GroupName}, Nodes) when is_list(Nodes) ->
+    validate_nas(NasId, validate_ip(IP), Secret, GroupName, proplists:get_value(GroupName, Nodes));
+validate_nas(Term, _) ->
+    ?invalid("bad term in NAS specification: ~p", [Term]).
 
-validate_nas({invalid, _} = Invalid, _Secret, _Name, _Nodes) -> Invalid;
-validate_nas(IP, Secret, Name, undefined) -> validate_nas(IP, Secret, Name, validate_handler_nodes(Name));
-validate_nas(IP, _Secret, Name, {invalid, _}) -> ?invalid("group ~p for nas ~p is undefined", [Name, IP]);
-validate_nas(IP, Secret, _Name, Nodes) when ?is_io(Secret) -> {IP, validate_secret(Secret), Nodes};
-validate_nas(_IP, Secret, _Name, _) -> ?invalid("bad RADIUS secret: ~p", [Secret]).
+validate_nas(_NasId, {invalid, _} = Invalid, _Secret, _Name, _Nodes) -> Invalid;
+
+validate_nas(NasId, IP, Secret, Name, undefined) ->
+    validate_nas(NasId, IP, Secret, Name, validate_handler_nodes(Name));
+validate_nas(_NasId, IP, _Secret, Name, {invalid, _}) ->
+    ?invalid("group ~p for nas ~p is undefined", [Name, IP]);
+validate_nas(NasId, IP, Secret, _Name, Nodes) when ?is_io(Secret) andalso (?is_io(NasId) orelse NasId == undefined) ->
+    {NasId, IP, validate_secret(Secret), Nodes};
+validate_nas(NasId, _IP, Secret, _Name, _) when ?is_io(Secret) ->
+    ?invalid("bad nas id name: ~p", [NasId]);
+validate_nas(_NasId, _IP, Secret, _Name, _) ->
+    ?invalid("bad RADIUS secret: ~p", [Secret]).
 
 % --------------------------------------------------------------------------------------------------
 % -- direct validation function
 
 validate_ip(IP) when is_list(IP) ->
-    ok_error_helper(inet_parse:ipv4_address(IP), {"bad IP address: ~p", [IP]});
+    ok_error_helper(inet_parse:address(IP), {"bad IP address: ~p", [IP]});
 validate_ip(IP) when ?ip4_address(IP) ->
     IP;
 validate_ip(X) ->
@@ -115,20 +129,20 @@ check_root(Nodes) ->
 % -- build right format function
 
 build_nas_behavior_list({Module, Nas, Args}, ListOfNases) ->
-    lists:map(fun({IP, Secret, Nodes}) ->
-                      {IP, Secret, Nodes, Module, {Args, build_nasname(Nas, IP)}}
+    lists:map(fun({undefined, IP, Secret, Nodes}) ->
+                      {build_nasname(Nas, IP), IP, Secret, Nodes, Module, Args};
+                 ({NasName, IP, Secret, Nodes}) ->
+                      {NasName, IP, Secret, Nodes, Module, Args}
               end, ListOfNases).
 
-build_nasname(Nas, {A, B, C, D}) ->
-    build_nasname(Nas, <<"_", (tob(A))/binary, ".", (tob(B))/binary, ".",(tob(C))/binary, ".",(tob(D))/binary>>);
 build_nasname(Nas, IP) ->
     NasBinary = tob(Nas),
-    <<NasBinary/binary, IP/binary>>.
+    IPString = inet_parse:ntoa(IP),
+    <<NasBinary/binary, "_", (list_to_binary(IPString))/binary>>.
 
 tob(Integer) when is_integer(Integer) -> tob(integer_to_list(Integer));
 tob(List) when is_list(List) -> list_to_binary(List);
 tob(Binary) -> Binary.
-
 
 -type valid_nas()    :: {inet:ip_address(), binary(), list(atom()), module(), term()}.
 -type valid_server() :: {eradius_server_mon:server(), list(valid_nas())}.
@@ -224,7 +238,7 @@ validate_nas_list([{NasAddress, Secret, HandlerNodes, Module, Args} | NasListRes
                                 E = {invalid, _} ->
                                     E;
                                 ValidNasListRest ->
-                                    [{NasAddress, ValidSecret, ValidHandlerNodes, Module, Args} | ValidNasListRest]
+                                    [{build_nasname("", NasAddress), NasAddress, ValidSecret, ValidHandlerNodes, Module, Args} | ValidNasListRest]
                             end;
                         _Else ->
                             {invalid, io_lib:format("bad module in NAS specifification: ~p", [Module])}

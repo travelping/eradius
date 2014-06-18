@@ -159,8 +159,8 @@ configure(#state{running = Running}) ->
 server_naslist({{IP, Port}, HandlerList}) ->
     [#nas{key = {{IP, Port}, NasIP},
           handler = {HandlerMod, HandlerArgs},
-          prop = #nas_prop{handler_nodes = HandlerNodes, nas_ip = NasIP, secret = Secret, trace = false}}
-      || {NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs} <- HandlerList].
+          prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret, trace = false}}
+      || {NasId, NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs} <- HandlerList].
 
 %-spec config_nodes(valid_config()) -> list(node()).
 config_nodes(Config) ->
