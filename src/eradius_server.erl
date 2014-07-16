@@ -200,7 +200,8 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             ServerPid ! {replied, ReqKey, self()},
             eradius_counter:inc_counter(replies, NasProp),
-            fun() -> wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, ?RESEND_RETRIES) end;
+            {ok, ResendTimeout} = application:get_env(eradius, resend_timeout),
+            fun() -> wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES) end;
         {discard, Reason} ->
             dbg(NasProp, "discarding request ~p: ~1000.p~n", [ReqKey, Reason]),
             discard_inc_counter(Reason, NasProp),
@@ -217,15 +218,18 @@ discard_inc_counter(bad_pdu, NasProp) ->
 discard_inc_counter(_Reason, NasProp) ->
     eradius_counter:inc_counter(packetsDropped, NasProp).
 
+wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, Retries) ->
+    erlang:send_after(ResendTimeout, self(), timeout),
+    wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries).
+
 wait_resend(ServerPid, ReqKey, _FromIP, _FromPort, _EncReply, 0) ->
     ServerPid ! {discarded, ReqKey};
 wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries) ->
     receive
         {ServerPid, resend, Socket} ->
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
-            wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries - 1)
-    after
-        ?RESEND_TIMEOUT ->
+            wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries - 1);
+        timeout ->
             ServerPid ! {discarded, ReqKey}
     end.
 
