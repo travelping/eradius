@@ -10,7 +10,8 @@
       {logfile, "./radius.log"},
       {tables, [dictionary]},
       {client_ip, undefined},
-      {client_ports, 20}
+      {client_ports, 20},
+      {resend_timeout, 30000}
     %% RADIUS server configuration:
 
     %% Note:
