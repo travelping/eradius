@@ -64,6 +64,10 @@ ATTRIBUTE	TP-CAPWAP-GPS-Longitude		52	string
 ATTRIBUTE	TP-CAPWAP-GPS-Altitude			53	string
 ATTRIBUTE	TP-CAPWAP-GPS-Hdop			54	string
 ATTRIBUTE	TP-CAPWAP-GPS-Timestamp		55	string
+ATTRIBUTE	TP-CAPWAP-Hardware-Version		56	string
+ATTRIBUTE	TP-CAPWAP-Software-Version		57	string
+ATTRIBUTE	TP-CAPWAP-Boot-Version			58	string
+ATTRIBUTE	TP-CAPWAP-Other-Software-Version	59	string
 
 VALUE		TP-TLS-Auth-Type	Pre-Shared-Key           0
 VALUE		TP-TLS-Auth-Type	X509-Subject-CommonName  1
