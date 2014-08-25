@@ -281,9 +281,8 @@ handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest) ->
         Request = #radius_request{} ->
             request_inc_counter(Request#radius_request.cmd, NasProp),
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
-            {ok, RadiusLog} = eradius_log:open(),
-            eradius_log:write_request(RadiusLog, Sender, Request),
-            apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, RadiusLog);
+            eradius_log:write_request(Sender, Request),
+            apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
         bad_pdu ->
             {discard, bad_pdu}
     end.
@@ -308,8 +307,8 @@ nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, NasPort, Sec
               nas_ip = NasIP, nas_port = NasPort,
               secret = Secret, trace = Trace, handler_nodes = Nodes}.
 
--spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}, eradius_log:log()) -> {discard, term()} | {exit, term()} | {reply, binary()}.
-apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, RadiusLog) ->
+-spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {exit, term()} | {reply, binary()}.
+apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
     try HandlerMod:radius_request(Request, NasProp, HandlerArg) of
         {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs, msg_hmac = MsgHMAC, eap_msg = EAPmsg}} ->
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
@@ -317,7 +316,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, RadiusLog) ->
 									       msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
 									       eap_msg = EAPmsg}),
             reply_inc_counter(ReplyCmd, NasProp),
-            eradius_log:write_request(RadiusLog, Sender, Reply),
+            eradius_log:write_request(Sender, Reply),
             {reply, EncReply};
         noreply ->
             {discard, handler_returned_noreply};

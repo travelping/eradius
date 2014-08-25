@@ -23,7 +23,8 @@ init([]) ->
     StatsServer  = {counter, {eradius_counter, start_link, []}, permanent, brutal_kill, worker, [eradius_counter]},
     StatsCollect = {aggregator, {eradius_counter_aggregator, start_link, []}, permanent, brutal_kill, worker, [eradius_counter_aggregator]},
     NodeMon      = {node_mon, {eradius_node_mon, start_link, []}, permanent, brutal_kill, worker, [eradius_node_mon]},
+    RadiusLog    = {radius_log, {eradius_log, start_link, []}, permanent, brutal_kill, worker, [eradius_log]},
     ServerTopSup = {server_top_sup, {eradius_server_top_sup, start_link, []}, permanent, infinity, supervisor, [eradius_server_top_sup]},
     Client       = {client, {eradius_client, start_link, []}, permanent, 500, worker, [eradius_client]},
 
-    {ok, {SupFlags, [DictServer, NodeMon, StatsServer, StatsCollect, ServerTopSup, Client]}}.
+    {ok, {SupFlags, [DictServer, NodeMon, StatsServer, StatsCollect, RadiusLog, ServerTopSup, Client]}}.

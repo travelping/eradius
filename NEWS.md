@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.4.1 - 25 Aug 2014
+---------------------------
+
+* change radius.log to a append only log file
+
 Version 0.4.0 - 18 Oct 2013
 ---------------------------
 

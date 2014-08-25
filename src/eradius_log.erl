@@ -1,45 +1,103 @@
-%% @private
+% Copyright (c) 2010-2011 by Travelping GmbH <info@travelping.com>
+
+% Permission is hereby granted, free of charge, to any person obtaining a
+% copy of this software and associated documentation files (the "Software"),
+% to deal in the Software without restriction, including without limitation
+% the rights to use, copy, modify, merge, publish, distribute, sublicense,
+% and/or sell copies of the Software, and to permit persons to whom the
+% Software is furnished to do so, subject to the following conditions:
+
+% The above copyright notice and this permission notice shall be included in
+% all copies or substantial portions of the Software.
+
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+% DEALINGS IN THE SOFTWARE.
+
+% @private
 -module(eradius_log).
--export([open/0, close/1, write_request/3]).
--export([radius_date/1, printable_attr_value/2, bin_to_hexstr/1]).
--export_type([log/0]).
+
+-behaviour(gen_server).
+
+%% API
+-export([start_link/0, write_request/2]).
+-export([bin_to_hexstr/1]).
+
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
 
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
--define(DISK_LOG_NAME, eradius_request_log).
-
--opaque log() :: term().
 
 -type sender() :: {inet:ip_address(), eradius_server:port_number(), eradius_server:req_id()}.
 
-%% ------------------------------------------------------------
-%% -- API
--spec open() -> {ok, log()}.
-open() ->
-    {ok, LogFile} = application:get_env(eradius, logfile),
-    disk_log:open([{name, ?DISK_LOG_NAME}, {file, LogFile}, {format, external}, {type, halt}]).
+-define(SERVER, ?MODULE).
 
--spec close(log()) -> ok.
-close(Log) ->
-    disk_log:close(Log).
+%%%===================================================================
+%%% API
+%%%===================================================================
+-spec start_link() -> {ok, pid()} | {error, Reason :: term}.
+start_link() ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec write_request(log(), sender(), #radius_request{}) -> ok.
-write_request(Log, Sender, Request = #radius_request{}) ->
+-spec write_request(sender(), #radius_request{}) -> ok.
+write_request(Sender, Request = #radius_request{}) ->
     case application:get_env(eradius, logging) of
         {ok, true} ->
             Time = calendar:universal_time(),
-            case catch format_message(Time, Sender, Request) of
-                {'EXIT', Error} ->
-                    eradius:error_report("Failed to log RADIUS request: ~p~n~p", [Error, Request]),
-                    ok;
-                Msg ->
-                    disk_log:blog(Log, Msg)
-            end;
+	    gen_server:cast(?SERVER, {write_request, Time, Sender, Request});
         _ ->
             ok
     end.
 
-%% ------------------------------------------------------------------------------------------
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+init(_) ->
+    {ok, LogFile} = application:get_env(eradius, logfile),
+    filelib:ensure_dir(LogFile),
+    case file:open(LogFile, [append]) of
+    {ok, Fd} ->
+        {ok, Fd};
+    {error, eacces} ->
+        {stop, {file_permission_error, LogFile}};
+    Error ->
+        {stop, Error}
+    end.
+
+handle_call(_Request, _From, State) ->
+    {reply, ok, State}.
+
+handle_cast({write_request, Time, Sender, Request}, State) ->
+    try
+	Msg = format_message(Time, Sender, Request),
+	ok = io:put_chars(State, Msg)
+    catch
+	_:Error ->
+	    eradius:error_report("Failed to log RADIUS request: ~p~n~p", [Error, Request]),
+	    ok
+    end,
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, Fd) ->
+    file:close(Fd),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %% -- formatting
 format_message(Time, Sender, Request) ->
     BinTStamp = radius_date(Time),
@@ -156,6 +214,12 @@ month(12) -> "Dec".
 -compile({inline, i2b/1}).
 i2b(I) -> list_to_binary(integer_to_list(I)).
 
+-compile({inline,hexchar/1}).
+hexchar(X) when X >= 0, X < 10 ->
+    X + $0;
+hexchar(X) when X >= 10, X < 16 ->
+    X + ($A - 10).
+
 -compile({inline, bin_to_hexstr/1}).
 bin_to_hexstr(Bin) ->
-    << <<(hd(integer_to_list(X, 16)))/utf8>> || <<X:4>> <= Bin >>.
+    << << (hexchar(X)) >> || <<X:4>> <= Bin >>.
