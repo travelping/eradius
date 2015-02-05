@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.6.0 - xx Feb 2015
+---------------------------
+
+* fix case of CAPWAP Power Travelping attributes
+
 Version 0.5.2 - 17 Dec 2014
 ---------------------------
 
