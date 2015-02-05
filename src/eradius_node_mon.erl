@@ -40,9 +40,9 @@ get_module_nodes(Module) ->
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
 -record(state, {
-    live_registrar_nodes = sets:new() :: set(),
-    dead_registrar_nodes = sets:new() :: set(),
-    app_masters = dict:new()          :: dict(),
+    live_registrar_nodes = sets:new() :: sets:set(),
+    dead_registrar_nodes = sets:new() :: sets:set(),
+    app_masters = dict:new()          :: dict:dict(),
     ping_timer                        :: reference()
 }).
 
@@ -117,7 +117,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %% ------------------------------------------------------------------------------------------
 %% -- helpers
--spec dict_prepend(term(), list(term()), dict()) -> dict().
+-spec dict_prepend(term(), list(term()), dict:dict()) -> dict:dict().
 dict_prepend(Key, List, Dict) ->
     dict:update(Key, fun (Old) -> List ++ Old end, List, Dict).
 
