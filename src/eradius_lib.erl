@@ -75,7 +75,7 @@ encode_reply_request(Req = #radius_request{reqid = ReqID, cmd = Command, authent
     {Body, BodySize} = encode_message_authenticator(Req, EncReq2),
     Head = <<(encode_command(Command)):8, ReqID:8, (BodySize + 20):16>>,
     ReqAuth = <<Authenticator:16/binary>>,
-    ReplyAuth = crypto:md5([Head, ReqAuth, Body, Req#radius_request.secret]),
+    ReplyAuth = crypto:hash(md5, [Head, ReqAuth, Body, Req#radius_request.secret]),
     <<Head/binary, ReplyAuth:16/binary, Body/binary>>.
 
 -spec encode_command(command()) -> byte().
@@ -98,7 +98,7 @@ encode_message_authenticator(_Req = #radius_request{msg_hmac = false}, Request) 
 encode_message_authenticator(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, msg_hmac = true}, {Body, BodySize}) ->
     Head = <<(encode_command(Command)):8, ReqID:8, (BodySize + 20 + 2 +16):16>>,
     ReqAuth = <<Authenticator:16/binary>>,
-    HMAC = crypto:md5_mac(Req#radius_request.secret, [Head, ReqAuth, Body, <<?RMessage_Authenticator,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>]),
+    HMAC = crypto:hmac(md5, Req#radius_request.secret, [Head, ReqAuth, Body, <<?RMessage_Authenticator,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>]),
     {<<Body/binary, ?RMessage_Authenticator, 18, HMAC/binary>>, BodySize + 2 + 16}.
 
 chunk(Bin, Length) ->
@@ -243,7 +243,7 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, Auth:16/binary, Body0/binary>>, Secret
 validate_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
     case Body of
 	<<Before:Pos/bytes, Value:16/bytes, After/binary>> ->
-	    case crypto:md5_mac(Secret, [<<Cmd:8, ReqId:8, Len:16>>, Auth, Before, zero_authenticator(), After]) of
+	    case crypto:hmac(md5, Secret, [<<Cmd:8, ReqId:8, Len:16>>, Auth, Before, zero_authenticator(), After]) of
 		Value -> ok;
 		_     -> throw(bad_pdu)
 	    end;
@@ -381,12 +381,12 @@ decode_vendor_specific_attribute(Req, VendorID, <<Type:8, ChunkLength:8, ChunkRe
 %% -- Attribute Encryption
 -spec scramble(secret(), authenticator(), binary()) -> binary().
 scramble(SharedSecret, RequestAuthenticator, <<PlainText/binary>>) ->
-    B = crypto:md5([SharedSecret, RequestAuthenticator]),
+    B = crypto:hash(md5, [SharedSecret, RequestAuthenticator]),
     do_scramble(SharedSecret, B, pad_to(16, PlainText), << >>).
 
 do_scramble(SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, CipherText) ->
     NewCipherText = crypto:exor(PlainText, B),
-    Bnext = crypto:md5([SharedSecret, NewCipherText]),
+    Bnext = crypto:hash(md5, [SharedSecret, NewCipherText]),
     do_scramble(SharedSecret, Bnext, Remaining, <<CipherText/binary, NewCipherText/binary>>);
 
 do_scramble(_SharedSecret, _B, << >>, CipherText) ->
@@ -414,12 +414,12 @@ salt_decrypt(SharedSecret, RequestAuthenticator, <<Salt:2/binary, CipherText/bin
     end.
 
 do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, <<CipherText/binary>>) ->
-    B = crypto:md5([SharedSecret, RequestAuthenticator, Salt]),
+    B = crypto:hash(md5, [SharedSecret, RequestAuthenticator, Salt]),
     salt_crypt(SharedSecret, B, CipherText, << >>).
 
 salt_crypt(SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, CipherText) ->
     NewCipherText = crypto:exor(PlainText, B),
-    Bnext = crypto:md5([SharedSecret, NewCipherText]),
+    Bnext = crypto:hash(md5, [SharedSecret, NewCipherText]),
     salt_crypt(SharedSecret, Bnext, Remaining, <<CipherText/binary, NewCipherText/binary>>);
 
 salt_crypt(_SharedSecret, _B, << >>, CipherText) ->
