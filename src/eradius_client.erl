@@ -47,8 +47,8 @@ send_request(NAS, Request) ->
 -spec send_request(nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'socket_down'}.
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
     {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, {IP, Port}}),
-    EncRequest = encode_request(Request#radius_request{reqid = ReqId, secret = Secret}),
-    send_request_loop(Socket, ReqId, {IP, Port}, EncRequest, Options);
+    Request1 = fill_authenticator(Request#radius_request{reqid = ReqId, secret = Secret}),
+    send_request_loop(Socket, ReqId, {IP, Port}, Request1, Options);
 send_request(_NAS, _Request, _Options) ->
     error(badarg).
 
@@ -64,8 +64,8 @@ send_remote_request(Node, NAS, Request) ->
 send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
     try gen_server:call({?SERVER, Node}, {wanna_send, {IP, Port}}) of
         {Socket, ReqId} ->
-            EncRequest = encode_request(Request#radius_request{reqid = ReqId, secret = Secret}),
-            SenderPid = spawn(Node, ?MODULE, send_remote_request_loop, [self(), Socket, ReqId, {IP, Port}, EncRequest, Options]),
+	    Request1 = fill_authenticator(Request#radius_request{reqid = ReqId, secret = Secret}),
+            SenderPid = spawn(Node, ?MODULE, send_remote_request_loop, [self(), Socket, ReqId, {IP, Port}, Request1, Options]),
             SenderMonitor = monitor(process, SenderPid),
             receive
                 {SenderPid, Result} ->
@@ -81,40 +81,39 @@ send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(R
 send_remote_request(_Node, _NAS, _Request, _Options) ->
     error(badarg).
 
-encode_request(Req = #radius_request{cmd = request}) ->
-    eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
-encode_request(Req = #radius_request{cmd = coareq}) ->
-    eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
-encode_request(Req = #radius_request{cmd = discreq}) ->
-    eradius_lib:encode_request(Req#radius_request{authenticator = eradius_lib:random_authenticator()});
-encode_request(Req = #radius_request{cmd = accreq}) ->
-    eradius_lib:encode_reply_request(Req#radius_request{authenticator = eradius_lib:zero_authenticator()}).
+fill_authenticator(Req = #radius_request{cmd = accreq}) ->
+    Req#radius_request{authenticator = eradius_lib:zero_authenticator()};
+fill_authenticator(Req = #radius_request{}) ->
+    Req#radius_request{authenticator = eradius_lib:random_authenticator()}.
 
 % @private
 send_remote_request_loop(ReplyPid, Socket, ReqId, Peer, EncRequest, Options) ->
     ReplyPid ! {self(), send_request_loop(Socket, ReqId, Peer, EncRequest, Options)}.
 
-send_request_loop(Socket, ReqId, Peer, EncRequest, Options) ->
+send_request_loop(Socket, ReqId, Peer,
+		  Request = #radius_request{authenticator = Authenticator},
+		  Options) ->
     Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
+    EncRequest = eradius_lib:encode_request(Request),
     SMon = erlang:monitor(process, Socket),
-    send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, Retries).
+    send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, Retries).
 
-send_request_loop(_Socket, SMon, _Peer, _ReqId, _EncRequest, _Timeout, 0) ->
+send_request_loop(_Socket, SMon, _Peer, _ReqId, _Authenticator, _EncRequest, _Timeout, 0) ->
     erlang:demonitor(SMon, [flush]),
     {error, timeout};
-send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN) ->
+send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, RetryN) ->
     Socket ! {self(), send_request, Peer, ReqId, EncRequest},
     receive
         {Socket, response, ReqId, Response} ->
-            {ok, Response};
+            {ok, Response, Authenticator};
         {'DOWN', SMon, process, Socket, _} ->
             {error, socket_down};
         {Socket, error, Error} ->
             {error, Error}
     after
         Timeout ->
-            send_request_loop(Socket, SMon, Peer, ReqId, EncRequest, Timeout, RetryN - 1)
+            send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, RetryN - 1)
     end.
 
 %% @private

@@ -1,5 +1,5 @@
 -module(eradius_lib).
--export([del_attr/2, get_attr/2, encode_request/1, encode_reply_request/1, decode_request/2, decode_request_id/1]).
+-export([del_attr/2, get_attr/2, encode_request/1, encode_reply_request/1, decode_request/2, decode_request/3, decode_request_id/1]).
 -export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, get_attributes/1, set_attributes/2]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
@@ -209,13 +209,17 @@ decode_request_id(_Req) -> bad_pdu.
 
 -spec decode_request(binary(), secret()) -> #radius_request{} | bad_pdu.
 decode_request(Packet, Secret) ->
-    case (catch decode_request0(Packet, Secret)) of
+    decode_request(Packet, Secret, undefined).
+
+-spec decode_request(binary(), secret(), authenticator()) -> #radius_request{} | bad_pdu.
+decode_request(Packet, Secret, Authenticator) ->
+    case (catch decode_request0(Packet, Secret, Authenticator)) of
         {'EXIT', _} -> bad_pdu;
         Else        -> Else
     end.
 
--spec decode_request0(binary(), secret()) -> #radius_request{}.
-decode_request0(<<Cmd:8, ReqId:8, Len:16, Auth:16/binary, Body0/binary>>, Secret) ->
+-spec decode_request0(binary(), secret(), authenticator() | 'undefined') -> #radius_request{}.
+decode_request0(<<Cmd:8, ReqId:8, Len:16, PacketAuthenticator:16/binary, Body0/binary>>, Secret, RequestAuthenticator) ->
     ActualBodySize = byte_size(Body0),
     GivenBodySize  = Len - 20,
     Body = if
@@ -228,18 +232,24 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, Auth:16/binary, Body0/binary>>, Secret
            end,
 
     Command = decode_command(Cmd),
-    PartialRequest = #radius_request{cmd = Command, reqid = ReqId, authenticator = Auth, secret = Secret, msg_hmac = false},
+    PartialRequest = #radius_request{cmd = Command, reqid = ReqId, authenticator = PacketAuthenticator, secret = Secret, msg_hmac = false},
     DecodedState = decode_attributes(PartialRequest, Body),
     Request = PartialRequest#radius_request{attrs = lists:reverse(DecodedState#decoder_state.attrs),
 					    eap_msg = list_to_binary(lists:reverse(DecodedState#decoder_state.eap_msg))},
     if
 	is_integer(DecodedState#decoder_state.hmac_pos) ->
-	    validate_authenticator(Cmd, ReqId, Len, Auth, Body, DecodedState#decoder_state.hmac_pos, Secret),
+	    validate_authenticator(Cmd, ReqId, Len, Body, DecodedState#decoder_state.hmac_pos, Secret, PacketAuthenticator, RequestAuthenticator),
 	    Request#radius_request{msg_hmac = true};
 	true -> Request
     end.
 
--spec validate_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), non_neg_integer(), binary(), binary()) -> ok.
+-spec validate_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), binary(), authenticator(), authenticator() | 'undefined') -> ok.
+validate_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, PacketAuthenticator, undefined) ->
+    validate_authenticator(Cmd, ReqId, Len, PacketAuthenticator, Body, Pos, Secret);
+validate_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, _PacketAuthenticator, RequestAuthenticator) ->
+    validate_authenticator(Cmd, ReqId, Len, RequestAuthenticator, Body, Pos, Secret).
+
+-spec validate_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), authenticator(), non_neg_integer(), binary(), binary()) -> ok.
 validate_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
     case Body of
 	<<Before:Pos/bytes, Value:16/bytes, After/binary>> ->
