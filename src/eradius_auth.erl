@@ -81,7 +81,7 @@ only_null(<<>>) ->
 %% @doc CHAP authentication
 -spec chap(binary(), binary(), binary()) -> boolean().
 chap(Passwd, <<ChapId, ChapPassword/binary>>, ChapChallenge) ->
-    EncPassword = crypto:md5([ChapId, Passwd, ChapChallenge]),
+    EncPassword = crypto:hash(md5, [ChapId, Passwd, ChapChallenge]),
     EncPassword == ChapPassword.
 
 %% @doc build a des key from a hash
@@ -104,11 +104,11 @@ ascii_to_unicode(Lst) when is_list(Lst) ->
 
 %% @doc calculte MD4 hash for value
 nt_hash(Value) ->
-    crypto:md4(Value).
+    crypto:hash(md4, Value).
 
 %% @doc calculate the MD4 hash of a plain text password the NT way
 nt_password_hash(Passwd) ->
-    crypto:md4(ascii_to_unicode(Passwd)).
+    crypto:hash(md4, ascii_to_unicode(Passwd)).
 
 %% ------------------------------------------------------------------------------------------
 %% -- MS-CHAP
@@ -119,31 +119,31 @@ v2_generate_nt_response(AuthenticatorChallenge, PeerChallenge, UserName, PasswdH
 
 %% @doc calculate MS-CHAP challenge hash
 v2_challenge_hash(PeerChallenge, AuthenticatorChallenge, UserName) ->
-    binary:part(crypto:sha([PeerChallenge, AuthenticatorChallenge, UserName]), 0, 8).
+    binary:part(crypto:hash(sha, [PeerChallenge, AuthenticatorChallenge, UserName]), 0, 8).
 
 %% @doc calculate MS-CHAP challenge response
 challenge_response(Challenge, PasswdHash) ->
     Hash = eradius_lib:pad_to(21, PasswdHash),
     <<Key1:8/binary, Key2:8/binary, Key3:8/binary>> = des_key_from_hash(Hash),
 
-    Resp1 = crypto:des_ecb_encrypt(Key1, Challenge),
-    Resp2 = crypto:des_ecb_encrypt(Key2, Challenge),
-    Resp3 = crypto:des_ecb_encrypt(Key3, Challenge),
+    Resp1 = crypto:block_encrypt(des_ecb, Key1, Challenge),
+    Resp2 = crypto:block_encrypt(des_ecb, Key2, Challenge),
+    Resp3 = crypto:block_encrypt(des_ecb, Key3, Challenge),
 
     <<Resp1/binary, Resp2/binary, Resp3/binary>>.
 
 v2_generate_authenticator_response(PasswdHash, NTResponse, PeerChallenge, AuthenticatorChallenge, UserName) ->
     PasswdHashHash = nt_hash(PasswdHash),
 
-    Digest = crypto:sha([PasswdHashHash, NTResponse, v2_magic1()]),
+    Digest = crypto:hash(sha, [PasswdHashHash, NTResponse, v2_magic1()]),
     ChallengeHash = v2_challenge_hash(PeerChallenge, AuthenticatorChallenge, UserName),
-    FinalDigest = crypto:sha([Digest, ChallengeHash, v2_magic2()]),
+    FinalDigest = crypto:hash(sha, [Digest, ChallengeHash, v2_magic2()]),
 
     %% trailing space needed for some implementations...
     <<"S=", (eradius_log:bin_to_hexstr(FinalDigest))/binary, " ">>.
 
 des_hash(<< Key:7/binary >>) ->
-    crypto:des_ecb_encrypt(des_key_from_hash(Key), <<"KGS!@#$%">>).
+    crypto:block_encrypt(des_ecb, des_key_from_hash(Key), <<"KGS!@#$%">>).
 
 lm_password(Password) ->
     binary:part(eradius_lib:pad_to(14, list_to_binary(string:to_upper(binary_to_list(Password)))), 0, 14).
@@ -207,11 +207,11 @@ ms_chap_v2_attrs(UserName, PasswdHash, AuthenticatorChallenge, Ident, PeerChalle
 %% -- MS-CHAP-V2 MPPE key functions
 %% @doc calculate MPPE master key
 mppe_get_master_key(PasswordHashHash, NTResponse) ->
-    binary:part(crypto:sha([PasswordHashHash, NTResponse, mppe_magic1()]), 0, 16).
+    binary:part(crypto:hash(sha, [PasswordHashHash, NTResponse, mppe_magic1()]), 0, 16).
 
 %% @doc calculate next MPPE key from current
 mppe_get_new_key_from_sha(StartKey, SessionKey, SessionKeyLength) ->
-    Key = crypto:sha([StartKey, mppe_sha_pad1(), SessionKey, mppe_sha_pad2()]),
+    Key = crypto:hash(sha, [StartKey, mppe_sha_pad1(), SessionKey, mppe_sha_pad2()]),
     binary:part(Key, 0, SessionKeyLength).
 
 %% @doc calculate first MPPE send key
