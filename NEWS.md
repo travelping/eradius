@@ -3,7 +3,7 @@ eradius
 
 A generic RADIUS client and server.
 
-Version 0.6.0 - xx Feb 2015
+Version 0.6.0 - 11 Feb 2015
 ---------------------------
 
 * fix Message-Authenitcatior validation in access replies (API change)
