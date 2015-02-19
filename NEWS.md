@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.6.1 - xx Mar 2015
+---------------------------
+
+* update Travelping dictionary
+
 Version 0.6.0 - 11 Feb 2015
 ---------------------------
 
