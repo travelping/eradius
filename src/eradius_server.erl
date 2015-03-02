@@ -275,6 +275,8 @@ handle_request({HandlerMod, HandlerArg}, NasProp, FromIP, EncRequest) ->
         Request = #radius_request{} ->
             request_inc_counter(Request#radius_request.cmd, NasProp),
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
+            lager:info(eradius_log:collect_meta(Request),"~s",
+                       [eradius_log:collect_message(Sender, Request)]),
             eradius_log:write_request(Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, FromIP);
         bad_pdu ->
@@ -315,6 +317,8 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, FromIP) ->
 									       msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
 									       eap_msg = EAPmsg}),
             reply_inc_counter(ReplyCmd, NasProp),
+            lager:info(eradius_log:collect_meta(Reply),"~s",
+                       [eradius_log:collect_message(Sender, Reply)]),
             eradius_log:write_request(Sender, Reply),
             {reply, EncReply};
         noreply ->
