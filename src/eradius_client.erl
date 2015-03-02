@@ -184,7 +184,8 @@ configure(State) ->
         {ok, Address} ->
             configure_address(State, ClientPortCount, Address);
         {error, _} ->
-            eradius:error_report("Invalid RADIUS client IP: ~p~n", [ClientIP]),
+	    lager:error([{clientIP, ClientIP}],
+            "Invalid RADIUS client IP (parsing failed): ~p", [ClientIP]),
             {error, {bad_client_ip, ClientIP}}
     end.
 
@@ -195,7 +196,8 @@ configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NA
         NAdd    ->
             configure_ports(State, NPorts);
         _       ->
-            eradius:info_report("Reopening RADIUS client sockets (client_ip changed)~n", []),
+            lager:info([{clientIP, NAdd}],
+                "Reopening RADIUS client sockets (client_ip changed to ~p)", [NAdd]),
             array:map(  fun(_PortIdx, Pid) ->
                                 case Pid of
                                     undefined   -> done;

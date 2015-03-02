@@ -86,12 +86,12 @@ handle_call({lookup_pid, Server}, _From, State) ->
         Pid ->
             {reply, {ok, Pid}, State}
     end;
-handle_call({set_trace, NasKey, Trace}, _From, State) ->
+handle_call({set_trace, NasKey, _Trace}, _From, State) ->
     case ets:lookup(?NAS_TAB, NasKey) of
         [] ->
             {reply, {error, not_found}, State};
         [Rec = #nas{prop = Prop}] ->
-            NewNas = Rec#nas{prop = Prop#nas_prop{trace = Trace}},
+            NewNas = Rec#nas{prop = Prop},
             ets:insert(?NAS_TAB, NewNas),
             {reply, ok, State}
     end;
@@ -118,7 +118,7 @@ configure(#state{running = Running}) ->
     {ok, ConfServList} = application:get_env(servers),
     case eradius_config:validate_config(ConfServList) of
         {invalid, Message} ->
-            eradius:error_report("invalid server config: ~s", [Message]),
+            lager:error("Invalid server config, ~s", [Message]),
             {error, invalid_config};
         ServList ->
             NasList = lists:flatmap(fun(Server) ->
@@ -147,7 +147,9 @@ configure(#state{running = Running}) ->
                                                  [{{IP, Port}, Pid} | Acc];
                                              {error, Error} ->
                                                  Host = inet_parse:ntoa(IP),
-                                                 eradius:error_report("Could not start listener ~s:~b: ~p~n", [Host, Port, Error]),
+                                                 lager:error([{ip, Host},{port,Port}],
+                                                  "Could not start listener on host: ~s:~b, occuring error: ~p",
+                                                  [Host, Port, Error]),
                                                  Acc
                                          end
                                  end, Started, ToStart),
@@ -159,7 +161,7 @@ configure(#state{running = Running}) ->
 server_naslist({{IP, Port}, HandlerList}) ->
     [#nas{key = {{IP, Port}, NasIP},
           handler = {HandlerMod, HandlerArgs},
-          prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret, trace = false}}
+          prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret}}
       || {NasId, NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs} <- HandlerList].
 
 %-spec config_nodes(valid_config()) -> list(node()).

@@ -101,6 +101,7 @@ init({IP, Port}) ->
 handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{transacts = Transacts}) ->
     case lookup_nas(State, FromIP, Packet) of
         {ok, ReqID, Handler, NasProp} ->
+            #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
             ReqKey = {FromIP, FromPortNo, ReqID},
             NNasProp = NasProp#nas_prop{nas_port = FromPortNo},
             case ets:lookup(Transacts, ReqKey) of
@@ -108,14 +109,18 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
                     HandlerPid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqKey, Handler, NNasProp, ReqUDP]),
                     ets:insert(Transacts, {ReqKey, {handling, HandlerPid}}),
                     eradius_counter:inc_counter(requests, NasProp);
-                [{_ReqKey, {handling, _HandlerPid}}] ->
+                [{_ReqKey, {handling, HandlerPid}}] ->
                     %% handler process is still working on the request
-                    dbg(NasProp, "duplicate request (being handled) ~p~n", [ReqKey]),
+                    lager:debug([{server_ip, ServerIP},{server_port, Port},{nas_ip, FromIP}],
+                        "IP: ~p Port: ~p FromIP: ~p INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p", 
+                        [ServerIP, Port, FromIP, HandlerPid, ReqKey]),
                     eradius_counter:inc_counter(dupRequests, NasProp);
                 [{_ReqKey, {replied, HandlerPid}}] ->
                     %% handler process waiting for resend message
                     HandlerPid ! {self(), resend, Socket},
-                    dbg(NasProp, "duplicate request (resend) ~p~n", [ReqKey]),
+                    lager:debug([{server_ip, ServerIP},{server_port, Port},{nas_ip, FromIP}],
+                        "IP: ~p Port: ~p FromIP: ~p INF: Handler ~p waiting for resent message. duplicate request (resent) ~p", 
+                         [ServerIP, Port, FromIP, HandlerPid, ReqKey]),
                     eradius_counter:inc_counter(dupRequests, NasProp)
             end,
             NewState = State;
@@ -175,21 +180,28 @@ lookup_nas(_State, _NasIP, _Packet) ->
 %% @private
 -spec do_radius(pid(), term(), eradius_server_mon:handler(), #nas_prop{}, udp_packet()) -> any().
 do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, FromIP, FromPort, EncRequest}) ->
+    #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
     Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
     case run_handler(Nodes, NasProp, Handler, EncRequest) of
         {reply, EncReply} ->
-            dbg(NasProp, "sending response for ~p~n", [ReqKey]),
+            lager:debug([{server_ip, ServerIP}, {server_port, Port}, {nas_ip, FromIP}],
+                "IP: ~p Port: ~p FromIP: ~p INF: Sending response for request ~p", 
+                 [ServerIP, Port, FromIP, ReqKey]),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             ServerPid ! {replied, ReqKey, self()},
             eradius_counter:inc_counter(replies, NasProp),
             {ok, ResendTimeout} = application:get_env(eradius, resend_timeout),
             wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES);
         {discard, Reason} ->
-            dbg(NasProp, "discarding request ~p: ~1000.p~n", [ReqKey, Reason]),
+            lager:debug([{server_ip, ServerIP}, {server_port, Port}, {nas_ip, FromIP}],
+                "IP: ~p Port: ~p FromIP: ~p INF: Handler discarded the request ~p for reason ~1000.p", 
+                [ServerIP, Port, FromIP, Reason, ReqKey]),
             discard_inc_counter(Reason, NasProp),
             ServerPid ! {discarded, ReqKey};
         {exit, Reason} ->
-            dbg(NasProp, "discarding request (handler EXIT) ~p: ~p~n", [ReqKey, Reason]),
+            lager:debug([{server_ip, ServerIP}, {server_port, Port}, {nas_ip, FromIP}],
+                "IP: ~p Port: ~p FromIP: ~p INF: Handler exited for reason ~p, discarding request ~p", 
+                [ServerIP, Port, FromIP, Reason, ReqKey]),
             eradius_counter:inc_counter(handlerFailure, NasProp),
             ServerPid ! {discarded, ReqKey}
     end.
@@ -282,12 +294,12 @@ handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasPropTuple, EncRequest
 nas_prop_record_to_tuple(R = #nas_prop{}) ->
     {nas_prop_v1, R#nas_prop.server_ip, R#nas_prop.server_port,
                   R#nas_prop.nas_ip, R#nas_prop.nas_port,
-                  R#nas_prop.secret, R#nas_prop.trace, R#nas_prop.handler_nodes}.
+                  R#nas_prop.secret, R#nas_prop.handler_nodes}.
 
-nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, NasPort, Secret, Trace, Nodes}) ->
+nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, NasPort, Secret, _Trace, Nodes}) ->
     #nas_prop{server_ip = ServerIP, server_port = ServerPort,
               nas_ip = NasIP, nas_port = NasPort,
-              secret = Secret, trace = Trace, handler_nodes = Nodes}.
+              secret = Secret, handler_nodes = Nodes}.
 
 -spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {exit, term()} | {reply, binary()}.
 apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
@@ -303,23 +315,18 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
         noreply ->
             {discard, handler_returned_noreply};
         OtherReturn ->
-            error_logger:error_report([radius_handler, {type, bad_return},
-                                                       {return, OtherReturn}]),
-            {discard, {bad_return, OtherReturn}}
+	    lager:error([{server_ip,ServerIP},{server_port,Port},{clientIP, FromIP}],
+            "IP: ~p Port: ~p FromIP: ~p INF: Unexpected return for request ~p from handler ~p: type of return: ~p, returned value: ~p",
+            [ServerIP, Port, FromIP, Request, HandlerArg, bad_return, OtherReturn]),
+	    {discard, {bad_return, OtherReturn}}
     catch
         Class:Reason ->
-            error_logger:error_report([radius_handler, {type, 'CRASH'},
-                                                       {class, Class},
-                                                       {reason, Reason},
-                                                       {stacktrace, erlang:get_stacktrace()}]),
+            lager:error([{server_ip,ServerIP},{server_port,Port},{clientIP, FromIP}],
+                "IP: ~p Port: ~p FromIP: ~p INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
+                [ServerIP, Port, FromIP, Request, Class, Reason, erlang:get_stacktrace()]),
             {exit, {Class, Reason}}
     end.
 
--spec dbg(#nas_prop{}, string(), list()) -> ok.
-dbg(#nas_prop{trace = true}, Fmt, Vals) ->
-    io:put_chars([printable_date(), " -- ", io_lib:format(Fmt, Vals)]);
-dbg(_, _, _) ->
-    ok.
 
 -spec printable_date() -> io_lib:chars().
 printable_date() ->
