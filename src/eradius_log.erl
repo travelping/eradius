@@ -24,7 +24,8 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, write_request/2]).
+-export([start_link/0, write_request/2,
+         collect_meta/1, collect_message/2]).
 -export([bin_to_hexstr/1]).
 
 %% gen_server callbacks
@@ -54,6 +55,15 @@ write_request(Sender, Request = #radius_request{}) ->
         _ ->
             ok
     end.
+
+-spec collect_meta(#radius_request{}) -> [{term(),term()}].
+collect_meta(Request) ->
+    Attrs = Request#radius_request.attrs,
+    [collect_attr(Key, Val) || {Key, Val} <- Attrs].
+
+-spec collect_message(sender(),#radius_request{}) -> iolist().
+collect_message({NASIP, NASPort, ReqID}, Request) ->
+    io_lib:format("~s:~p [~p]: ~s",[inet:ntoa(NASIP), NASPort, ReqID, format_cmd(Request#radius_request.cmd)]).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -145,6 +155,18 @@ print_attr(Id, Val) ->
             print_attr(#attribute{id = Id, name = Name, type = octets}, Val)
     end.
 
+collect_attr(Key = #attribute{name = Attr, type = _Type}, InVal) ->
+    FmtVal = collectable_attr_value(Key, InVal),
+    {list_to_atom(Attr), FmtVal};
+collect_attr(Id, Val) ->
+    case eradius_dict:lookup(Id) of
+        [Attr = #attribute{}] ->
+            collect_attr(Attr, Val);
+        _ ->
+            Name = format_unknown(Id),
+            collect_attr(#attribute{id = Id, name = Name, type = octets}, Val)
+    end.
+
 printable_attr_value(Attr = #attribute{type = {tagged, RealType}}, {Tag, RealVal}) ->
     ValBin = printable_attr_value(Attr#attribute{type = RealType}, RealVal),
     TagBin = case Tag of
@@ -169,6 +191,31 @@ printable_attr_value(_Attr, <<Val/binary>>) ->
     <<"0x", (bin_to_hexstr(Val))/binary>>;
 printable_attr_value(_Attr, Val) ->
     list_to_binary(io_lib:format("~p", [Val])).
+
+collectable_attr_value(Attr = #attribute{type = {tagged, RealType}}, {Tag, RealVal}) ->
+    ValCol = collectable_attr_value(Attr#attribute{type = RealType}, RealVal),
+    TagCol = case Tag of
+                 undefined -> empty;
+                 Int       -> Int
+             end,
+    {TagCol, ValCol};
+collectable_attr_value(#attribute{type = string}, Value) when is_binary(Value) ->
+    binary_to_list(Value);
+collectable_attr_value(#attribute{type = string}, Value) when is_list(Value) ->
+    Value;
+collectable_attr_value(#attribute{type = ipaddr}, IP) ->
+    inet_parse:ntoa(IP);
+collectable_attr_value(#attribute{id = ID, type = integer}, Val) when is_integer(Val) ->
+    case eradius_dict:lookup({ID, Val}) of
+        [#value{name = VName}] -> VName;
+        _                      -> Val
+    end;
+collectable_attr_value(#attribute{type = date}, {{Y,Mo,D},{H,Min,S}}) ->
+    io_lib:fwrite("~4..0B-~2..0B-~2..0BT~2..0B:~2..0B:~2..0B", [Y, Mo, D, H, Min, S]);
+collectable_attr_value(_Attr, <<Val/binary>>) ->
+    "0x"++binary_to_list(bin_to_hexstr(Val));
+collectable_attr_value(_Attr, Val) ->
+    io_lib:format("~p", [Val]).
 
 radius_date({{YYYY,MM,DD},{Hour,Min,Sec}}) ->
     DayNumber = calendar:day_of_the_week(YYYY, MM, DD),
