@@ -177,6 +177,7 @@ terminate(_Reason, _State) -> ok.
 %% @private
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
+%% @private
 configure(State) ->
     {ok, ClientPortCount} = application:get_env(eradius, client_ports),
     {ok, ClientIP} = application:get_env(eradius, client_ip),

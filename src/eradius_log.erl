@@ -51,7 +51,7 @@ write_request(Sender, Request = #radius_request{}) ->
     case application:get_env(eradius, logging) of
         {ok, true} ->
             Time = calendar:universal_time(),
-	    gen_server:cast(?SERVER, {write_request, Time, Sender, Request});
+            gen_server:cast(?SERVER, {write_request, Time, Sender, Request});
         _ ->
             ok
     end.
