@@ -46,7 +46,7 @@
 -export_type([port_number/0, req_id/0]).
 
 %% internal
--export([do_radius/5, handle_request/3, handle_remote_request/5, stats/2]).
+-export([do_radius/5, handle_request/4, handle_remote_request/5, handle_remote_request/6, stats/2]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -182,7 +182,7 @@ lookup_nas(_State, _NasIP, _Packet) ->
 do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, FromIP, FromPort, EncRequest}) ->
     #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
     Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
-    case run_handler(Nodes, NasProp, Handler, EncRequest) of
+    case run_handler(Nodes, NasProp, FromIP, Handler, EncRequest) of
         {reply, EncReply} ->
             lager:debug([{server_ip, ServerIP}, {server_port, Port}, {nas_ip, FromIP}],
                 "IP: ~p Port: ~p FromIP: ~p INF: Sending response for request ~p", 
@@ -227,36 +227,36 @@ wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries) ->
             ServerPid ! {discarded, ReqKey}
     end.
 
-run_handler([], _NasProp, _Handler, _EncRequest) ->
+run_handler([], _NasProp, _FromIP, _Handler, _EncRequest) ->
     {discard, no_nodes};
-run_handler(NodesAvailable, NasProp = #nas_prop{handler_nodes = local}, Handler, EncRequest) ->
+run_handler(NodesAvailable, NasProp = #nas_prop{handler_nodes = local}, FromIP, Handler, EncRequest) ->
     case lists:member(node(), NodesAvailable) of
         true ->
-            handle_request(Handler, NasProp, EncRequest);
+            handle_request(Handler, NasProp, FromIP, EncRequest);
         false ->
             {discard, no_nodes_local}
     end;
-run_handler(NodesAvailable, NasProp, Handler, EncRequest) ->
+run_handler(NodesAvailable, NasProp, FromIP, Handler, EncRequest) ->
     case ordsets:intersection(lists:usort(NodesAvailable), lists:usort(NasProp#nas_prop.handler_nodes)) of
         [LocalNode] when LocalNode == node() ->
-            handle_request(Handler, NasProp, EncRequest);
+            handle_request(Handler, NasProp, FromIP, EncRequest);
         [RemoteNode] ->
-            run_remote_handler(RemoteNode, Handler, NasProp, EncRequest);
+            run_remote_handler(RemoteNode, Handler, NasProp, FromIP, EncRequest);
         Nodes ->
             %% humble testing at the erlang shell indicated that phash2 distributes N
             %% very well even for small lenghts.
             N = erlang:phash2(make_ref(), length(Nodes)) + 1,
             case lists:nth(N, Nodes) of
                 LocalNode when LocalNode == node() ->
-                    handle_request(Handler, NasProp, EncRequest);
+                    handle_request(Handler, NasProp, FromIP, EncRequest);
                 RemoteNode ->
-                    run_remote_handler(RemoteNode, Handler, NasProp, EncRequest)
+                    run_remote_handler(RemoteNode, Handler, NasProp, FromIP, EncRequest)
             end
     end.
 
-run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, EncRequest) ->
+run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, FromIP, EncRequest) ->
     NasPropTuple = nas_prop_record_to_tuple(NasProp),
-    RemoteArgs = [self(), HandlerMod, HandlerArgs, NasPropTuple, EncRequest],
+    RemoteArgs = [self(), HandlerMod, HandlerArgs, NasPropTuple, FromIP, EncRequest],
     HandlerPid = spawn_link(Node, ?MODULE, handle_remote_request, RemoteArgs),
     receive
         {HandlerPid, ReturnValue} ->
@@ -269,14 +269,14 @@ run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, EncRequest) ->
     end.
 
 %% @private
--spec handle_request(eradius_server_mon:handler(), #nas_prop{}, binary()) -> any().
-handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest) ->
+-spec handle_request(eradius_server_mon:handler(), #nas_prop{}, inet:ip_address(), binary()) -> any().
+handle_request({HandlerMod, HandlerArg}, NasProp, FromIP, EncRequest) ->
     case eradius_lib:decode_request(EncRequest, NasProp#nas_prop.secret) of
         Request = #radius_request{} ->
             request_inc_counter(Request#radius_request.cmd, NasProp),
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             eradius_log:write_request(Sender, Request),
-            apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
+            apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, FromIP);
         bad_pdu ->
             {discard, bad_pdu}
     end.
@@ -286,9 +286,12 @@ handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest) ->
 %%   remote handlers need to be upgraded if the signature of this function changes.
 %%   error reports go to the logger of the node that executes the request.
 handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasPropTuple, EncRequest) ->
+    FromIP = element(4, NasPropTuple),
+    handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasPropTuple, FromIP, EncRequest).
+handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasPropTuple, FromIP, EncRequest) ->
     group_leader(whereis(user), self()),
     NasProp = nas_prop_tuple_to_record(NasPropTuple),
-    Result = handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest),
+    Result = handle_request({HandlerMod, HandlerArg}, NasProp, FromIP, EncRequest),
     ReplyPid ! {self(), Result}.
 
 nas_prop_record_to_tuple(R = #nas_prop{}) ->
@@ -301,8 +304,10 @@ nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, NasPort, Sec
               nas_ip = NasIP, nas_port = NasPort,
               secret = Secret, handler_nodes = Nodes}.
 
--spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {exit, term()} | {reply, binary()}.
-apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
+% is use of inet:ip_adress() correct?
+-spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}, inet:ip_address()) -> {discard, term()} | {exit, term()} | {reply, binary()}.
+apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, FromIP) ->
+    #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
     try HandlerMod:radius_request(Request, NasProp, HandlerArg) of
         {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs, msg_hmac = MsgHMAC, eap_msg = EAPmsg}} ->
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
