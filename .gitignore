@@ -10,6 +10,8 @@ tetrapak/.*.cache
 *.log
 /dist/
 /test-log/
-
+/log/*
+*.html
 /doc/*
 !/doc/overview.edoc
+*.tags*
