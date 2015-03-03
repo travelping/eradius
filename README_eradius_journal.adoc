@@ -23,7 +23,7 @@ Mon Feb 02 10:15:25 2015 10.38.0.1:24208 [240] Access-Request # <1>
         Service-Type = Framed-User
         Framed-Protocol = GPRS-PDP-Context
         NAS-Port-Type = Wireless-Other
-        X_3GPP-IMSI = "234159150687262" <3>
+        X_3GPP-IMSI = "123456789876543" <3>
 
 ----
 
@@ -44,21 +44,21 @@ Mon Feb 02 10:15:25 2015 10.38.0.1:24208 [195] Accounting-Request
     Service-Type = Framed-User
     Framed-Protocol = GPRS-PDP-Context
     NAS-Port-Type = Wireless-Other
-    X_3GPP-IMSI = "234159150687262"
-    Acct-Session-Id = "D4B790E7047BB263"
+    X_3GPP-IMSI = "123456789876543"
+    Acct-Session-Id = "A123B456C789D123"
     Acct-Authentic = RADIUS
-    Acct-Multi-Session-Id = "D4B790E7047BB263"
+    Acct-Multi-Session-Id = "A123B456C789D321"
     Framed-MTU = 1500
     Event-Timestamp = 2015-02-02T10:15:25
-    Framed-IP-Address = 10.38.11.151
-    NAS-Port = 67931
+    Framed-IP-Address = 12.34.56.101
+    NAS-Port = 12345
 ----
 
 If you want to analyse the this logfiles with classic line based console tools like
 
 [listing]
 ----
-cat radius.log | grep 234159150687262
+cat radius.log | grep 123456789876543
 ----
 
 you run quickly in trouble as the command will find the appropiate log line in the radius.log file but you loose all the context due
@@ -173,8 +173,8 @@ Fr, 2015-02-13 12:02:44.995819 CET [s=587acfdc7ec6473492726d96355d56c2;i=eff;b=7
         USER_NAME="test"
         NAS_IP_ADDRESS="88.88.88.88"
         NAS_PORT=8888
-        X_3GPP_IMSI="1337" <2>
-        CALLING_STATION_ID="447721218119"
+        X_3GPP_IMSI="123456789123" <2>
+        CALLING_STATION_ID="001122334455"
         SERVICE_TYPE="Framed-User"
         FRAMED_PROTOCOL="GPRS-PDP-Context"
         CALLED_STATION_ID="m2m.cellubi.co.uk"
