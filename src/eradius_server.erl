@@ -112,15 +112,15 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
                 [{_ReqKey, {handling, HandlerPid}}] ->
                     %% handler process is still working on the request
                     lager:debug([{server_ip, ServerIP},{server_port, Port},{nas_ip, FromIP}],
-                        "IP: ~p Port: ~p FromIP: ~p INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p", 
-                        [ServerIP, Port, FromIP, HandlerPid, ReqKey]),
+                        "~p:~p From: ~p:~p INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p", 
+                        [ServerIP, Port, FromIP, FromPortNo, HandlerPid, ReqKey]),
                     eradius_counter:inc_counter(dupRequests, NasProp);
                 [{_ReqKey, {replied, HandlerPid}}] ->
                     %% handler process waiting for resend message
                     HandlerPid ! {self(), resend, Socket},
                     lager:debug([{server_ip, ServerIP},{server_port, Port},{nas_ip, FromIP}],
-                        "IP: ~p Port: ~p FromIP: ~p INF: Handler ~p waiting for resent message. duplicate request (resent) ~p", 
-                         [ServerIP, Port, FromIP, HandlerPid, ReqKey]),
+                        "~p:~p From: ~p:~p INF: Handler ~p waiting for resent message. duplicate request (resent) ~p", 
+                         [ServerIP, Port, FromIP, FromPortNo, HandlerPid, ReqKey]),
                     eradius_counter:inc_counter(dupRequests, NasProp)
             end,
             NewState = State;
@@ -185,8 +185,8 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
     case run_handler(Nodes, NasProp, FromIP, Handler, EncRequest) of
         {reply, EncReply} ->
             lager:debug([{server_ip, ServerIP}, {server_port, Port}, {nas_ip, FromIP}],
-                "IP: ~p Port: ~p FromIP: ~p INF: Sending response for request ~p", 
-                 [ServerIP, Port, FromIP, ReqKey]),
+                "~p:~p From: ~p:~p INF: Sending response for request ~p", 
+                 [ServerIP, Port, FromIP, FromPort, ReqKey]),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             ServerPid ! {replied, ReqKey, self()},
             eradius_counter:inc_counter(replies, NasProp),
@@ -194,14 +194,14 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
             wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES);
         {discard, Reason} ->
             lager:debug([{server_ip, ServerIP}, {server_port, Port}, {nas_ip, FromIP}],
-                "IP: ~p Port: ~p FromIP: ~p INF: Handler discarded the request ~p for reason ~1000.p", 
-                [ServerIP, Port, FromIP, Reason, ReqKey]),
+                "~p:~p From: ~p:~p INF: Handler discarded the request ~p for reason ~1000.p", 
+                [ServerIP, Port, FromIP, FromPort, Reason, ReqKey]),
             discard_inc_counter(Reason, NasProp),
             ServerPid ! {discarded, ReqKey};
         {exit, Reason} ->
             lager:debug([{server_ip, ServerIP}, {server_port, Port}, {nas_ip, FromIP}],
-                "IP: ~p Port: ~p FromIP: ~p INF: Handler exited for reason ~p, discarding request ~p", 
-                [ServerIP, Port, FromIP, Reason, ReqKey]),
+                "~p:~p From: ~p:~p INF: Handler exited for reason ~p, discarding request ~p", 
+                [ServerIP, Port, FromIP, FromPort, Reason, ReqKey]),
             eradius_counter:inc_counter(handlerFailure, NasProp),
             ServerPid ! {discarded, ReqKey}
     end.
