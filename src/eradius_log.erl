@@ -61,9 +61,9 @@ collect_meta(Request) ->
     Attrs = Request#radius_request.attrs,
     [collect_attr(Key, Val) || {Key, Val} <- Attrs].
 
--spec collect_message(sender(),#radius_request{}) -> string().
+-spec collect_message(sender(),#radius_request{}) -> iolist().
 collect_message({NASIP, NASPort, ReqID}, Request) ->
-    lists:flatten(io_lib:format("~s:~p [~p]: ~s",[inet:ntoa(NASIP), NASPort, ReqID, format_cmd(Request#radius_request.cmd)])).
+    io_lib:format("~s:~p [~p]: ~s",[inet:ntoa(NASIP), NASPort, ReqID, format_cmd(Request#radius_request.cmd)]).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -204,8 +204,8 @@ collectable_attr_value(#attribute{type = string}, Value) when is_binary(Value) -
     binary_to_list(Value);
 collectable_attr_value(#attribute{type = string}, Value) when is_list(Value) ->
     Value;
-collectable_attr_value(#attribute{type = ipaddr}, IP_Adress) ->
-    inet_parse:ntoa(IP_Adress);
+collectable_attr_value(#attribute{type = ipaddr}, IP) ->
+    inet_parse:ntoa(IP);
 collectable_attr_value(#attribute{id = ID, type = integer}, Val) when is_integer(Val) ->
     case eradius_dict:lookup({ID, Val}) of
         [#value{name = VName}] -> VName;
