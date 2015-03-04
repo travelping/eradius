@@ -185,7 +185,7 @@ configure(State) ->
         {ok, Address} ->
             configure_address(State, ClientPortCount, Address);
         {error, _} ->
-	    lager:error([{clientIP, ClientIP}],
+	    lager:error([{client_ip, ClientIP}],
             "Invalid RADIUS client IP (parsing failed): ~p", [ClientIP]),
             {error, {bad_client_ip, ClientIP}}
     end.
@@ -197,7 +197,7 @@ configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NA
         NAdd    ->
             configure_ports(State, NPorts);
         _       ->
-            lager:info([{clientIP, NAdd}],
+            lager:info([{client_ip, NAdd}],
                 "Reopening RADIUS client sockets (client_ip changed to ~p)", [NAdd]),
             array:map(  fun(_PortIdx, Pid) ->
                                 case Pid of

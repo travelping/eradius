@@ -324,13 +324,13 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp, FromIP) ->
         noreply ->
             {discard, handler_returned_noreply};
         OtherReturn ->
-	    lager:error([{server_ip,ServerIP},{server_port,Port},{clientIP, FromIP}],
+	    lager:error([{server_ip,ServerIP},{server_port,Port},{client_ip, FromIP}],
             "IP: ~p Port: ~p FromIP: ~p INF: Unexpected return for request ~p from handler ~p: type of return: ~p, returned value: ~p",
             [ServerIP, Port, FromIP, Request, HandlerArg, bad_return, OtherReturn]),
 	    {discard, {bad_return, OtherReturn}}
     catch
         Class:Reason ->
-            lager:error([{server_ip,ServerIP},{server_port,Port},{clientIP, FromIP}],
+            lager:error([{server_ip,ServerIP},{server_port,Port},{client_ip, FromIP}],
                 "IP: ~p Port: ~p FromIP: ~p INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
                 [ServerIP, Port, FromIP, Request, Class, Reason, erlang:get_stacktrace()]),
             {exit, {Class, Reason}}
