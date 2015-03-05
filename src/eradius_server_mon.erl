@@ -6,7 +6,7 @@
 %%   then sends ping requests to all nodes that are part of the configuration in order
 %%   to keep them connected.
 -module(eradius_server_mon).
--export([start_link/0, reconfigure/0, lookup_handler/3, lookup_pid/2, set_trace/4, all_nas_keys/0]).
+-export([start_link/0, reconfigure/0, lookup_handler/3, lookup_pid/2, all_nas_keys/0]).
 -export_type([handler/0]).
 
 -behaviour(gen_server).
@@ -63,11 +63,6 @@ lookup_pid(ServerIP, ServerPort) ->
 all_nas_keys() ->
 	ets:select(?NAS_TAB, [{#nas{key = '$1', _ = '_'}, [], ['$1']}]).
 
-%% @doc Set or clear the trace flag for a given Server/NAS combination.
--spec set_trace(inet:ip_address(), eradius_server:port_number(), inet:ip_address(), boolean()) -> ok.
-set_trace(ServerIP, ServerPort, NasIP, Trace) when is_boolean(Trace) ->
-    gen_server:call(?SERVER, {set_trace, {{ServerIP, ServerPort}, NasIP}, Trace}).
-
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
 -record(state, {running}).
@@ -85,15 +80,6 @@ handle_call({lookup_pid, Server}, _From, State) ->
             {reply, {error, not_found}, State};
         Pid ->
             {reply, {ok, Pid}, State}
-    end;
-handle_call({set_trace, NasKey, Trace}, _From, State) ->
-    case ets:lookup(?NAS_TAB, NasKey) of
-        [] ->
-            {reply, {error, not_found}, State};
-        [Rec = #nas{prop = Prop}] ->
-            NewNas = Rec#nas{prop = Prop#nas_prop{trace = Trace}},
-            ets:insert(?NAS_TAB, NewNas),
-            {reply, ok, State}
     end;
 handle_call(reconfigure, _From, State) ->
     case configure(State) of
@@ -118,7 +104,7 @@ configure(#state{running = Running}) ->
     {ok, ConfServList} = application:get_env(servers),
     case eradius_config:validate_config(ConfServList) of
         {invalid, Message} ->
-            eradius:error_report("invalid server config: ~s", [Message]),
+            lager:error("Invalid server config, ~s", [Message]),
             {error, invalid_config};
         ServList ->
             NasList = lists:flatmap(fun(Server) ->
@@ -146,8 +132,8 @@ configure(#state{running = Running}) ->
                                              {ok, Pid} ->
                                                  [{{IP, Port}, Pid} | Acc];
                                              {error, Error} ->
-                                                 Host = inet_parse:ntoa(IP),
-                                                 eradius:error_report("Could not start listener ~s:~b: ~p~n", [Host, Port, Error]),
+                                                 lager:error("Could not start listener on host: ~s, occuring error: ~p",
+                                                  [eradius_server:printable_peer(IP, Port), Error]),
                                                  Acc
                                          end
                                  end, Started, ToStart),
@@ -159,7 +145,7 @@ configure(#state{running = Running}) ->
 server_naslist({{IP, Port}, HandlerList}) ->
     [#nas{key = {{IP, Port}, NasIP},
           handler = {HandlerMod, HandlerArgs},
-          prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret, trace = false}}
+          prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret}}
       || {NasId, NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs} <- HandlerList].
 
 %-spec config_nodes(valid_config()) -> list(node()).

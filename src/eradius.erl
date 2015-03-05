@@ -9,7 +9,6 @@
 -export([start/2, stop/1, config_change/3]).
 
 %% internal use
--export([error_report/2, info_report/2]).
 
 -include("eradius_lib.hrl").
 
@@ -64,15 +63,6 @@ ensure_ip(IPString) when is_list(IPString) ->
 ensure_ip(IP) ->
     error(badarg, [IP]).
 
-%% @private
-%% @doc Log an error using error_logger
-error_report(Fmt, Vals) ->
-    error_logger:error_report(lists:flatten(io_lib:format(Fmt, Vals))).
-
-%% @private
-%% @doc Log a message using error_logger
-info_report(Fmt, Vals) ->
-    error_logger:info_report(lists:flatten(io_lib:format(Fmt, Vals))).
 
 %% ----------------------------------------------------------------------------------------------------
 %% -- application callbacks
