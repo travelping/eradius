@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.6.1 - 05 Mar 2015
+---------------------------
+* switching to lager logging
+* using systemds journal for informational eradius logging
+
 Version 0.6.0 - 11 Feb 2015
 ---------------------------
 
