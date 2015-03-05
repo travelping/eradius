@@ -87,7 +87,6 @@
     nas_ip        :: inet:ip_address(),
     nas_port      :: eradius_server:port_number(),
     secret        :: eradius_lib:secret(),
-    trace = false :: boolean(),
     handler_nodes = local :: list(atom()) | local
 }).
 
