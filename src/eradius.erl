@@ -2,7 +2,6 @@
 -module(eradius).
 -export([load_tables/1, load_tables/2,
 	 modules_ready/1, modules_ready/2,
-	 trace_on/3, trace_off/3,
 	 statistics/1]).
 
 -behaviour(application).
@@ -32,15 +31,6 @@ modules_ready(Modules) ->
 %%    available for processing. The modules will be revoked when the given Pid goes down.
 modules_ready(Pid, Modules) ->
     eradius_node_mon:modules_ready(Pid, Modules).
-
-%% @doc Start tracing requests from the given NAS coming in on the given server.
-%%   Do not do do this on a production system, it generates lots of output.
-trace_on(ServerIP, ServerPort, NasIP) ->
-    eradius_server_mon:set_trace(ensure_ip(ServerIP), ServerPort, ensure_ip(NasIP), true).
-
-%% @doc Stop tracing requests from the given NAS.
-trace_off(ServerIP, ServerPort, NasIP) ->
-    eradius_server_mon:set_trace(ensure_ip(ServerIP), ServerPort, ensure_ip(NasIP), false).
 
 %% @doc manipulate server statistics
 %%    * reset: reset all counters to zero
