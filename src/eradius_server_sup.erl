@@ -14,13 +14,11 @@ start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 start_instance(IP, Port) ->
-    IPString = inet_parse:ntoa(IP),
-    eradius:info_report("Starting RADIUS Listener at ~s:~b~n", [IPString, Port]),
+    lager:info("Starting RADIUS Listener at ~s", [eradius_server:printable_peer(IP, Port)]),
     supervisor:start_child(?SERVER, [IP, Port]).
 
 stop_instance(IP, Port, Pid) ->
-    IPString = inet_parse:ntoa(IP),
-    eradius:info_report("Stopping RADIUS Listener at ~s:~b~n", [IPString, Port]),
+    lager:info("Stopping RADIUS Listener at ~s", [eradius_server:printable_peer(IP, Port)]),
     supervisor:terminate_child(?SERVER, Pid).
 
 all() ->

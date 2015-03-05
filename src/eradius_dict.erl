@@ -82,9 +82,9 @@ do_load_tables(Dir, Tables) ->
                                      end
                              end, Tables),
         ets:insert(?TABLENAME, Defs),
-        eradius:info_report("Loaded RADIUS tables: ~p", [Tables])
+        lager:info("Loaded RADIUS tables: ~p", [Tables])
     catch
         throw:{consult, FailedTable} ->
-            eradius:error_report("Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
+            lager:error("Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
             {error, {consult, FailedTable}}
     end.
