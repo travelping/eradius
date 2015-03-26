@@ -15,3 +15,5 @@ tetrapak/.*.cache
 /doc/*
 !/doc/overview.edoc
 *.tags*
+/deps/
+.rebar
