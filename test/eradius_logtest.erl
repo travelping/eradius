@@ -49,7 +49,7 @@ client_test(Command) ->
     Request = eradius_lib:set_attributes(#radius_request{cmd = Command},[
                 {?NAS_Port, 8888},
                 {?User_Name, "test"},
-                {?NAS_IP_Address, {88.88.88.88}},
+                {?NAS_IP_Address, {88,88,88,88}},
                 {?Calling_Station_Id, "447721218119"},
                 {?Service_Type, 2},
                 {?Framed_Protocol, 7},
