@@ -28,8 +28,10 @@ validate_new_config_start(_Servers, {invalid, _} = Invalid) -> Invalid;
 validate_new_config_start(Servers, Nodes) ->
     map_helper(fun(Server) -> validate_new_server_config(Server, Nodes) end, Servers, flatten).
 
-validate_new_server_config({Name, {IP, ListOfPorts}}, Nodes) ->
-    validate_new_server_config(get_app_env(Name), validate_ip(IP), validate_ports(ListOfPorts), Nodes).
+validate_new_server_config({Name, {IP, ListOfPorts}}, Nodes) when is_list(ListOfPorts) ->
+    validate_new_server_config(get_app_env(Name), validate_ip(IP), validate_ports(ListOfPorts), Nodes);
+validate_new_server_config({Name, {IP, Port}}, Nodes) ->
+    validate_new_server_config(get_app_env(Name), validate_ip(IP), validate_ports([Port]), Nodes).
 
 validate_new_server_config({invalid, _} = Invalid, _IP, _ListOfPorts, _Nodes) -> Invalid;
 validate_new_server_config(_NasList, {invalid, _} = Invalid, _ListOfPorts, _Nodes) -> Invalid;

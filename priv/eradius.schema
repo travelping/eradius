@@ -1,0 +1,174 @@
+{mapping, "radius.handler.$server.$nas", "eradius", []}.
+{mapping, "radius.handler.$server.$nas.args", "eradius", []}.
+{mapping, "radius.handler.$server.$nas.source.$src", "eradius", []}.
+{mapping, "radius.handler.$server.$nas.source.$src.$opt", "eradius", []}.
+
+{translation, "eradius",
+    fun(Conf) ->
+        Parse = fun(Str) -> 
+            {ok, T, _} = erl_scan:string("[" ++ Str ++ "]."),
+            {ok, Term} = erl_parse:parse_term(T),
+            Term
+        end,
+        Servers = lists:usort([{Server, Nas} || {["radius", _, Server, Nas], _} <- cuttlefish_variable:filter_by_prefix("radius.handler", Conf)]),
+        Res = [begin 
+            Groups = cuttlefish_variable:filter_by_prefix("radius.handler." ++ Server1 ++ "." ++ Nas1, Conf),
+            NasID = cuttlefish:conf_get("radius.handler." ++ Server1 ++ "." ++ Nas1, Conf),
+            ArgsV = cuttlefish:conf_get("radius.handler." ++ Server1 ++ "." ++ Nas1 ++ ".args", Conf, []),
+            ArgsT = Parse(ArgsV),
+            Grps = [begin 
+                [IP|Tail] = string:tokens(SrcVal, ","),
+                [Secret|_] = Tail,
+                Secret1 = string:strip(Secret),
+                Sources = cuttlefish_variable:filter_by_prefix("radius.handler." ++ Server1 ++ "." ++ Nas1 ++ ".source." ++ Src, Conf),
+                Opts = [{list_to_atom(Opt), list_to_binary(OptVal)} || {["radius",_,_,_,_,_,Opt], OptVal} <- Sources],
+                case Opts of
+                    [] -> {IP, list_to_binary(Secret1)};
+                    _ -> {IP, list_to_binary(Secret1), Opts} 
+                end
+            end || {["radius",_,_,_,_,Src], SrcVal} <- Groups],
+            case Grps of
+                [] -> { list_to_atom(Server1), { {NasID, ArgsT}} };
+                _ -> { list_to_atom(Server1), { {NasID, ArgsT}, Grps } }
+            end
+        end || {Server1, Nas1} <- Servers],
+        Servers2 = [list_to_atom(Server) || {["radius", _, Server, _], _} <- cuttlefish_variable:filter_by_prefix("radius.handler", Conf)],
+        [{Srv, proplists:get_all_values(Srv, Res)} || Srv <- lists:usort(Servers2)]
+    end
+}.
+
+%% @doc Client ip address
+{mapping, "radius.client_ip", "eradius.client_ip", [
+    {default, undefined}
+    % {datatype, ip}
+]}.
+{translation, "eradius.client_ip", 
+    fun(Conf) -> 
+        cuttlefish:conf_get("radius.client_ip", Conf, undefined)
+    end
+}.
+
+%% @doc Numnber of client ports
+{mapping, "radius.client_ports", "eradius.client_ports", [
+    {default, 20},
+    {datatype, integer}
+]}.
+{translation, "eradius.client_ports", 
+    fun(Conf) ->
+        cuttlefish:conf_get("radius.client_ports", Conf)
+    end
+}.
+
+%% @doc Enable/Disable logging
+{mapping, "radius.logging", "eradius.logging", [
+    {default, true},
+    {datatype, atom}
+]}.
+{translation, "eradius.logging",
+    fun(Conf) ->
+        cuttlefish:conf_get("radius.logging", Conf)
+    end
+}.
+
+%% @doc Log file name
+{mapping, "radius.logfile", "eradius.logfile", [
+    {default, "./radius.log"}
+]}.
+{translation, "eradius.logfile",
+    fun(Conf) ->
+        cuttlefish:conf_get("radius.logfile", Conf)
+    end
+}.
+
+%% @doc Queries resend timeout. Set in milliseconds
+{mapping, "radius.resend_timeout", "eradius.resend_timeout", [
+    {default, 30000},
+    {datatype, integer}
+]}.
+{translation, "eradius.resend_timeout", 
+    fun(Conf) -> 
+        cuttlefish:conf_get("radius.resend_timeout", Conf)
+    end
+}.
+
+%% @doc Table of dictionaries
+{mapping, "radius.tables", "eradius.tables", [
+    {datatype, string},
+    {default, "dictionary"}
+]}.
+{translation, "eradius.tables",
+    fun(Conf) ->
+        Tbl = cuttlefish:conf_get("radius.tables", Conf),
+        {ok, T, _} = erl_scan:string("[" ++ Tbl ++ "]."),
+        {ok, Term} = erl_parse:parse_term(T),
+        Term
+    end
+}.
+
+%% @doc RADIUS callback. If only one handler module is used, it can be defined globally. Currently only used it.
+{mapping, "radius.radius_callback", "eradius.radius_callback", [
+    {default, eradius_example_handler},
+    {datatype, atom}
+]}.
+
+{translation, "eradius.radius_callback",
+    fun(Conf) ->
+        cuttlefish:conf_get("radius.radius_callback", Conf)
+    end
+}.
+
+%% @doc Session nodes
+%% Format: eradius.session.nodes = node1@host1, node2@host2 or local
+{mapping, "radius.session.nodes", "eradius.session_nodes", [
+    {datatype, string},
+    {default, "local"}
+]}.
+{translation, "eradius.session.nodes",
+    fun(Conf) ->
+        Nodes = cuttlefish:conf_get("radius.session.nodes", Conf),
+        {ok, T, _} = erl_scan:string("[" ++ Nodes ++ "]."),
+        {ok, Term} = erl_parse:parse_term(T),
+        Term
+    end
+}.
+
+%% @doc Information about server
+%% Format: eradius.server.<server_name>.ip.<connection name> = <ip addr>:<port>
+{mapping, "radius.server.root.ip.auth", "eradius", [
+    {default, "127.0.0.1:1812"}
+]}.
+
+%% @see eradius.server.root.ip.auth
+{mapping, "radius.server.root.ip.acc", "eradius", [
+    {default, "127.0.0.1:1813"}
+]}.
+
+{mapping, "radius.server.$srvname.ip.$type", "eradius.servers.$srvname", []}.
+
+{translation, "eradius.servers",
+    fun(Conf) ->
+        SrvNames = lists:usort([SrvName || {[_, _, SrvName, _, _], _} <- cuttlefish_variable:filter_by_prefix("radius.server", Conf)]),
+        lists:flatten([begin 
+            I = cuttlefish_variable:filter_by_prefix("radius.server." ++ Name, Conf),
+            [{list_to_atom(S), cuttlefish_datatypes:from_string(V, ip)} || {[_, _, S, _, _], V} <- I]
+        end || Name <- SrvNames])
+    end
+}.
+
+%% This is not used now. May be used later.
+{mapping, "radius.session.nodes.$group", "eradius.session_nodes", []}.
+
+{translation, "eradius.session_nodes",
+    fun(Conf) ->
+        Vals = cuttlefish_variable:filter_by_prefix("radius.session.nodes", Conf),
+        case length(Vals) of
+            Len when Len == 1 ->
+                Val = cuttlefish:conf_get("radius.session.nodes", Conf),
+                {ok, T, _} = erl_scan:string("[" ++ Val ++ "]."),
+                {ok, Term} = erl_parse:parse_term(T),
+                Term;
+            Len when Len > 1 ->
+                sess_list
+        end
+    end
+}.

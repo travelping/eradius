@@ -10,10 +10,6 @@
 -include("../include/eradius_dict.hrl").
 -compile(export_all).
 
--task({"build:dicts", "Compile eradius dictionaries"}).
--task({"clean:dicts", "Delete compiled dictionaries"}).
--hook({"build:dicts", run_before, "build:erlang"}).
-
 pre_compile(Config, Appfile) ->
     case rebar_utils:find_files("priv/dictionaries", "^dictionary.*") of
         [] ->
@@ -63,25 +59,21 @@ compile_each([{Dictionary, {Headerfile, Mapfile}}|Rest], Config) ->
         false ->
             compile_each(Rest, Config);
         true ->
-            file:delete(Headerfile),
-            file:delete(Mapfile),
+            Res = parse_dict(Dictionary),
+            {ok, Hrl} = file:open(Headerfile, [write]),
+            {ok, Map} = file:open(Mapfile, [write]),
+            emit(Res, Hrl, Map),
             compile_each(Rest, Config)
     end.
 
 clean_each([], _Config) ->
     ok;
 clean_each([{Dictionary, {Headerfile, Mapfile}}|Rest], Config) ->
-    case needs_compile(Dictionary, Headerfile)
-        or needs_compile(Dictionary, Mapfile) of
-        false ->
-            compile_each(Rest, Config);
-        true ->
-            Res = parse_dict(Dictionary),
-            {ok, Hrl} = file:open(Headerfile, [write]),
-            {ok, Map} = file:open(Mapfile, [write]),
-            emit(Res, Hrl, Map),
-            clean_each(Rest, Config)
-    end.
+    rebar_log:log(info, "Delete ~p~n", [Headerfile]),
+    file:delete(Headerfile),
+    rebar_log:log(info, "Delete ~p~n", [Mapfile]),
+    file:delete(Mapfile),
+    clean_each(Rest, Config).
 
 %%% --------------------------------------------------------------------
 %%% Dictionary making
