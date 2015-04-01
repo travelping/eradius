@@ -64,8 +64,14 @@ send_remote_request(Node, NAS, Request) ->
 send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
     try gen_server:call({?SERVER, Node}, {wanna_send, {IP, Port}}) of
         {Socket, ReqId} ->
-	    Request1 = fill_authenticator(Request#radius_request{reqid = ReqId, secret = Secret}),
-            SenderPid = spawn(Node, ?MODULE, send_remote_request_loop, [self(), Socket, ReqId, {IP, Port}, Request1, Options]),
+            Request1 = fill_authenticator(Request#radius_request{reqid = ReqId, secret = Secret}),
+            Request2 = case eradius_node_mon:get_remote_version(Node) of
+                           {0, Minor} when Minor < 6 ->
+                               eradius_lib:encode_request(Request1);
+                           _ ->
+                               Request1
+                       end,
+            SenderPid = spawn(Node, ?MODULE, send_remote_request_loop, [self(), Socket, ReqId, {IP, Port}, Request2, Options]),
             SenderMonitor = monitor(process, SenderPid),
             receive
                 {SenderPid, Result} ->

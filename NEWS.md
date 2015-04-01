@@ -3,6 +3,10 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.6.2 - 23 Apr 2015
+---------------------------
+* add backwards compatibility with old eradius versions
+
 Version 0.6.1 - 05 Mar 2015
 ---------------------------
 * switching to lager logging
