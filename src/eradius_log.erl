@@ -158,7 +158,7 @@ print_attr(Id, Val) ->
 
 collect_attr(Key = #attribute{name = Attr, type = _Type}, InVal) ->
     FmtVal = collectable_attr_value(Key, InVal),
-    {list_to_atom(Attr), FmtVal};
+    {list_to_atom(lists:flatten(Attr)), FmtVal};
 collect_attr(Id, Val) ->
     case eradius_dict:lookup(Id) of
         [Attr = #attribute{}] ->
