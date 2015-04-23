@@ -46,10 +46,10 @@ client_test() ->
 
 client_test(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
-    Request = eradius_lib:set_attributes(#radius_request{cmd = Command},[
+    Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true},[
                 {?NAS_Port, 8888},
                 {?User_Name, "test"},
-                {?NAS_IP_Address, {88.88.88.88}},
+                {?NAS_IP_Address, {88,88,88,88}},
                 {?Calling_Station_Id, "447721218119"},
                 {?Service_Type, 2},
                 {?Framed_Protocol, 7},
@@ -59,8 +59,8 @@ client_test(Command) ->
                 {{127,42},18}                           %Unbekannte ID
                 ] ),
     case eradius_client:send_request({{127, 0, 0, 1}, 1813, ?SECRET}, Request) of
-        {ok, Result} ->
-            eradius_lib:decode_request(Result, ?SECRET);
+        {ok, Result, Auth} ->
+            eradius_lib:decode_request(Result, ?SECRET, Auth);
         Error ->
             Error
     end.
