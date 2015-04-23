@@ -59,6 +59,8 @@ get_attr_loop(_, [])                                     -> undefined.
 
 %% @doc Convert a RADIUS request to the wire format.
 -spec encode_request(#radius_request{}) -> binary().
+encode_request(Req = #radius_request{cmd = accreq}) ->
+    encode_reply_request(Req);
 encode_request(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, attrs = Attributes}) ->
     EncReq1 = encode_attributes(Req, Attributes),
     EncReq2 = encode_eap_message(Req, EncReq1),
@@ -236,21 +238,22 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, PacketAuthenticator:16/binary, Body0/b
     DecodedState = decode_attributes(PartialRequest, Body),
     Request = PartialRequest#radius_request{attrs = lists:reverse(DecodedState#decoder_state.attrs),
 					    eap_msg = list_to_binary(lists:reverse(DecodedState#decoder_state.eap_msg))},
+    validate_authenticator(Command, <<Cmd:8, ReqId:8, Len:16>>, PacketAuthenticator, Body, Secret),
     if
 	is_integer(DecodedState#decoder_state.hmac_pos) ->
-	    validate_authenticator(Cmd, ReqId, Len, Body, DecodedState#decoder_state.hmac_pos, Secret, PacketAuthenticator, RequestAuthenticator),
+	    validate_packet_authenticator(Cmd, ReqId, Len, Body, DecodedState#decoder_state.hmac_pos, Secret, PacketAuthenticator, RequestAuthenticator),
 	    Request#radius_request{msg_hmac = true};
 	true -> Request
     end.
 
--spec validate_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), binary(), authenticator(), authenticator() | 'undefined') -> ok.
-validate_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, PacketAuthenticator, undefined) ->
-    validate_authenticator(Cmd, ReqId, Len, PacketAuthenticator, Body, Pos, Secret);
-validate_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, _PacketAuthenticator, RequestAuthenticator) ->
-    validate_authenticator(Cmd, ReqId, Len, RequestAuthenticator, Body, Pos, Secret).
+-spec validate_packet_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), binary(), authenticator(), authenticator() | 'undefined') -> ok.
+validate_packet_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, PacketAuthenticator, undefined) ->
+    validate_packet_authenticator(Cmd, ReqId, Len, PacketAuthenticator, Body, Pos, Secret);
+validate_packet_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, _PacketAuthenticator, RequestAuthenticator) ->
+    validate_packet_authenticator(Cmd, ReqId, Len, RequestAuthenticator, Body, Pos, Secret).
 
--spec validate_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), authenticator(), non_neg_integer(), binary(), binary()) -> ok.
-validate_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
+-spec validate_packet_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), authenticator(), non_neg_integer(), binary(), binary()) -> ok.
+validate_packet_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
     case Body of
 	<<Before:Pos/bytes, Value:16/bytes, After/binary>> ->
 	    case crypto:hmac(md5, Secret, [<<Cmd:8, ReqId:8, Len:16>>, Auth, Before, zero_authenticator(), After]) of
@@ -260,6 +263,10 @@ validate_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
 	_ ->
 	    throw(bad_pdu)
     end.
+
+validate_authenticator(accreq, Head, PacketAuthenticator, Body, Secret) ->
+    crypto:hash(md5, [Head, zero_authenticator(), Body, Secret]) == PacketAuthenticator orelse throw(bad_pdu);
+validate_authenticator(_, _Head, _PacketAuthenticator, _Body, _Secret) -> true.
 
 -spec decode_command(byte()) -> command().
 decode_command(?RAccess_Request)      -> request;
