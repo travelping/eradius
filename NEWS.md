@@ -8,6 +8,7 @@ Version 0.6.2 - 23 Apr 2015
 * fix/add decoding for 24 bit integer datatype
 * add backwards compatibility with old eradius versions
 * fix request encoding and validation
+* add rebar support
 
 Version 0.6.1 - 05 Mar 2015
 ---------------------------
