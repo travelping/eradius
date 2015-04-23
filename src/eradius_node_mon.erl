@@ -5,12 +5,13 @@
 %%   The node_mon server monitors the application master and removes it from
 %%   request processing when it goes down.
 -module(eradius_node_mon).
--export([start_link/0, modules_ready/2, set_nodes/1, get_module_nodes/1]).
+-export([start_link/0, modules_ready/2, set_nodes/1, get_module_nodes/1, get_remote_version/1]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -define(NODE_TAB, eradius_node_mon).
+-define(NODE_INFO_TAB, eradius_node_info).
 -define(PING_INTERVAL, 3000). % 3 sec
 -define(PING_TIMEOUT, 300).   % 0.3 sec
 -define(SERVER, ?MODULE).
@@ -37,6 +38,15 @@ get_module_nodes(Module) ->
             []
     end.
 
+-spec get_remote_version(node()) -> {integer(), integer()} | undefined.
+get_remote_version(Node) ->
+    try
+        ets:lookup_element(?NODE_INFO_TAB, Node, 2)
+    catch
+        error:badarg ->
+            undefined
+    end.
+
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
 -record(state, {
@@ -48,10 +58,12 @@ get_module_nodes(Module) ->
 
 init([]) ->
     ets:new(?NODE_TAB, [bag, named_table, protected, {read_concurrency, true}]),
+    ets:new(?NODE_INFO_TAB, [set, named_table, protected, {read_concurrency, true}]),
     PingTimer = erlang:send_after(?PING_INTERVAL, self(), ping_dead_nodes),
     {ok, #state{ping_timer = PingTimer}}.
 
-handle_call(remote_get_regs_v1, _From, State) ->
+handle_call(remote_get_regs_v1, From, State) ->
+    check_eradius_version(From),
     Registrations = dict:to_list(State#state.app_masters),
     {reply, {ok, Registrations}, State};
 handle_call({set_nodes, Nodes}, _From, State) ->
@@ -66,6 +78,7 @@ handle_cast({remote_modules_ready_v1, ApplicationMaster, Modules}, State) ->
 handle_cast({modules_ready, ApplicationMaster, Modules}, State) ->
     NewState = State#state{app_masters = register_locally({ApplicationMaster, Modules}, State#state.app_masters)},
     lists:foreach(fun (Node) ->
+                      check_eradius_version(Node),
                       gen_server:cast({?SERVER, Node}, {remote_modules_ready_v1, ApplicationMaster, Modules})
                   end, nodes()),
     {noreply, NewState}.
@@ -131,3 +144,26 @@ register_locally({ApplicationMaster, Modules}, AppMasters) ->
     ServerNode = node(ApplicationMaster),
     ets:insert(?NODE_TAB, [{Mod, ServerNode} || Mod <- Modules]),
     dict_prepend(ApplicationMaster, Modules, AppMasters).
+
+check_eradius_version({Pid, _}) when is_pid(Pid) ->
+    check_eradius_version(Pid);
+check_eradius_version(Pid) when is_pid(Pid) ->
+    check_eradius_version(node(Pid));
+check_eradius_version(Node) ->
+    case rpc:call(Node, application, get_key, [eradius, vsn]) of
+        {ok, Vsn} ->
+            try interpret_vsn(Vsn) of
+                Version ->
+                    ets:insert(?NODE_INFO_TAB, {Node, Version})
+            catch
+                _:_ ->
+                    lager:warning("unknown eradius version format ~p on node ~p", [Vsn, Node])
+            end;
+        _ ->
+            lager:warning("eradius version do not known on node ~p", [Node])
+    end.
+
+interpret_vsn(Vsn) ->
+    BinVsn = list_to_binary(Vsn),
+    [MajorVsn, MinorVsn | _] = binary:split(BinVsn, <<".">>, [global]),
+    {binary_to_integer(MajorVsn), binary_to_integer(MinorVsn)}.
