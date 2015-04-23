@@ -345,6 +345,8 @@ decode_value(<<Bin/binary>>, Type) ->
             Bin;
         integer ->
             decode_integer(Bin);
+        integer24 ->
+            decode_integer(Bin);
         integer64 ->
             decode_integer(Bin);
         date ->
