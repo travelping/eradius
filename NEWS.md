@@ -3,6 +3,10 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.6.3 - 23 Mar 2015
+---------------------------
+* update Travelping dictionary
+
 Version 0.6.2 - 23 Apr 2015
 ---------------------------
 * fix/add decoding for 24 bit integer datatype
