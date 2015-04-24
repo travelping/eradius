@@ -89,7 +89,7 @@ handle_cast({write_request, Time, Sender, Request}, State) ->
 	ok = io:put_chars(State, Msg)
     catch
 	_:Error ->
-	    lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p", 
+	    lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p",
             [Error, Request, Sender]),
 	    ok
     end,

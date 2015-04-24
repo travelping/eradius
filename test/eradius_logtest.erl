@@ -50,10 +50,10 @@ client_test(Command) ->
                 {?NAS_Port, 8888},
                 {?User_Name, "test"},
                 {?NAS_IP_Address, {88,88,88,88}},
-                {?Calling_Station_Id, "447721218119"},
+                {?Calling_Station_Id, "0123456789"},
                 {?Service_Type, 2},
                 {?Framed_Protocol, 7},
-                {30,"m2m.cellubi.co.uk"},               %Called-Station-Id
+                {30,"some.id.com"},               %Called-Station-Id
                 {61,18},                                %NAS_PORT_TYPE
                 {{10415,1}, "1337"},                    %X_3GPP-IMSI
                 {{127,42},18}                           %Unbekannte ID
