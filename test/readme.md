@@ -18,8 +18,8 @@ Start an Erlangshell
 
     `>application:set_env(lager, handlers, [{lager_journald_backend, []}]).
      >eradius_logtest:start().
-     >eradius_logtest:client_test(<<"test">>,{88,88,88,88}).`
-     
+     >eradius_logtest:client_test().`
+
 You now should find something simmilar to the following message in your journal:
 
     `Feb 13 17:09:52 tpiadmin-HP-EliteBook-8470p beam.smp[11790]: 127.0.0.1:39534 [27]: Access-Request`

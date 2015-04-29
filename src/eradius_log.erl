@@ -89,7 +89,7 @@ handle_cast({write_request, Time, Sender, Request}, State) ->
 	ok = io:put_chars(State, Msg)
     catch
 	_:Error ->
-	    lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p", 
+	    lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p",
             [Error, Request, Sender]),
 	    ok
     end,
@@ -158,7 +158,7 @@ print_attr(Id, Val) ->
 
 collect_attr(Key = #attribute{name = Attr, type = _Type}, InVal) ->
     FmtVal = collectable_attr_value(Key, InVal),
-    {list_to_atom(Attr), FmtVal};
+    {list_to_atom(lists:flatten(Attr)), FmtVal};
 collect_attr(Id, Val) ->
     case eradius_dict:lookup(Id) of
         [Attr = #attribute{}] ->
