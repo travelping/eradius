@@ -8,28 +8,33 @@
 -include_lib("eradius/include/dictionary.hrl").
 -include_lib("eradius/include/dictionary_3gpp.hrl").
 
--define(ALLOWD_USERS, [<<"test">>, <<"proxy_test">>]).
+-define(ALLOWD_USERS, [<<"user">>, <<"user@domain">>, <<"proxy_test">>]).
 -define(SECRET, <<"secret">>).
--define(SECRET2, <<"secret2">>).
+-define(SECRET2, <<"proxy_secret">>).
+-define(SECRET3, <<"test_secret">>).
 
 start() ->
     application:load(eradius),
-    ProxyConfig = [{to, {{127, 0, 0, 1}, 1813}}, {secret, ?SECRET}],
-    Config = [{radius_callback, eradius_proxy},
+    ProxyConfig = [{default_route, {{127, 0, 0, 1}, 1813, ?SECRET}}, 
+                   {options, [{type, realm}, {strip, true}, {separator, "@"}]},
+                   {routes, [{"test", {{127, 0, 0, 1}, 1815, ?SECRET3}}
+                            ]}
+                  ],
+    Config = [{radius_callback, eradius_logtest},
               {servers, [{root,  {"127.0.0.1", [1812, 1813]}},
+                         {test,  {"127.0.0.1", [1815]}},
                          {proxy, {"127.0.0.1", [11812, 11813]}}
                         ]},
               {session_nodes, [node()]},
-              {root,
-                      [
-                       { {eradius_logtest, "test", [] }, [{"127.0.0.1", ?SECRET}] }
-                      ]
-              },
-              {proxy,
-                      [
+              {root, [
+                       { {eradius_logtest, "root", [] }, [{"127.0.0.1", ?SECRET}] }
+              ]},
+              {test, [
+                       { {eradius_logtest, "test", [] }, [{"127.0.0.1", ?SECRET3}] }
+              ]},
+              {proxy, [
                        { {eradius_proxy, "proxy", ProxyConfig }, [{"127.0.0.1", ?SECRET2}] }
-                      ]
-              }
+              ]}
              ],
     [application:set_env(eradius, Key, Value) || {Key, Value} <- Config],
     {ok, _} = application:ensure_all_started(eradius),
@@ -66,7 +71,7 @@ test_client() ->
 
 test_client(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
-    Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("test")),
+    Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user")),
     send_request({127, 0, 0, 1}, 1813, ?SECRET, Request).
 
 test_proxy() ->
@@ -75,7 +80,11 @@ test_proxy() ->
 test_proxy(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
     Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("proxy_test")),
-    send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request).
+    send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request),
+    Request2 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@test")),
+    send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request2),
+    Request3 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@domain@test")),
+    send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request3).
 
 send_request(Ip, Port, Secret, Request) -> 
     case eradius_client:send_request({Ip, Port, Secret}, Request) of
