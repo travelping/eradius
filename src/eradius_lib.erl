@@ -505,23 +505,48 @@ enc_vendor_octet_test() ->
     E = << ?RVendor_Specific, (4+8):8, 311:32, 7:8, (4+2):8, 7:32 >>,
     E = encode_attribute(?PDU, #attribute{id = {311,7}, type = octets, enc = no}, 7).
 
+decode_attribute(A, B, C) -> decode_attribute(A, B, C, 0, #decoder_state{}).
+
 dec_simple_integer_test() ->
-    [{_, 1}] = decode_attribute(<<0,0,0,1>>, ?PDU, #attribute{id = 40, type = integer, enc = no}).
+    State = decode_attribute(<<0,0,0,1>>, ?PDU, #attribute{id = 40, type = integer, enc = no}),
+    [{_, 1}] = State#decoder_state.attrs.
 
 dec_simple_string_test() ->
-    [{_, "29113"}] = decode_attribute(<<"29113">>, ?PDU, #attribute{id = 44, type = string, enc = no}).
+    State = decode_attribute(<<"29113">>, ?PDU, #attribute{id = 44, type = string, enc = no}),
+    [{_, <<"29113">>}] = State#decoder_state.attrs.
 
 dec_simple_ipv4_test() ->
-    [{_, {10,33,0,1}}] = decode_attribute(<<10,33,0,1>>, ?PDU, #attribute{id = 4, type = ipaddr, enc = no}).
+    State = decode_attribute(<<10,33,0,1>>, ?PDU, #attribute{id = 4, type = ipaddr, enc = no}),
+    [{_, {10,33,0,1}}] = State#decoder_state.attrs.
 
-dec_vendor_integer_test() ->
-    [{_,0}] = decode_attribute(<<0,0,40,175,3,6,0,0,0,0>>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}).
+dec_vendor_test_() ->
+    {setup, 
+        fun() -> 
+            application:set_env(eradius, tables, [dictionary]),
+            eradius_dict:start_link(),
+            ok 
+        end,
+        fun(_) -> 
+            ok
+        end,
+        [
+            {"dec_vendor_ipv4_t", fun dec_vendor_integer_t/0},
+            {"dec_vendor_string_t", fun dec_vendor_string_t/0},
+            {"dec_vendor_ipv4_t", fun dec_vendor_ipv4_t/0}
+        ]
+    }.
 
-dec_vendor_string_test() ->
-    [{_,"23415"}] = decode_attribute(<<0,0,40,175,8,7,"23415">>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}).
+dec_vendor_integer_t() ->
+    State = decode_attribute(<<0,0,40,175,3,6,0,0,0,0>>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}),
+    [{_, <<0, 0, 0, 0>>}] = State#decoder_state.attrs.
 
-dec_vendor_ipv4_test() ->
-    [{_,{212,183,144,246}}] = decode_attribute(<<0,0,40,175,6,6,212,183,144,246>>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}).
+dec_vendor_string_t() ->
+    State = decode_attribute(<<0,0,40,175,8,7,"23415">>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}),
+    [{_, <<"23415">>}] = State#decoder_state.attrs.
+
+dec_vendor_ipv4_t() ->
+    State = decode_attribute(<<0,0,40,175,6,6,212,183,144,246>>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}),
+    [{_, <<212,183,144,246>>}] = State#decoder_state.attrs.
 
 %% TODO: add more tests
 
