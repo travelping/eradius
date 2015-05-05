@@ -17,7 +17,7 @@ radius_request(Request, NasProp, Args) ->
 
 % @private
 send_to_server(#radius_request{reqid = ReqID} = Request, Server, Port, Secret) ->
-    case eradius_client:send_request({Server, Port, Secret}, Request) of
+    case eradius_client:send_request({Server, Port, Secret}, Request, [{retries, 1}]) of
         {ok, Result, Auth} -> decode_request(Result, ReqID, Secret, Auth);
         Error -> 
             lager:error("~p: error during send_request (~p)", [?MODULE, Error]), 
