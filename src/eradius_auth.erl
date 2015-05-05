@@ -391,4 +391,4 @@ mppe_start_key56_test()->
 mppe_start_key128_test()->
     {?SEND_START_KEY128, _ } = mppe_generate_session_keys(?PASSWORD_HASH, ?NT_RESPONSE, 128).
 
--endif
+-endif.

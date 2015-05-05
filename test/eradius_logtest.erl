@@ -1,6 +1,6 @@
 -module(eradius_logtest).
 
--export([start/0, radius_request/3, client_test/0, client_test/1]).
+-export([start/0, radius_request/3, test_client/0, test_client/1]).
 -import(eradius_lib, [get_attr/2]).
 
 -include_lib("eradius/include/eradius_lib.hrl").
@@ -41,10 +41,10 @@ radius_request(#radius_request{cmd = request} = Request, _NasProp, _) ->
 radius_request(#radius_request{cmd = accreq}, _NasProp, _) ->
     {reply, #radius_request{cmd = accresp}}.
 
-client_test() ->
-  client_test(request).
+test_client() ->
+  test_client(request).
 
-client_test(Command) ->
+test_client(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
     Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true},[
                 {?NAS_Port, 8888},

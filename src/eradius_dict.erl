@@ -50,7 +50,7 @@ load_tables(Dir, Tables) when is_list(Tables) ->
 %% -- gen_server callbacks
 init([]) ->
     create_table(),
-    {ok, InitialLoadTables} = application:get_env(tables),
+    {ok, InitialLoadTables} = application:get_env(eradius, tables),
     do_load_tables(code:priv_dir(eradius), InitialLoadTables),
     {ok, #state{}}.
 
