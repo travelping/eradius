@@ -1,6 +1,6 @@
 -module(eradius_logtest).
 
--export([start/0, radius_request/3, test_client/0, test_client/1]).
+-export([start/0, radius_request/3, test_client/0, test_client/1, validate_arguments/1]).
 -import(eradius_lib, [get_attr/2]).
 
 -include_lib("eradius/include/eradius_lib.hrl").
@@ -40,6 +40,9 @@ radius_request(#radius_request{cmd = request} = Request, _NasProp, _) ->
 
 radius_request(#radius_request{cmd = accreq}, _NasProp, _) ->
     {reply, #radius_request{cmd = accresp}}.
+
+
+validate_arguments(_Args) -> true.
 
 test_client() ->
   test_client(request).
