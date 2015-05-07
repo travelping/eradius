@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.6.4 - 7 May 2015
+---------------------------
+* add optional callback validate_arguments/1 to eradius handlers
+* add eradius_proxy for default proxies
+
 Version 0.6.3 - 23 Mar 2015
 ---------------------------
 * update Travelping dictionary
