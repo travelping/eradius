@@ -18,7 +18,13 @@ Start an Erlangshell
 
     `>application:set_env(lager, handlers, [{lager_journald_backend, []}]).
      >eradius_logtest:start().
-     >eradius_logtest:client_test().`
+     >eradius_logtest:test_client().
+     >eradius_logtest:test_proxy().`
+
+or
+
+    `>eradius_logtest:test().`
+
 
 You now should find something simmilar to the following message in your journal:
 

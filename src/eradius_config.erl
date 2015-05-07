@@ -58,6 +58,7 @@ validate_behavior({Nas, Args}) ->
 validate_behavior({{invalid, _} = Invalid, _Nas, _Args}) ->
     Invalid;
 validate_behavior({Module, Nas, _Args} = Value) when is_atom(Module) andalso ?is_io(Nas) ->
+    code:is_loaded(Module) =:= false andalso code:load_file(Module),
     case erlang:function_exported(Module, validate_arguments, 1) of
         true -> validate_arguments(Value);
         false -> Value

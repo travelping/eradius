@@ -31,6 +31,8 @@
 -type nas_address() :: {inet:ip_address(), eradius_server:port_number(), eradius_lib:secret()}.
 -type options() :: [{retries, pos_integer()} | {timeout, timeout()}].
 
+-export_type([nas_address/0]).
+
 %% ------------------------------------------------------------------------------------------
 %% -- API
 % @private
