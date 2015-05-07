@@ -58,13 +58,23 @@ validate_behavior({Nas, Args}) ->
 validate_behavior({{invalid, _} = Invalid, _Nas, _Args}) ->
     Invalid;
 validate_behavior({Module, Nas, _Args} = Value) when is_atom(Module) andalso ?is_io(Nas) ->
-    Value;
+    case erlang:function_exported(Module, validate_arguments, 1) of
+        true -> validate_arguments(Value);
+        false -> Value
+    end;
 validate_behavior({Module, _, _}) when is_atom(Module) ->
     ?invalid("bad NAS Id in Behavior specifification: ~p", [Module]);
 validate_behavior({Module, _, _}) ->
     ?invalid("bad module in Behavior specifification: ~p", [Module]);
 validate_behavior(Term) ->
     ?invalid("bad Term in Behavior specifification: ~p", [Term]).
+
+validate_arguments({Module, _Nas, Args} = Value) ->
+    case Module:validate_arguments(Args) of
+        true -> Value;
+        false -> ?invalid("~p: bad configuration", [Module]);
+        Error -> ?invalid("~p: bad configuration: ~p", [Module, Error])
+    end.
 
 validate_naslist(ListOfNases, Nodes) -> map_helper(fun(Nas) -> validate_nas(Nas, Nodes) end, ListOfNases).
 
