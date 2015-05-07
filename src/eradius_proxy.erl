@@ -1,7 +1,7 @@
 -module(eradius_proxy).
 
 -behaviour(eradius_server).
--export([radius_request/3]).
+-export([radius_request/3, validate_arguments/1]).
 
 -include("eradius_lib.hrl").
 -include("dictionary.hrl").
@@ -17,24 +17,22 @@
 -type routes() :: [{Name :: string(), route()}].
 
 radius_request(Request, _NasProp, Args) ->
-    try handle(Request, Args)
-    catch
-        _:{bad_configuration, Type} -> 
-            lager:error("~p: invalid configuration ('~p' is invalid or isn't set)", [?MODULE, Type]), 
-            bad_configuration;
-        _:Reason -> Reason
-    end.
-
-% @private
-handle(Request, Args) ->
     DefaultRoute = proplists:get_value(default_route, Args),
-    DefaultRoute =:= undefined andalso throw({bad_configuration, default_route}),
     Options = proplists:get_value(options, Args, ?DEFAULT_OPTIONS),
-    validate_options(Options) =:= false andalso throw({bad_configuration, options}),
     Username = eradius_lib:get_attr(Request, ?User_Name),
     Routes = proplists:get_value(routes, Args, []),
     {NewUsername, Route} = resolve_routes(Username, DefaultRoute, Routes, Options),
     send_to_server(new_request(Request, Username, NewUsername), Route).
+
+validate_arguments(Args) ->
+    Route = proplists:get_value(default_route, Args, {undefined, 0, []}),
+    Options = proplists:get_value(options, Args, ?DEFAULT_OPTIONS),
+    case {validate_route(Route), validate_options(Options)} of
+        {false, _} -> default_route;
+        {_, false} -> options;
+        _ -> true
+    end.
+
 
 % @private
 -spec send_to_server(Request :: #radius_request{}, Route :: route()) -> 
@@ -56,6 +54,21 @@ decode_request(Result, ReqID, Secret, Auth) ->
             lager:error("~p: error during decode_request (~p)", [?MODULE, Error]), 
             Error
     end.
+
+% @private
+-spec validate_route({Ip :: inet:ip_address(), Port :: eradius_server:port_number(), Secret :: eradius_lib:secret()}) -> 
+    boolean().
+validate_route({_Ip, Port, _Secret}) when not is_integer(Port); Port =< 0; Port > 65535 -> false;
+validate_route({_Ip, _Port, Secret}) when not is_list(Secret), not is_binary(Secret) -> false;
+validate_route({Ip, _Port, _Secret}) when is_list(Ip) -> 
+    {Res, _} = inet_parse:address(Ip),
+    Res =:= ok;
+validate_route({Ip, Port, Secret}) when is_tuple(Ip) ->
+    case inet_parse:ntoa(Ip) of
+        {error, _} -> false;
+        Address -> validate_route({Address, Port, Secret})
+    end;
+validate_route(_) -> false.
 
 % @private
 -spec validate_options(Options :: [proplists:property()]) -> boolean().
@@ -156,6 +169,24 @@ resolve_routes_test() ->
     Opts2 = Opts ++ Opts1,
     ?assertEqual({"example", DefaultRoute}, resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts2)),
     ?assertEqual({"user", Test}, resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts2)), 
+    ok.
+
+validate_arguments_test() ->
+    GoodConfig = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}}, 
+                  {options, [{type, realm}, {strip, true}, {separator, "@"}]},
+                  {routes, [{"test", {{127, 0, 0, 1}, 1815, <<"secret1">>}}
+                           ]}
+                 ],
+    BadConfig = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}}, 
+                 {options, [{type, abc}]}
+                 ],
+    BadConfig1 = [{default_route, {{127, 0, 0, 1}, 0, <<"secret">>}}],
+    BadConfig2 = [{default_route, {abc, 123, <<"secret">>}}],
+    ?assertEqual(true, validate_arguments(GoodConfig)),
+    ?assertEqual(default_route, validate_arguments([])),
+    ?assertEqual(options, validate_arguments(BadConfig)),
+    ?assertEqual(default_route, validate_arguments(BadConfig1)),
+    ?assertEqual(default_route, validate_arguments(BadConfig2)),
     ok.
 
 validate_options_test() ->
