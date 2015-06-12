@@ -95,8 +95,10 @@ new_request(Request, _Username, NewUsername) ->
                          ?User_Name, NewUsername).
 
 % @private
--spec resolve_routes(Username :: binary(), DefaultRoute :: route(), Routes :: routes(), Options :: [proplists:property()]) -> 
+-spec resolve_routes(Username :: undefined | binary(), DefaultRoute :: route(), Routes :: routes(), Options :: [proplists:property()]) -> 
     {NewUsername :: string(), Route :: route()}.
+resolve_routes(undefined, {_, _, DefaultSecret} = DefaultRoute, _Routes, _Options) ->
+    {undefined, DefaultRoute};
 resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) ->
     Type = proplists:get_value(type, Options, ?DEFAULT_TYPE),
     Strip = proplists:get_value(strip, Options, ?DEFAULT_STRIP),
@@ -153,6 +155,7 @@ resolve_routes_test() ->
     Test = {{127, 0, 0, 1}, 11813, <<"test">>},
     Routes = [{"prod", Prod}, {"test", Test}],
     % default
+    ?assertEqual({undefined, DefaultRoute}, resolve_routes(undefined, DefaultRoute, Routes, [])),
     ?assertEqual({"user", DefaultRoute}, resolve_routes(<<"user">>, DefaultRoute, Routes, [])),
     ?assertEqual({"user@prod", Prod}, resolve_routes(<<"user@prod">>, DefaultRoute, Routes, [])),
     ?assertEqual({"user@test", Test}, resolve_routes(<<"user@test">>, DefaultRoute, Routes, [])), 
@@ -202,6 +205,7 @@ new_request_test() ->
     Req1 = eradius_lib:set_attr(Req0, ?User_Name, "user1"),
     ?assertEqual(Req0, new_request(Req0, "user", "user")),
     ?assertEqual(Req1, new_request(Req0, "user", "user1")),
+    ?assertEqual(Req0, new_request(Req0, undefined, undefined)),
     ok.
 
 get_key_test() ->

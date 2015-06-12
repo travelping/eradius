@@ -8,7 +8,7 @@
 -include_lib("eradius/include/dictionary.hrl").
 -include_lib("eradius/include/dictionary_3gpp.hrl").
 
--define(ALLOWD_USERS, [<<"user">>, <<"user@domain">>, <<"proxy_test">>]).
+-define(ALLOWD_USERS, [undefined, <<"user">>, <<"user@domain">>, <<"proxy_test">>]).
 -define(SECRET, <<"secret">>).
 -define(SECRET2, <<"proxy_secret">>).
 -define(SECRET3, <<"test_secret">>).
@@ -79,6 +79,7 @@ test_proxy() ->
 
 test_proxy(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
+    send_request({127, 0, 0, 1}, 11813, ?SECRET2, #radius_request{cmd = Command}),
     Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("proxy_test")),
     send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request),
     Request2 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@test")),
