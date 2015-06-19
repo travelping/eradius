@@ -59,7 +59,7 @@ get_attr_loop(_, [])                                     -> undefined.
 
 %% @doc Convert a RADIUS request to the wire format.
 -spec encode_request(#radius_request{}) -> binary().
-encode_request(Req = #radius_request{cmd = accreq}) ->
+encode_request(Req = #radius_request{cmd = Cmd}) when (Cmd == accreq) orelse (Cmd == discreq) orelse (Cmd == coareq) ->
     encode_reply_request(Req);
 encode_request(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, attrs = Attributes}) ->
     EncReq1 = encode_attributes(Req, Attributes),
@@ -520,13 +520,13 @@ dec_simple_ipv4_test() ->
     [{_, {10,33,0,1}}] = State#decoder_state.attrs.
 
 dec_vendor_test_() ->
-    {setup, 
-        fun() -> 
+    {setup,
+        fun() ->
             application:set_env(eradius, tables, [dictionary]),
             eradius_dict:start_link(),
-            ok 
+            ok
         end,
-        fun(_) -> 
+        fun(_) ->
             ok
         end,
         [
