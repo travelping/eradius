@@ -1,0 +1,5 @@
+language: erlang
+otp_release:
+   - 17.4
+script: "rebar get-deps compile && rebar eunit skip_deps=true"
+after_failure: "cat logs/raw.log"
