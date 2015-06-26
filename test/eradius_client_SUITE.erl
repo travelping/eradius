@@ -21,7 +21,7 @@ all() -> [
     ].
 
 init_per_suite(Config) ->
-    ok = tpk:s(eradius),
+    {ok, _} = application:ensure_all_started(eradius),
     startSocketCounter(),
     io:format(standard_error, "running..~n", []),
     Config.
@@ -151,19 +151,21 @@ wanna_send(_Config) ->
                         send(FUN, null, null)
                 end, lists:seq(1, 10)).
 
+%% I've catched some data races with `delSocket()' and `getSocketCount()' when 
+%% `delSocket()' happens after `getSocketCount()' (because `delSocket()' is sent from another process).
+%% I don't know a better decision than add some delay before `getSocketCount()'
 reconf_address(_Config) ->
-    FUN = fun() -> gen_server:call(eradius_client, reconfigure) end,
+    FUN = fun() -> gen_server:call(eradius_client, reconfigure), timer:sleep(100) end,
     application:set_env(eradius, client_ip, "7.13.23.42"),
     send(FUN, null, "7.13.23.42").
 
 reconf_ports_30(_Config) ->
-    FUN = fun() -> gen_server:call(eradius_client, reconfigure) end,
+    FUN = fun() -> gen_server:call(eradius_client, reconfigure), timer:sleep(100) end,
     application:set_env(eradius, client_ports, 30),
     send(FUN, 30, null).
 
 
 reconf_ports_10(_Config) ->
-    FUN = fun() -> gen_server:call(eradius_client, reconfigure) end,
+    FUN = fun() -> gen_server:call(eradius_client, reconfigure), timer:sleep(100) end,
     application:set_env(eradius, client_ports, 10),
     send(FUN, 10, null).
-

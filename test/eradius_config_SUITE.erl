@@ -26,7 +26,7 @@ all() -> [config_1, config_2].
 
 init_per_suite(Config) ->
     % Is it a good practise? Copied fron client test
-    ok = tpk:s(eradius),
+    {ok, _} = application:ensure_all_started(eradius),
     Config.
 
 end_per_suite(_Config) ->
