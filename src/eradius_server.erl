@@ -302,15 +302,17 @@ nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, NasPort, Sec
 -spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {exit, term()} | {reply, binary()}.
 apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
     #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
+    Timestamp1 = os:timestamp(),
     try HandlerMod:radius_request(Request, NasProp, HandlerArg) of
         {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs, msg_hmac = MsgHMAC, eap_msg = EAPmsg}} ->
+            Timestamp2 = os:timestamp(),
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             EncReply = eradius_lib:encode_reply_request(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
 									       msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
 									       eap_msg = EAPmsg}),
             reply_inc_counter(ReplyCmd, NasProp),
-            lager:info(eradius_log:collect_meta(Reply),"~s",
-                       [eradius_log:collect_message(Sender, Reply)]),
+            lager:info(eradius_log:collect_meta(Reply),"~s ~b ms",
+                       [eradius_log:collect_message(Sender, Reply), (timer:now_diff(Timestamp2, Timestamp1) div 1000)]),
             eradius_log:write_request(Sender, Reply),
             {reply, EncReply};
         noreply ->
@@ -327,7 +329,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
     end.
 
 -spec printable_peer(inet:ip4_address(),eradius_server:port_number()) -> io_lib:chars().
-printable_peer({IA,IB,IC,ID}, Port) -> 
+printable_peer({IA,IB,IC,ID}, Port) ->
     io_lib:format("~b.~b.~b.~b:~b",[IA,IB,IC,ID,Port]).
 
 -spec printable_date() -> io_lib:chars().
