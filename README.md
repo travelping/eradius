@@ -7,6 +7,6 @@ several authentication mechanisms and dynamic configuration
 
 ## Building eradius
 
-We use the [tetrapak](https://github.com/travelping/tetrapak) build tool to build eradius.
-Tetrapak is required to build the dictionaries.
-
+```
+$ rebar get-deps && rebar compile
+```
