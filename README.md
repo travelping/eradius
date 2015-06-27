@@ -1,4 +1,4 @@
-# eradius
+# eradius [![Build Status](https://travis-ci.org/travelping/eradius.svg)](https://travis-ci.org/travelping/eradius)
 
 This fork of eradius is a radical deviation from the original
 Jungerl code. It contains a generic RADIUS client, support for 
