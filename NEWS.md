@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.6.5 - 1 Jul 2015
+---------------------------
+* remote handler doesn't change io to standart io of local node anymore
+* eradius_proxy can proxy requests without setted username
+
 Version 0.6.4 - 7 May 2015
 ---------------------------
 * add optional callback validate_arguments/1 to eradius handlers

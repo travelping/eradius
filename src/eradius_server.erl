@@ -284,7 +284,6 @@ handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest) ->
 %%   remote handlers need to be upgraded if the signature of this function changes.
 %%   error reports go to the logger of the node that executes the request.
 handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasPropTuple, EncRequest) ->
-    group_leader(whereis(user), self()),
     NasProp = nas_prop_tuple_to_record(NasPropTuple),
     Result = handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest),
     ReplyPid ! {self(), Result}.
@@ -327,7 +326,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
     end.
 
 -spec printable_peer(inet:ip4_address(),eradius_server:port_number()) -> io_lib:chars().
-printable_peer({IA,IB,IC,ID}, Port) -> 
+printable_peer({IA,IB,IC,ID}, Port) ->
     io_lib:format("~b.~b.~b.~b:~b",[IA,IB,IC,ID,Port]).
 
 -spec printable_date() -> io_lib:chars().
