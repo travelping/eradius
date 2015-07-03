@@ -77,16 +77,16 @@ validate_arguments({Module, _Nas, Args} = Value) ->
         Error -> ?invalid("~p: bad configuration: ~p", [Module, Error])
     end.
 
-validate_naslist(ListOfNases, Nodes) -> map_helper(fun(Nas) -> validate_nas(Nas, Nodes) end, ListOfNases).
+validate_naslist(ListOfNases, Nodes) -> map_helper(fun(Nas) -> validate_nas(Nas, Nodes) end, ListOfNases, yes).
 
 validate_nas({IP, Secret}, Nodes) ->
     validate_nas({IP, Secret, []}, Nodes);
 validate_nas({IP, Secret, Options}, Nodes) ->
     validate_nas({proplists:get_value(nas_id, Options), IP, Secret, proplists:get_value(group, Options)}, Nodes);
 validate_nas({NasId, IP, Secret, undefined}, {root, Nodes}) ->
-    validate_nas(NasId, validate_ip(IP), Secret, root, Nodes);
+    validate_nas(NasId, IP, Secret, root, Nodes);
 validate_nas({NasId, IP, Secret, GroupName}, Nodes) when is_list(Nodes) ->
-    validate_nas(NasId, validate_ip(IP), Secret, GroupName, proplists:get_value(GroupName, Nodes));
+    validate_nas(NasId, IP, Secret, GroupName, proplists:get_value(GroupName, Nodes));
 validate_nas(Term, _) ->
     ?invalid("bad term in NAS specification: ~p", [Term]).
 
@@ -97,7 +97,11 @@ validate_nas(NasId, IP, Secret, Name, undefined) ->
 validate_nas(_NasId, IP, _Secret, Name, {invalid, _}) ->
     ?invalid("group ~p for nas ~p is undefined", [Name, IP]);
 validate_nas(NasId, IP, Secret, _Name, Nodes) when ?is_io(Secret) andalso (?is_io(NasId) orelse NasId == undefined) ->
-    {NasId, IP, validate_secret(Secret), Nodes};
+    case string:tokens(IP, "/") of
+        [IP0, Mask] -> 
+            [{NasId, validate_ip(IP1), validate_secret(Secret), Nodes} || IP1 <- generate_ip_list(validate_ip(IP0), Mask)];
+        _ -> {NasId, validate_ip(IP), validate_secret(Secret), Nodes}
+    end;
 validate_nas(NasId, _IP, Secret, _Name, _) when ?is_io(Secret) ->
     ?invalid("bad nas id name: ~p", [NasId]);
 validate_nas(_NasId, _IP, Secret, _Name, _) ->
@@ -337,3 +341,36 @@ ok_error_helper({error, _Error}, {Msg, Value}) when is_list(Msg) -> ?invalid(Msg
 ok_error_helper({error, _Error}, ErrorMsg) when is_list(ErrorMsg) -> ErrorMsg;
 ok_error_helper({ok, Value}, _ErrorMessage) -> Value;
 ok_error_helper(Value, _ErrorMessage) -> Value.
+
+generate_ip_list(IP, Mask) when is_list(Mask) -> 
+    generate_ip_list(IP, catch list_to_integer(Mask));
+generate_ip_list({A, B, C, D}, Mask) when Mask >=0, Mask =< 32 -> 
+    <<Address:32/integer>> = <<A, B, C, D>>,
+    Wildcard = 16#ffffffff bsr Mask,
+    <<Netmask:32/unsigned-integer>> = << (bnot Wildcard):32 >>,
+    generate_ip(Address band Netmask, Address bor Wildcard);
+generate_ip_list(_, Mask) -> ?invalid("invalid mask ~p", [Mask]).
+
+generate_ip(E, E) -> 
+    <<A:8, B:8, C:8, D:8>> = <<E:32/integer>>,
+    [{A, B, C, D}];
+generate_ip(S, E) -> 
+    <<A:8, B:8, C:8, D:8>> = <<S:32/integer>>,
+    [{A, B, C, D} | generate_ip(S+1, E)].
+
+
+%% ------------------------------------------------------------------------------------------
+%% -- EUnit Tests
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+generate_ip_list_test() ->
+    ?assertEqual([{192, 168, 11, 148}, {192, 168, 11, 149}, {192, 168, 11, 150}, {192, 168, 11, 151}], 
+                 generate_ip_list({192, 168, 11, 150}, "30")),
+    R = generate_ip_list({192, 168, 11, 150}, 24),
+    ?assertEqual(256, length(generate_ip_list({192, 168, 11, 150}, 24))),
+    ?assertEqual(2048, length(generate_ip_list({192, 168, 11, 10}, 21))),
+    ?assertMatch({invalid, _}, generate_ip_list({192, 168, 11, 150}, "34")),
+    ok.
+
+-endif.
