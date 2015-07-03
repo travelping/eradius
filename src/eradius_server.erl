@@ -78,6 +78,7 @@ behaviour_info(callbacks) -> [{radius_request,3}].
 -spec start_link(inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
 start_link(IP = {A,B,C,D}, Port) ->
     Name = list_to_atom(lists:flatten(io_lib:format("eradius_server_~b.~b.~b.~b:~b", [A,B,C,D,Port]))),
+    io:format("Name: ~p", [Name]),
     gen_server:start_link({local, Name}, ?MODULE, {IP, Port}, []).
 
 stats(Server, Function) ->

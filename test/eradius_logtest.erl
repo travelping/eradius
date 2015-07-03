@@ -27,7 +27,7 @@ start() ->
                         ]},
               {session_nodes, [node()]},
               {root, [
-                       { {eradius_logtest, "root", [] }, [{"127.0.0.1", ?SECRET}] }
+                       { {eradius_logtest, "root", [] }, [{"127.0.0.1/24", ?SECRET}] }
               ]},
               {test, [
                        { {eradius_logtest, "test", [] }, [{"127.0.0.1", ?SECRET3}] }

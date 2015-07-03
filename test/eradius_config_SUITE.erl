@@ -22,7 +22,7 @@
                   end
           end)())).
 
-all() -> [config_1, config_2].
+all() -> [config_1, config_2, config_with_ranges].
 
 init_per_suite(Config) ->
     % Is it a good practise? Copied fron client test
@@ -41,7 +41,7 @@ config_1(_Config) ->
                       ]},
             {root, [
                       { {"NAS1", [arg1, arg2]},
-                          [{"10.18.14.2", <<"secret1">>}]},
+                          [{"10.18.14.2/30", <<"secret1">>}]},
                       { {"NAS2", [arg1, arg2]},
                           [{"10.18.14.3", <<"secret2">>, [{nas_id, <<"name">>}]}]}
                    ]}],
@@ -112,6 +112,54 @@ config_2(_Config) ->
                           nas_id = <<"NAS2_10.18.14.2">>,
                           nas_ip = {10,18,14,2},
                           handler_nodes = ['node3@host3', 'node4@host4']
+                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,2})),
+    ok.
+
+config_with_ranges(_Config) ->
+    Nodes = ['node1@host1', 'node2@host2'],
+    Conf = [{session_nodes, [
+                             {"NodeGroup", Nodes}
+                            ]
+            },
+            {servers, [
+                          {root, {"127.0.0.1", [1812, 1813]}}
+                      ]},
+            {root, [
+                      { {handler, "NAS", []},
+                          [ {"10.18.14.2/30", <<"secret2">>, [{group, "NodeGroup"}]} ] }
+                 ]}],
+    apply_conf(Conf),
+    ?match({ok, {handler,[]},
+                #nas_prop{
+                          server_ip = {127,0,0,1},
+                          server_port = 1812,
+                          nas_id = <<"NAS_10.18.14.2">>,
+                          nas_ip = {10,18,14,2},
+                          handler_nodes = Nodes
+                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1812, {10,18,14,2})),
+    ?match({ok, {handler,[]},
+                #nas_prop{
+                          server_ip = {127,0,0,1},
+                          server_port = 1812,
+                          nas_id = <<"NAS_10.18.14.3">>,
+                          nas_ip = {10,18,14,3},
+                          handler_nodes = Nodes
+                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1812, {10,18,14,3})),
+    ?match({ok, {handler,[]},
+                #nas_prop{
+                          server_ip = {127,0,0,1},
+                          server_port = 1813,
+                          nas_id = <<"NAS_10.18.14.1">>,
+                          nas_ip = {10,18,14,1},
+                          handler_nodes = Nodes
+                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,1})),
+    ?match({ok, {handler,[]},
+                #nas_prop{
+                          server_ip = {127,0,0,1},
+                          server_port = 1813,
+                          nas_id = <<"NAS_10.18.14.2">>,
+                          nas_ip = {10,18,14,2},
+                          handler_nodes = Nodes
                          }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,2})),
     ok.
 
