@@ -25,7 +25,7 @@
 
 %% API
 -export([start_link/0, write_request/2,
-         collect_meta/1, collect_message/2]).
+         collect_meta/2, collect_message/2]).
 -export([bin_to_hexstr/1]).
 
 %% gen_server callbacks
@@ -56,10 +56,12 @@ write_request(Sender, Request = #radius_request{}) ->
             ok
     end.
 
--spec collect_meta(#radius_request{}) -> [{term(),term()}].
-collect_meta(Request) ->
+-spec collect_meta(sender(),#radius_request{}) -> [{term(),term()}].
+collect_meta({_NASIP, _NASPort, ReqID}, Request) ->
+    Request_Type = binary_to_list(format_cmd(Request#radius_request.cmd)),
+    Request_ID = integer_to_list(ReqID),
     Attrs = Request#radius_request.attrs,
-    [collect_attr(Key, Val) || {Key, Val} <- Attrs].
+    [{request_type, Request_Type},{request_id, Request_ID}|[collect_attr(Key, Val) || {Key, Val} <- Attrs]].
 
 -spec collect_message(sender(),#radius_request{}) -> iolist().
 collect_message({NASIP, NASPort, ReqID}, Request) ->

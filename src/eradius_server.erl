@@ -272,7 +272,7 @@ handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest) ->
         Request = #radius_request{} ->
             request_inc_counter(Request#radius_request.cmd, NasProp),
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
-            lager:info(eradius_log:collect_meta(Request),"~s",
+            lager:info(eradius_log:collect_meta(Sender, Request),"~s",
                        [eradius_log:collect_message(Sender, Request)]),
             eradius_log:write_request(Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
@@ -309,7 +309,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
 									       msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
 									       eap_msg = EAPmsg}),
             reply_inc_counter(ReplyCmd, NasProp),
-            lager:info(eradius_log:collect_meta(Reply),"~s",
+            lager:info(eradius_log:collect_meta(Sender, Reply),"~s",
                        [eradius_log:collect_message(Sender, Reply)]),
             eradius_log:write_request(Sender, Reply),
             {reply, EncReply};
