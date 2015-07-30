@@ -3,7 +3,7 @@
    {description, "Erlang RADIUS server"},
    {vsn, "0.6.2"},
    {registered, [eradius_dict, eradius_sup, eradius_server_top_sup, eradius_server_sup, eradius_server_mon]},
-   {applications, [kernel, stdlib, crypto, lager]},
+   {applications, [kernel, stdlib, crypto, lager, exometer_core]},
    {mod, {eradius, []}},
    {env, [
       {servers, []},
@@ -12,7 +12,14 @@
       {tables, [dictionary]},
       {client_ip, undefined},
       {client_ports, 20},
-      {resend_timeout, 30000}
+      {resend_timeout, 30000},
+      {metrics, [requests, dupRequests, replies, accessRequests, accessAccepts,
+                 accessRejects, accessChallenges, accountRequests, accountResponses,
+                 packetsDropped, handlerFailure, coaRequests, coaAcks, coaNaks,
+                 disconnectRequests, discNaks, discAcks, malformedRequests,
+                 client_requests, client_remote_requests, client_socket_error, client_socket_dow,
+                 client_responses,
+                 server_uptime, server_reset_time, server_invalid_requests, server_discard_no_handler]}
     %% RADIUS server configuration:
 
     %% Note:
