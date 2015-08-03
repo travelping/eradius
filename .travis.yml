@@ -1,5 +1,6 @@
 language: erlang
 otp_release:
    - 17.4
+   - 18.0
 script: "rebar get-deps compile && rebar eunit ct skip_deps=true"
 after_failure: "cat logs/raw.log"

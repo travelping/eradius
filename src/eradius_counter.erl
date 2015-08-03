@@ -24,7 +24,7 @@
 
 %% @doc initialize a counter structure
 init_counter(Key = {_ServerIP, ServerPort}) when is_integer(ServerPort) ->
-	#server_counter{key = Key, upTime = now(), resetTime = now()};
+	#server_counter{key = Key, upTime = eradius_lib:timestamp(), resetTime = eradius_lib:timestamp()};
 init_counter(#nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP}) ->
     #nas_counter{key = {{ServerIP, ServerPort}, NasIP}};
 init_counter({{ServerIP, ServerPort}, NasIP})
@@ -32,7 +32,7 @@ init_counter({{ServerIP, ServerPort}, NasIP})
     #nas_counter{key = {{ServerIP, ServerPort}, NasIP}}.
 
 %% @doc reset counters
-reset_counter(#server_counter{upTime = Up}) -> #server_counter{upTime = Up, resetTime = now()};
+reset_counter(#server_counter{upTime = Up}) -> #server_counter{upTime = Up, resetTime = eradius_lib:timestamp()};
 reset_counter(Nas = #nas_prop{}) ->
     init_counter(Nas).
 
@@ -82,14 +82,14 @@ start_link() ->
 init([]) ->
     ets:new(?MODULE, [ordered_set, protected, named_table, {keypos, #nas_counter.key}, {write_concurrency,true}]),
     eradius:modules_ready([?MODULE]),
-    {ok, #state{reset = now()}}.
+    {ok, #state{reset = eradius_lib:timestamp()}}.
 
 %% @private
 handle_call(pull, _From, State) ->
     Nass = read_stats(State),
     Servers = server_stats(pull),
     ets:delete_all_objects(?MODULE),
-    {reply, {Servers, Nass}, State#state{reset = now()}};
+    {reply, {Servers, Nass}, State#state{reset = eradius_lib:timestamp()}};
 handle_call(read, _From, State) ->
     Nass = read_stats(State),
     Servers = server_stats(read),
@@ -97,7 +97,7 @@ handle_call(read, _From, State) ->
 handle_call(reset, _From, State) ->
     server_stats(reset),
     ets:delete_all_objects(?MODULE),
-    {reply, ok, State#state{reset = now()}}.
+    {reply, ok, State#state{reset = eradius_lib:timestamp()}}.
 
 %% @private
 handle_cast({inc_counter, Counter, Nas = #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP}}, State) ->
@@ -111,7 +111,7 @@ handle_cast({inc_counter, Counter, Nas = #nas_prop{server_ip = ServerIP, server_
 handle_cast({collect, Ref, Process}, State) ->
     Process ! {collect, Ref, ets:tab2list(?MODULE)},
     ets:delete_all_objects(?MODULE),
-    {noreply, State#state{reset = now()}};
+    {noreply, State#state{reset = eradius_lib:timestamp()}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

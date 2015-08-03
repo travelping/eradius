@@ -70,8 +70,8 @@ testSocket(Pid) ->
 -record(state, {
     socket_ip :: inet:ip_address(),
     no_ports = 1 :: pos_integer(),
-    idcounters = dict:new() :: dict(),
-    sockets = array:new() :: array(),
+    idcounters = dict:new() :: dict:dict(),
+    sockets = array:new() :: array:array(),
     sup :: pid()
 }).
 
