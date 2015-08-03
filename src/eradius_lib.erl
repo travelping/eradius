@@ -1,6 +1,7 @@
 -module(eradius_lib).
 -export([del_attr/2, get_attr/2, encode_request/1, encode_reply_request/1, decode_request/2, decode_request/3, decode_request_id/1]).
 -export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, get_attributes/1, set_attributes/2]).
+-export([timestamp/0]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
 % -compile(bin_opt_info).
@@ -454,6 +455,15 @@ pad_to(Width, Binary) ->
          0 -> Binary;
          N -> <<Binary/binary, 0:(N*8)>>
      end.
+
+-spec timestamp() -> erlang:timestamp().
+timestamp() ->
+    try
+        erlang:timestamp()
+    catch
+        error:undef ->
+            erlang:now()
+    end.
 
 -ifdef(TEST).
 

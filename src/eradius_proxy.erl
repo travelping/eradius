@@ -97,7 +97,7 @@ new_request(Request, _Username, NewUsername) ->
 % @private
 -spec resolve_routes(Username :: undefined | binary(), DefaultRoute :: route(), Routes :: routes(), Options :: [proplists:property()]) -> 
     {NewUsername :: string(), Route :: route()}.
-resolve_routes(undefined, {_, _, DefaultSecret} = DefaultRoute, _Routes, _Options) ->
+resolve_routes(undefined, {_, _, _DefaultSecret} = DefaultRoute, _Routes, _Options) ->
     {undefined, DefaultRoute};
 resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) ->
     Type = proplists:get_value(type, Options, ?DEFAULT_TYPE),

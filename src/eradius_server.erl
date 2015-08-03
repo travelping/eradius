@@ -332,7 +332,7 @@ printable_peer({IA,IB,IC,ID}, Port) ->
 
 -spec printable_date() -> io_lib:chars().
 printable_date() ->
-    {_ , _, MicroSecs} = Now = now(),
+    {_ , _, MicroSecs} = Now = eradius_lib:timestamp(),
     {{Y, Mo, D}, {H, M, S}} = calendar:now_to_local_time(Now),
     io_lib:format("~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b:~4..0b", [Y,Mo,D,H,M,S,MicroSecs div 1000]).
 

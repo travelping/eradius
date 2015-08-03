@@ -38,14 +38,14 @@ init([]) ->
     ets:new(?MODULE, [ordered_set, protected, named_table, {keypos, #nas_counter.key}, {write_concurrency,true}]),
     eradius:modules_ready([?MODULE]),
     erlang:send_after(?INIT_HB, self(), heartbeat),
-    {ok, #state{me = make_ref(), reset = now()}}.
+    {ok, #state{me = make_ref(), reset = eradius_lib:timestamp()}}.
 
 %% @private
 handle_call(pull, _From, State) ->
     Nass = read_stats(State),
     Servers = server_stats(pull),
     ets:delete_all_objects(?MODULE),
-    {reply, {Servers, Nass}, State#state{reset = now()}};
+    {reply, {Servers, Nass}, State#state{reset = eradius_lib:timestamp()}};
 handle_call(read, _From, State) ->
     Nass = read_stats(State),
     Servers = server_stats(read),
@@ -53,7 +53,7 @@ handle_call(read, _From, State) ->
 handle_call(reset, _From, State) ->
     server_stats(reset),
     ets:delete_all_objects(?MODULE),
-    {reply, ok, State#state{reset = now()}}.
+    {reply, ok, State#state{reset = eradius_lib:timestamp()}}.
 
 %% @private
 handle_info(heartbeat, State) ->
