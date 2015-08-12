@@ -1,6 +1,9 @@
+before_install:
+   - wget https://github.com/rebar/rebar/wiki/rebar
+   - chmod u+x ./rebar
 language: erlang
 otp_release:
-   - 17.4
+   - 17.5
    - 18.0
-script: "rebar get-deps compile && rebar eunit ct skip_deps=true"
+script: "./rebar compile && ./rebar skip_deps=true eunit ct send-coveralls"
 after_failure: "cat logs/raw.log"
