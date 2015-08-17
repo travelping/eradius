@@ -22,7 +22,7 @@
                   end
           end)())).
 
-all() -> [config_1, config_2, config_with_ranges].
+all() -> [config_1, config_2, config_with_ranges, log_test].
 
 init_per_suite(Config) ->
     % Is it a good practise? Copied fron client test
@@ -163,6 +163,48 @@ config_with_ranges(_Config) ->
                          }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,2})),
     ok.
 
+log_test(_Config) ->
+    LogFile0 = "./radius.log",
+    LogFile1 = "./radius1.log",
+    LogOn0 = [{logging, true}, {logfile, LogFile0}],
+    LogOn1 = [{logging, true}, {logfile, LogFile1}],
+    LogOff = [{logging, false}],
+
+    % via eradius_log:reconfigure/0
+    set_env(LogOn0),
+    ok = eradius_log:reconfigure(),
+    ?match(true, logger_disabled /= gen_server:call(eradius_log, get_state)),
+    ?match(true, filelib:is_file(LogFile0)),
+
+    set_env(LogOff),
+    ok = eradius_log:reconfigure(),
+    logger_disabled = gen_server:call(eradius_log, get_state),
+
+    set_env(LogOn1),
+    ?match(false, filelib:is_file(LogFile1)),
+    ok = eradius_log:reconfigure(),
+    ?match(true, logger_disabled /= gen_server:call(eradius_log, get_state)),
+    ?match(true, filelib:is_file(LogFile1)),
+
+    % via eradius:config_change/3
+    set_env(LogOff),
+    eradius:config_change([], LogOff, []),
+    logger_disabled = gen_server:call(eradius_log, get_state),
+
+    set_env(LogOn0),
+    eradius:config_change([], LogOn1, []),
+    ?match(true, logger_disabled /= gen_server:call(eradius_log, get_state)),
+
+    % check default value for logging
+    application:unset_env(eradius, logging),
+    eradius:config_change([], [], [logging]),
+    logger_disabled = gen_server:call(eradius_log, get_state),
+
+    ok.
+
+set_env(Config) ->
+    [application:set_env(eradius, Env, Value) || {Env, Value} <- Config].
+
 apply_conf(Config) ->
-    [application:set_env(eradius, Env, Value) || {Env, Value} <- Config],
+    set_env(Config),
     eradius_server_mon:reconfigure().
