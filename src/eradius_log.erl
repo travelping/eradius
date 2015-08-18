@@ -88,17 +88,20 @@ handle_call(get_state, _From, State) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+handle_cast({write_request, _Time, _Sender, _Request}, logger_disabled = State) ->
+    {noreply, State};
+
 handle_cast({write_request, Time, Sender, Request}, State) ->
     try
         Msg = format_message(Time, Sender, Request),
-        ok = io:put_chars(State, Msg)
+        ok = io:put_chars(State, Msg),
+        {noreply, State}
     catch
         _:Error ->
-            lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p",
-                        [Error, Request, Sender]),
-            ok
-    end,
-    {noreply, State}.
+            lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p, " 
+                        "logging will be disabled", [Error, Request, Sender]),
+            {noreply, logger_disabled}
+    end.
 
 handle_info(_Info, State) ->
     {noreply, State}.
