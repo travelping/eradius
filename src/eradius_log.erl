@@ -25,7 +25,8 @@
 
 %% API
 -export([start_link/0, write_request/2,
-         collect_meta/2, collect_message/2]).
+         collect_meta/2, collect_message/2,
+         reconfigure/0]).
 -export([bin_to_hexstr/1]).
 
 %% gen_server callbacks
@@ -67,33 +68,35 @@ collect_meta({_NASIP, _NASPort, ReqID}, Request) ->
 collect_message({NASIP, NASPort, ReqID}, Request) ->
     io_lib:format("~s:~p [~p]: ~s",[inet:ntoa(NASIP), NASPort, ReqID, format_cmd(Request#radius_request.cmd)]).
 
+-spec reconfigure() -> ok.
+reconfigure() ->
+    gen_server:call(?SERVER, reconfigure).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
-init(_) ->
-    {ok, LogFile} = application:get_env(eradius, logfile),
-    filelib:ensure_dir(LogFile),
-    case file:open(LogFile, [append]) of
-    {ok, Fd} ->
-        {ok, Fd};
-    {error, eacces} ->
-        {stop, {file_permission_error, LogFile}};
-    Error ->
-        {stop, Error}
-    end.
+init(_) -> {ok, init_logger()}.
+
+handle_call(reconfigure, _From, State) ->
+    file:close(State),
+    {reply, ok, init_logger()};
+
+% for tests
+handle_call(get_state, _From, State) ->
+    {reply, State, State};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 handle_cast({write_request, Time, Sender, Request}, State) ->
     try
-	Msg = format_message(Time, Sender, Request),
-	ok = io:put_chars(State, Msg)
+        Msg = format_message(Time, Sender, Request),
+        ok = io:put_chars(State, Msg)
     catch
-	_:Error ->
-	    lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p",
-            [Error, Request, Sender]),
-	    ok
+        _:Error ->
+            lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p",
+                        [Error, Request, Sender]),
+            ok
     end,
     {noreply, State}.
 
@@ -110,6 +113,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+%% -- init
+init_logger() ->
+    case application:get_env(eradius, logging) of
+        {ok, true} -> init_logfile();
+        _ -> logger_disabled
+    end.
+
+init_logfile() ->
+    {ok, LogFile} = application:get_env(eradius, logfile),
+    ok = filelib:ensure_dir(LogFile),
+    case file:open(LogFile, [append]) of
+        {ok, Fd} -> Fd;
+        Error ->
+            lager:error("Failed to open file ~p (~p)", [LogFile, Error]),
+            logger_disabled
+    end.
 
 %% -- formatting
 format_message(Time, Sender, Request) ->
