@@ -97,7 +97,7 @@ validate_nas(NasId, IP, Secret, Name, undefined) ->
 validate_nas(_NasId, IP, _Secret, Name, {invalid, _}) ->
     ?invalid("group ~p for nas ~p is undefined", [Name, IP]);
 validate_nas(NasId, IP, Secret, _Name, Nodes) when ?is_io(Secret) andalso (?is_io(NasId) orelse NasId == undefined) ->
-    case string:tokens(IP, "/") of
+    case is_list(IP) andalso string:tokens(IP, "/") of
         [IP0, Mask] -> 
             [{NasId, validate_ip(IP1), validate_secret(Secret), Nodes} || IP1 <- generate_ip_list(validate_ip(IP0), Mask)];
         _ -> {NasId, validate_ip(IP), validate_secret(Secret), Nodes}

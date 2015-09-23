@@ -43,7 +43,7 @@ config_1(_Config) ->
                       { {"NAS1", [arg1, arg2]},
                           [{"10.18.14.2/30", <<"secret1">>}]},
                       { {"NAS2", [arg1, arg2]},
-                          [{"10.18.14.3", <<"secret2">>, [{nas_id, <<"name">>}]}]}
+                          [{{10, 18, 14, 3}, <<"secret2">>, [{nas_id, <<"name">>}]}]}
                    ]}],
     apply_conf(Conf),
     ?match({ok, {?MODULE,[arg1,arg2]},
