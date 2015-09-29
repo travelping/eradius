@@ -15,7 +15,7 @@ pre_compile(Config, Appfile) ->
         [] ->
             ok;
         Dictionaries ->
-            Basedir =  rebar_config:get_xconf(Config, base_dir),
+            {ok, Basedir} = file:get_cwd(),
             IncludeDir = filename:join([Basedir, "include"]),
             ok = filelib:ensure_dir(IncludeDir),
             dictionary_compile(Config, Appfile, Dictionaries)
@@ -29,8 +29,8 @@ clean(Config, Appfile) ->
             dictionary_clean(Config, Appfile, Dictionaries)
     end.
 
-out_files(Config, DictionaryFile) ->
-    Basedir =  rebar_config:get_xconf(Config, base_dir),
+out_files(_Config, DictionaryFile) ->
+    {ok, Basedir} = file:get_cwd(),
     DictionaryFileBase = filename:basename(DictionaryFile),
     OutfileBase = re:replace(DictionaryFileBase, "\\.", "_", [{return, list}]),
     Headerfile = string:join([OutfileBase, "hrl"], "."),
@@ -68,7 +68,7 @@ compile_each([{Dictionary, {Headerfile, Mapfile}}|Rest], Config) ->
 
 clean_each([], _Config) ->
     ok;
-clean_each([{Dictionary, {Headerfile, Mapfile}}|Rest], Config) ->
+clean_each([{_Dictionary, {Headerfile, Mapfile}}|Rest], Config) ->
     rebar_log:log(info, "Delete ~p~n", [Headerfile]),
     file:delete(Headerfile),
     rebar_log:log(info, "Delete ~p~n", [Mapfile]),
