@@ -149,6 +149,10 @@ encode_attribute(_Req, _Attr = #attribute{id = ?REAP_Message}, _) ->
     <<>>;
 encode_attribute(Req, Attr = #attribute{id = {Vendor, ID}}, Value) ->
     EncValue = encode_attribute(Req, Attr#attribute{id = ID}, Value),
+    if byte_size(EncValue) + 6 > 255 ->
+	    error(badarg, [{Vendor, ID}, Value]);
+       true -> ok
+    end,
     <<?RVendor_Specific:8, (byte_size(EncValue) + 6):8, Vendor:32, EncValue/binary>>;
 encode_attribute(Req, #attribute{type = {tagged, Type}, id = ID, enc = Enc}, Value) ->
     case Value of
@@ -156,9 +160,17 @@ encode_attribute(Req, #attribute{type = {tagged, Type}, id = ID, enc = Enc}, Val
         UntaggedValue                                    -> Tag = 0
     end,
     EncValue = encrypt_value(Req, encode_value(Type, UntaggedValue), Enc),
+    if byte_size(EncValue) + 3 > 255 ->
+	    error(badarg, [ID, Value]);
+       true -> ok
+    end,
     <<ID, (byte_size(EncValue) + 3):8, Tag:8, EncValue/binary>>;
 encode_attribute(Req, #attribute{type = Type, id = ID, enc = Enc}, Value)->
     EncValue = encrypt_value(Req, encode_value(Type, Value), Enc),
+    if byte_size(EncValue) + 2 > 255 ->
+	    error(badarg, [ID, Value]);
+       true -> ok
+    end,
     <<ID, (byte_size(EncValue) + 2):8, EncValue/binary>>.
 
 -spec encrypt_value(#radius_request{}, binary(), eradius_dict:attribute_encryption()) -> binary().
