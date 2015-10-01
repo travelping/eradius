@@ -60,7 +60,10 @@ get_attr_loop(_, [])                                     -> undefined.
 
 %% @doc Convert a RADIUS request to the wire format.
 -spec encode_request(#radius_request{}) -> binary().
-encode_request(Req = #radius_request{cmd = Cmd}) when (Cmd == accreq) orelse (Cmd == discreq) orelse (Cmd == coareq) ->
+encode_request(Req = #radius_request{cmd = Cmd})
+  when (Cmd == accreq) orelse
+       (Cmd == discreq) orelse
+       (Cmd == coareq) ->
     encode_reply_request(Req);
 encode_request(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, attrs = Attributes}) ->
     EncReq1 = encode_attributes(Req, Attributes),
