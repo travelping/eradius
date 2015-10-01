@@ -89,7 +89,10 @@ send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(R
 send_remote_request(_Node, _NAS, _Request, _Options) ->
     error(badarg).
 
-fill_authenticator(Req = #radius_request{cmd = accreq}) ->
+fill_authenticator(Req = #radius_request{cmd = Cmd})
+  when (Cmd == accreq) orelse
+       (Cmd == discreq) orelse
+       (Cmd == coareq) ->
     Req#radius_request{authenticator = eradius_lib:zero_authenticator()};
 fill_authenticator(Req = #radius_request{}) ->
     Req#radius_request{authenticator = eradius_lib:random_authenticator()}.
