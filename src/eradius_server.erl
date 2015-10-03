@@ -343,7 +343,7 @@ request_inc_counter(accreq, NasProp) ->
 request_inc_counter(coareq, NasProp) ->
     eradius_counter:inc_counter(coaRequests, NasProp);
 request_inc_counter(discreq, NasProp) ->
-    eradius_counter:inc_counter(disconnectRequests, NasProp);
+    eradius_counter:inc_counter(discRequests, NasProp);
 request_inc_counter(_Cmd, _NasProp) ->
     ok.
 
