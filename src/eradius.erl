@@ -1,8 +1,8 @@
 %% @doc Main module of the eradius application.
 -module(eradius).
 -export([load_tables/1, load_tables/2,
-	 modules_ready/1, modules_ready/2,
-	 statistics/1]).
+         modules_ready/1, modules_ready/2,
+         statistics/1]).
 
 -behaviour(application).
 -export([start/2, stop/1, config_change/3]).
@@ -59,7 +59,14 @@ ensure_ip(IP) ->
 
 %% @private
 start(_StartType, _StartArgs) ->
-    eradius_sup:start_link().
+    Result = eradius_sup:start_link(),
+    case application:get_env(eradius, enable_metrics) of
+        {ok, true} ->
+            eradius_metrics:start_subscriptions();
+        _ ->
+            ok
+    end,
+    Result.
 
 %% @private
 stop(_State) ->
@@ -70,7 +77,7 @@ config_change(Added, Changed, Removed) ->
     lists:foreach(fun do_config_change/1, Added),
     lists:foreach(fun do_config_change/1, Changed),
     Keys = [K || {K, _} <- Added ++ Changed] ++ Removed,
-    (lists:member(logging, Keys) or lists:member(logfile, Keys)) 
+    (lists:member(logging, Keys) or lists:member(logfile, Keys))
         andalso eradius_log:reconfigure(),
     eradius_client:reconfigure().
 

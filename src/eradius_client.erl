@@ -48,6 +48,7 @@ send_request(NAS, Request) ->
 %   If no answer is received within the specified timeout, the request will be sent again.
 -spec send_request(nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'socket_down'}.
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
+    eradius_metrics:update_client_counter_metric(client_requests, 1),
     {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, {IP, Port}}),
     Request1 = fill_authenticator(Request#radius_request{reqid = ReqId, secret = Secret}),
     send_request_loop(Socket, ReqId, {IP, Port}, Request1, Options);
@@ -64,6 +65,7 @@ send_remote_request(Node, NAS, Request) ->
 %   The request will not be sent again if the remote node is unreachable.
 -spec send_remote_request(node(), nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'node_down' | 'socket_down'}.
 send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
+    eradius_metrics:update_client_counter_metric(client_remote_requests, 1),
     try gen_server:call({?SERVER, Node}, {wanna_send, {IP, Port}}) of
         {Socket, ReqId} ->
             Request1 = fill_authenticator(Request#radius_request{reqid = ReqId, secret = Secret}),
@@ -103,8 +105,7 @@ send_remote_request_loop(ReplyPid, Socket, ReqId, Peer, EncRequest, Options) ->
 
 send_request_loop(Socket, ReqId, Peer,
 		  Request = #radius_request{authenticator = Authenticator},
-		  Options) ->
-    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
+		  Options) ->    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
     EncRequest = eradius_lib:encode_request(Request),
     SMon = erlang:monitor(process, Socket),
@@ -117,10 +118,13 @@ send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout,
     Socket ! {self(), send_request, Peer, ReqId, EncRequest},
     receive
         {Socket, response, ReqId, Response} ->
+            eradius_metrics:update_client_counter_metric(client_responses, 1),
             {ok, Response, Authenticator};
         {'DOWN', SMon, process, Socket, _} ->
+            eradius_metrics:update_client_counter_metric(client_socket_down, 1),
             {error, socket_down};
         {Socket, error, Error} ->
+            eradius_metrics:update_client_counter_metric(client_socket_error, 1),
             {error, Error}
     after
         Timeout ->

@@ -13,6 +13,9 @@
 -define(SECRET2, <<"proxy_secret">>).
 -define(SECRET3, <<"test_secret">>).
 
+-define(CLIENT_REQUESTS_COUNT, 1).
+-define(CLIENT_PROXY_REQUESTS_COUNT, 8).
+
 start() ->
     application:load(eradius),
     ProxyConfig = [{default_route, {{127, 0, 0, 1}, 1813, ?SECRET}}, 
@@ -38,16 +41,21 @@ start() ->
              ],
     [application:set_env(eradius, Key, Value) || {Key, Value} <- Config],
     {ok, _} = application:ensure_all_started(eradius),
-    {ok, spawn(fun() ->
-                   eradius:modules_ready([?MODULE, eradius_proxy]),
-                   timer:sleep(infinity)
-               end)}.
+    spawn(fun() ->
+                  eradius:modules_ready([?MODULE, eradius_proxy]),
+                  timer:sleep(infinity)
+          end),
+    check_server_metrics().
 
 test() ->
     application:set_env(lager, handlers, [{lager_journald_backend, []}]),
     eradius_logtest:start(),
     eradius_logtest:test_client(),
+    exometer:reset([eradius, client_requests]),
+    exometer:reset([eradius, client_responses]),
     eradius_logtest:test_proxy(),
+    exometer:reset([eradius, client_requests]),
+    exometer:reset([eradius, client_responses]),
     ok.
 
 
@@ -72,7 +80,8 @@ test_client() ->
 test_client(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
     Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user")),
-    send_request({127, 0, 0, 1}, 1813, ?SECRET, Request).
+    send_request({127, 0, 0, 1}, 1813, ?SECRET, Request),
+    check_client_metrics(?CLIENT_REQUESTS_COUNT).
 
 test_proxy() ->
   test_proxy(request).
@@ -85,9 +94,10 @@ test_proxy(Command) ->
     Request2 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@test")),
     send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request2),
     Request3 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@domain@test")),
-    send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request3).
+    send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request3),
+    check_client_metrics(?CLIENT_PROXY_REQUESTS_COUNT).
 
-send_request(Ip, Port, Secret, Request) -> 
+send_request(Ip, Port, Secret, Request) ->
     case eradius_client:send_request({Ip, Port, Secret}, Request) of
         {ok, Result, Auth} ->
             eradius_lib:decode_request(Result, Secret, Auth);
@@ -107,3 +117,31 @@ attrs(User) ->
      {{10415,1}, "1337"},                 %X_3GPP-IMSI
      {{127,42},18}                        %Unbekannte ID
     ].
+
+check_client_metrics(ValidReqCount) ->
+    case exometer:get_value([eradius, client_requests]) of
+        {ok,[{value, ValidReqCount}, _]} ->
+            ok;
+        _ ->
+            lager:error("Wrong value of the `client_requests` metric: ~p~n", [exometer:get_value([eradius, client_requests])])
+    end,
+
+    {ok, [{value, Responses}, _]} = exometer:get_value([eradius, client_responses]),
+    case ValidReqCount == Responses of
+        true ->
+            ok;
+        _ ->
+            lager:error("Wrong value of the `client_responses` metric: ~p~n", [exometer:get_value([eradius, client_responses])])
+    end.
+
+check_server_metrics() ->
+    {MegaSecs, Secs, MicroSecs} = os:timestamp(),
+    CurrentTimestamp = list_to_integer(integer_to_list(MegaSecs) ++ integer_to_list(Secs) ++ integer_to_list(MicroSecs)),
+    {ok, [{value, UptimeTimestamp}, _]} = exometer:get_value([eradius, '127.0.0.1:1812', server_uptime]),
+
+    case CurrentTimestamp > UptimeTimestamp of
+        true ->
+            ok;
+        false ->
+            lager:error("Wrong value of the `server_uptime` metric. ~n")
+    end.
