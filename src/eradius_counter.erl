@@ -24,7 +24,7 @@
 
 %% @doc initialize a counter structure
 init_counter(Key = {_ServerIP, ServerPort}) when is_integer(ServerPort) ->
-	#server_counter{key = Key, upTime = eradius_lib:timestamp(), resetTime = eradius_lib:timestamp()};
+	#server_counter{key = Key, startTime = eradius_lib:timestamp(), resetTime = eradius_lib:timestamp()};
 init_counter(#nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP}) ->
     #nas_counter{key = {{ServerIP, ServerPort}, NasIP}};
 init_counter({{ServerIP, ServerPort}, NasIP})
@@ -32,7 +32,7 @@ init_counter({{ServerIP, ServerPort}, NasIP})
     #nas_counter{key = {{ServerIP, ServerPort}, NasIP}}.
 
 %% @doc reset counters
-reset_counter(#server_counter{upTime = Up}) -> #server_counter{upTime = Up, resetTime = eradius_lib:timestamp()};
+reset_counter(#server_counter{startTime = Up}) -> #server_counter{startTime = Up, resetTime = eradius_lib:timestamp()};
 reset_counter(Nas = #nas_prop{}) ->
     init_counter(Nas).
 

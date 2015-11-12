@@ -146,13 +146,13 @@ send(FUN, Ports, Address) ->
 
 wanna_send(_Config) ->
     lists:map(fun(_) ->
-                        IP = random:uniform(100),
+                        IP = {random:uniform(100), random:uniform(100), random:uniform(100), random:uniform(100)},
                         Port = random:uniform(100),
                         FUN = fun() -> gen_server:call(eradius_client, {wanna_send, {IP, Port}}) end,
                         send(FUN, null, null)
                 end, lists:seq(1, 10)).
 
-%% I've catched some data races with `delSocket()' and `getSocketCount()' when 
+%% I've catched some data races with `delSocket()' and `getSocketCount()' when
 %% `delSocket()' happens after `getSocketCount()' (because `delSocket()' is sent from another process).
 %% I don't know a better decision than add some delay before `getSocketCount()'
 reconf_address(_Config) ->

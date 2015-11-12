@@ -26,11 +26,6 @@
     prop :: #nas_prop{}
 }).
 
--define(NAS_METRICS_TYPES, [requests, dupRequests, replies, accessRequests, accessAccepts,
-                            accessRejects, accessChallenges, accountRequests, accountResponses,
-                            packetsDropped, handlerFailure, coaRequests, coaAcks, coaNaks,
-                            disconnectRequests, discNaks, discAcks, malformedRequests]).
-
 %% ------------------------------------------------------------------------------------------
 %% -- API
 start_link() ->
@@ -117,28 +112,14 @@ configure(#state{running = Running}) ->
                                             ets:insert(?NAS_TAB, List),
                                             List
                                     end, ServList),
-            {ok, MetricsConfiguration} = application:get_env(eradius, metrics),
             ets:foldl(fun(Nas, _) ->
                               case lists:member(Nas, NasList) of
                                   true ->
                                       {nas,{{_, Port},_},_, {_,_,_,NasIP,_,_,_,_}} = Nas,
-                                      Reporters = exometer_report:list_reporters(),
-                                      lists:foreach(fun({Reporter, _}) ->
-                                          lists:foreach(fun(Metric) ->
-                                              case lists:member(Metric, MetricsConfiguration) of
-                                                  true ->
-						      Key = erlang:iolist_to_binary([NasIP, <<":">>, integer_to_binary(Port)]),
-						      exometer_report:subscribe(Reporter,
-										[eradius, binary_to_atom(Key, utf8), Metric],
-										value, 500, [{nas, {from_name, 2}}], true);
-                                                  false ->
-                                                      ok
-                                              end
-                                          end, ?NAS_METRICS_TYPES)
-                                      end, Reporters),
+				      eradius_metrics:subscribe_server(NasIP, Port, proxy),
+				      eradius_metrics:subscribe_server(NasIP, Port, nas),
                                       done;
-                                  false   ->
-                                      ets:delete(?NAS_TAB, Nas)
+                                  false   -> ets:delete(?NAS_TAB, Nas)
                               end
                       end, [], ?NAS_TAB),
 
