@@ -13,13 +13,16 @@
       {client_ip, undefined},
       {client_ports, 20},
       {resend_timeout, 30000},
-      {metrics, [requests, dupRequests, replies, accessRequests, accessAccepts,
-                 accessRejects, accessChallenges, accountRequests, accountResponses,
-                 packetsDropped, handlerFailure, coaRequests, coaAcks, coaNaks,
-                 disconnectRequests, discNaks, discAcks, malformedRequests,
-                 client_requests, client_remote_requests, client_socket_error, client_socket_dow,
-                 client_responses,
-                 server_uptime, server_reset_time, server_invalid_requests, server_discard_no_handler]}
+      %% Metrics configuration:
+      %%
+      %% The `metrics` configuration option provides the list which
+      %% may contains following atoms:
+      %%
+      %%  * nas - enables subscription on a nas metrics (count of dropped packets and etc...)
+      %%  * server - enables subscription on a server metrics (server uptime and etc..)
+      %%  * client - enables subscription on a client metrics (count of access requests and etc...)
+      %%
+      {metrics, [nas, server, client]}
     %% RADIUS server configuration:
 
     %% Note:

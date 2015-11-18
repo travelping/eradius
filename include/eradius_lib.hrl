@@ -74,7 +74,7 @@
 
 -record(server_counter, {
           key                  :: term(),
-          upTime               :: erlang:timestamp(),
+          startTime            :: eralng:timestamp(),
           resetTime            :: erlang:timestamp(),
           invalidRequests = 0  :: non_neg_integer(),
           discardNoHandler = 0 :: non_neg_integer()

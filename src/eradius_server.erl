@@ -48,7 +48,6 @@
 %% internal
 -export([do_radius/5, handle_request/3, handle_remote_request/5, stats/2]).
 -export([printable_peer/2]).
--export([get_metric_name/3]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -58,8 +57,6 @@
 -define(RESEND_TIMEOUT, 5000).          % how long the binary response is kept after sending it on the socket
 -define(RESEND_RETRIES, 3).             % how often a reply may be resent
 -define(HANDLER_REPLY_TIMEOUT, 15000).  % how long to wait before a remote handler is considered dead
-
--define(SERVER_METRIC_TYPES, [server_uptime, server_reset_time, server_invalid_requests, server_discard_no_handler]).
 
 -type port_number() :: 1..65535.
 -type req_id()      :: byte().
@@ -94,7 +91,7 @@ init({IP, Port}) ->
     process_flag(trap_exit, true),
     case gen_udp:open(Port, [{active, once}, {ip, IP}, binary]) of
         {ok, Socket} ->
-            init_server_metrics(IP, Port),
+            eradius_metrics:subscribe_server(IP, Port, server),
             {ok, #state{socket = Socket,
                         ip = IP, port = Port,
                         transacts = ets:new(transacts, []),
@@ -120,22 +117,22 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
                     %% handler process is still working on the request
                     lager:debug("~s From: ~s INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
-                    eradius_metrics:update_nas_prop_metric(dupRequests, NasProp, 1),
+                    eradius_metrics:update_nas_prop_metric(dup_requests, NasProp, 1),
                     eradius_counter:inc_counter(dupRequests, NasProp);
                 [{_ReqKey, {replied, HandlerPid}}] ->
                     %% handler process waiting for resend message
                     HandlerPid ! {self(), resend, Socket},
                     lager:debug("~s From: ~s INF: Handler ~p waiting for resent message. duplicate request (resent) ~p",
                          [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
-                    eradius_metrics:update_nas_prop_metric(dupRequests, NasProp, 1),
+                    eradius_metrics:update_nas_prop_metric(dup_requests, NasProp, 1),
                     eradius_counter:inc_counter(dupRequests, NasProp)
             end,
             NewState = State;
         {discard, Reason} when Reason == no_nodes_local, Reason == no_nodes ->
-            exometer:update_or_create(get_metric_name(IP, Port, server_invalid_requests), 1, counter, []),
+            exometer:update_or_create(eradius_metrics:get_metric_name(IP, Port, invalid_requests, server), 1, counter, []),
             NewState = State#state{counter = eradius_counter:inc_counter(discardNoHandler, State#state.counter)};
         {discard, _Reason} ->
-            exometer:update_or_create(get_metric_name(IP, Port, server_discard_no_handler), 1, counter, []),
+            exometer:update_or_create(eradius_metrics:get_metric_name(IP, Port, discards_no_handler, server), 1, counter, []),
             NewState = State#state{counter = eradius_counter:inc_counter(invalidRequests, State#state.counter)}
     end,
     inet:setopts(Socket, [{active, once}]),
@@ -184,36 +181,6 @@ lookup_nas(#state{ip = IP, port = Port}, NasIP, <<_Code, ReqID, _/binary>>) ->
 lookup_nas(_State, _NasIP, _Packet) ->
     {discard, bad_pdu}.
 
-get_metric_name(IP, Port, Metric) ->
-    {N1, N2, N3, N4} = IP,
-    Name = erlang:iolist_to_binary([integer_to_binary(N1), <<".">>,
-                                    integer_to_binary(N2), <<".">>,
-                                    integer_to_binary(N3), <<".">>,
-                                    integer_to_binary(N4), <<":">>, integer_to_binary(Port)]),
-    [eradius, binary_to_atom(Name, utf8), Metric].
-
-init_server_metrics(IP, Port) ->
-    {ok, MetricsConfiguration} = application:get_env(eradius, metrics),
-    Reporters = exometer_report:list_reporters(),
-    lists:foreach(fun({Reporter, _}) ->
-        lists:foreach(fun(Metric) ->
-            case lists:member(Metric, MetricsConfiguration) of
-                true ->
-                    exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric), value, 500,
-					      [{server, {from_name, 2}}], true);
-                false ->
-                    ok
-            end
-        end, ?SERVER_METRIC_TYPES)
-    end,
-    Reporters),
-
-    % update server uptime and reset time metrics
-    {MegaSecs, Secs, MicroSecs} = os:timestamp(),
-    Timestamp = list_to_integer(integer_to_list(MegaSecs) ++ integer_to_list(Secs) ++ integer_to_list(MicroSecs)),
-    exometer:update_or_create(get_metric_name(IP, Port, server_uptime), Timestamp, gauge, []),
-    exometer:update_or_create(get_metric_name(IP, Port, server_reset_time), Timestamp, gauge, []).
-
 %% ------------------------------------------------------------------------------------------
 %% -- Request Handler
 %% @private
@@ -239,17 +206,17 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
         {exit, Reason} ->
             lager:debug("~s From: ~s INF: Handler exited for reason ~p, discarding request ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
-            eradius_metrics:update_nas_prop_metric(handlerFailure, NasProp, 1),
+            eradius_metrics:update_nas_prop_metric(handler_failures, NasProp, 1),
             eradius_counter:inc_counter(handlerFailure, NasProp),
             ServerPid ! {discarded, ReqKey}
     end.
 
 %% @TODO: extend for other failures
 discard_inc_counter(bad_pdu, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(malformedRequests, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(malformed_requests, NasProp, 1),
     eradius_counter:inc_counter(malformedRequests, NasProp);
 discard_inc_counter(_Reason, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(packetsDropped, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(packets_dropped, NasProp, 1),
     eradius_counter:inc_counter(packetsDropped, NasProp).
 
 wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, Retries) ->
@@ -380,54 +347,43 @@ printable_date() ->
     io_lib:format("~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b:~4..0b", [Y,Mo,D,H,M,S,MicroSecs div 1000]).
 
 request_inc_counter(request, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(accessRequests, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(access_requests, NasProp, 1),
     eradius_counter:inc_counter(accessRequests, NasProp);
 request_inc_counter(accreq, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(accountRequests, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(account_requests, NasProp, 1),
     eradius_counter:inc_counter(accountRequests, NasProp);
 request_inc_counter(coareq, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(coaRequests, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(coa_requests, NasProp, 1),
     eradius_counter:inc_counter(coaRequests, NasProp);
 request_inc_counter(discreq, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(discRequests, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(disconnect_requests, NasProp, 1),
     eradius_counter:inc_counter(discRequests, NasProp);
 request_inc_counter(_Cmd, _NasProp) ->
     ok.
 
 reply_inc_counter(accept, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(accessAccepts, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(access_accepts, NasProp, 1),
     eradius_counter:inc_counter(accessAccepts, NasProp);
 reply_inc_counter(reject, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(accessRejects, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(access_rejects, NasProp, 1),
     eradius_counter:inc_counter(accessRejects, NasProp);
 reply_inc_counter(challenge, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(accessChallenges, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(access_challenges, NasProp, 1),
     eradius_counter:inc_counter(accessChallenges, NasProp);
 reply_inc_counter(accresp, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(accountResponses, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(account_responses, NasProp, 1),
     eradius_counter:inc_counter(accountResponses, NasProp);
 reply_inc_counter(coaack, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(coaAcks, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(coa_acks, NasProp, 1),
     eradius_counter:inc_counter(coaAcks, NasProp);
 reply_inc_counter(coanak, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(coaNaks, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(coa_naks, NasProp, 1),
     eradius_counter:inc_counter(coaNaks, NasProp);
 reply_inc_counter(discack, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(discAcks, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(disc_acks, NasProp, 1),
     eradius_counter:inc_counter(discAcks, NasProp);
 reply_inc_counter(discnak, NasProp) ->
-    eradius_metrics:update_nas_prop_metric(discNaks, NasProp, 1),
+    eradius_metrics:update_nas_prop_metric(disc_naks, NasProp, 1),
     eradius_counter:inc_counter(discNaks, NasProp);
 reply_inc_counter(_Cmd, _NasProp) ->
     ok.
-
-%% ------------------------------------------------------------------------------------------
-%% -- EUnit Tests
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-get_metric_name_test() ->
-    ?assertEqual(eradius_server:get_metric_name({127, 0, 0, 1}, 1813, server_reset_time), [eradius, '127.0.0.1:1813', server_reset_time]),
-    ?assertEqual(eradius_server:get_metric_name({127, 0, 0, 1}, 1812, server_reset_time), [eradius, '127.0.0.1:1812', server_reset_time]),
-    ok.
--endif.

@@ -59,14 +59,7 @@ ensure_ip(IP) ->
 
 %% @private
 start(_StartType, _StartArgs) ->
-    Result = eradius_sup:start_link(),
-    case application:get_env(eradius, enable_metrics) of
-        {ok, true} ->
-            eradius_metrics:start_subscriptions();
-        _ ->
-            ok
-    end,
-    Result.
+    eradius_sup:start_link().
 
 %% @private
 stop(_State) ->
