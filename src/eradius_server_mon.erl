@@ -116,7 +116,6 @@ configure(#state{running = Running}) ->
                               case lists:member(Nas, NasList) of
                                   true ->
                                       {nas,{{_, Port},_},_, {_,_,_,NasIP,_,_,_,_}} = Nas,
-				      eradius_metrics:subscribe_server(NasIP, Port, proxy),
 				      eradius_metrics:subscribe_server(NasIP, Port, nas),
                                       done;
                                   false   -> ets:delete(?NAS_TAB, Nas)
