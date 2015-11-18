@@ -67,7 +67,7 @@ client_subscriptions({IP, Port}, Reporter, Metrics) ->
 				  exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric, client),
 							    DataPoint, 1000, [{client, {from_name, 3}}], true)
 			  end, Metrics);
-	fase ->
+	false ->
 	    ok
     end.
 
