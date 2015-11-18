@@ -56,7 +56,7 @@ subscribe_client(Name) ->
 
 client_subscriptions({IP, Port}, Reporter, Metrics) ->
     {ok, EnabledMetrics} = application:get_env(eradius, metrics),
-    case lists:memeber(client, EnabledMetrics) of
+    case lists:member(client, EnabledMetrics) of
 	true ->
 	    lists:foreach(fun({Metric, MetricType}) ->
 				  DataPoint = case MetricType of
