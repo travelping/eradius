@@ -127,11 +127,11 @@ check_client_metrics(ValidReqCount, Addr, Metric) ->
 check_server_metrics() ->
     timer:sleep(5000),
     case exometer:get_value([eradius, server, binary_to_atom(<<"127.0.0.1:11813">>, utf8), uptime]) of
-	{ok, 5} -> ok;
-	_ -> lager:error("Wrong value of the server `uptime` metric: ~n")
+       {ok, [{counter, 5}]} -> ok;
+       _ -> lager:error("Wrong value of the server `uptime` metric: ~n")
     end,
     timer:sleep(15000),
     case exometer:get_value([eradius, server, binary_to_atom(<<"127.0.0.1:11813">>, utf8), uptime]) of
-	{ok, 20} -> ok;
-	_ -> lager:error("Wrong value of the server `uptime` metric: ~n")
+       {ok, [{counter, 20}]} -> ok;
+       _ -> lager:error("Wrong value of the server `uptime` metric: ~n")
     end.

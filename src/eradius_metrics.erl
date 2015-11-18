@@ -99,7 +99,7 @@ addr_to_bin(IP, Port) ->
 update_uptime({IP, Port}) ->
     {ok, [{value, ServerStartTime}, _]} = exometer:get_value(get_metric_name(IP, Port, start_time, server)),
     CurrentTime = timestamp(),
-    round(CurrentTime - ServerStartTime).
+    [{counter, round(CurrentTime - ServerStartTime)}].
 
 timestamp() ->
     {MegaSecs, Secs, MicroSecs} = os:timestamp(),
