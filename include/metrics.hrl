@@ -1,4 +1,4 @@
--define(SERVER_METRICS, [start_time, uptime, reset_time, invalid_requests, discards_no_handler]).
+-define(SERVER_METRICS, [start_time, reset_time, invalid_requests, discards_no_handler]).
 
 -define(CLIENT_METRICS, [{socket_errors, counter}, {sockets_down, counter}, {access_requests, counter},
                          {reject_requests, counter}, {accept_requests, counter}, {challenge_requests, counter},
