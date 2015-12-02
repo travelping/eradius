@@ -32,9 +32,9 @@ subscribe_server(IP, Port, SubscriptionType) ->
             exometer:update_or_create(eradius_metrics:get_metric_name(IP, Port, start_time, server), StartTime, gauge, []),
             exometer:update_or_create(eradius_metrics:get_metric_name(IP, Port, reset_time, server), StartTime, gauge, []),
             UptimeMetricName = eradius_metrics:get_metric_name(IP, Port, uptime, server),
-            exometer:new(UptimeMetricName, {function, eradius_metrics, update_uptime, [{IP, Port}], value, [counter]}),
+            exometer:new(UptimeMetricName, {function, eradius_metrics, update_uptime, [{IP, Port}], proplist, [counter]}),
             lists:foreach(fun({Reporter, _}) ->
-                exometer_report:subscribe(Reporter, UptimeMetricName, value, 10000, [{uptime, {from_name, 3}}], true)
+                exometer_report:subscribe(Reporter, UptimeMetricName, counter, 10000, [{uptime, {from_name, 3}}], true)
 	    end,
 	    exometer_report:list_reporters());
         _ ->
