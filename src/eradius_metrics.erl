@@ -2,26 +2,53 @@
 
 -include("metrics.hrl").
 
--export([get_metric_name/4, subscribe_client/1, addr_to_bin/2, subscribe_server/3, timestamp/0, update_uptime/1]).
+-export([get_metric_name/4, subscribe_client/1, subscribe_server/2, timestamp/0, update_uptime/1, unsubscribe_server/2]).
 -export([update_client_counter_metric/4, update_nas_prop_metric/3, update_client_histogram_metric/4]).
 
-subscribe_server(IP, Port, SubscriptionType) ->
-    {ok, EnabledMetrics} = application:get_env(eradius, metrics),
-    lists:foreach(fun({Reporter, _}) ->
-        {MetricsList, MetricType} = case SubscriptionType of
-					server -> {?SERVER_METRICS, value};
-					nas -> {?NAS_METRICS, value}
-				    end,
+get_metrics_by_type(Type) ->
+    case Type of
+        server -> {?SERVER_METRICS, value};
+        nas -> {?NAS_METRICS, value}
+    end.
 
-	case lists:member(SubscriptionType, EnabledMetrics) of
-	    true ->
-		lists:foreach(fun(Metric) ->
-		    Name = server_metric_name(IP, Port, Metric, SubscriptionType),
-		    exometer_report:subscribe(Reporter, Name, MetricType, 1000, [{SubscriptionType, {from_name, 3}}], true)
-		end, MetricsList);
-	    false ->
-		ok
-	end
+unsubscribe_server(SubscriptionName, SubscriptionType) ->
+    {ok, EnabledMetrics} = application:get_env(eradius, metrics),
+    {MetricsList, MetricType} = get_metrics_by_type(SubscriptionType),
+    lists:foreach(fun({Reporter, _}) ->
+                  case lists:member(SubscriptionType, EnabledMetrics) of
+                      true ->
+                          lists:foreach(fun(Metric) ->
+                                                ServerId = get_server_id(SubscriptionName),
+                                                Name = [eradius, SubscriptionType, ServerId, Metric],
+                                                exometer_report:unsubscribe_all(Reporter, Name),
+                                                exometer:delete(Name)
+                                        end, MetricsList);
+                      false ->
+                          ok
+                  end
+     end,
+     exometer_report:list_reporters()).
+
+get_server_id(SubscriptionName) ->
+    case is_atom(SubscriptionName) of
+        true -> SubscriptionName;
+        false -> binary_to_atom(SubscriptionName, utf8)
+    end.
+
+subscribe_server(SubscriptionName, SubscriptionType) ->
+    {ok, EnabledMetrics} = application:get_env(eradius, metrics),
+    ServerId = get_server_id(SubscriptionName),
+    lists:foreach(fun({Reporter, _}) ->
+                  {MetricsList, MetricType} = get_metrics_by_type(SubscriptionType),
+                  case lists:member(SubscriptionType, EnabledMetrics) of
+                      true ->
+                          lists:foreach(fun(Metric) ->
+                                            Name = [eradius, SubscriptionType, ServerId, Metric],
+                                            exometer_report:subscribe(Reporter, Name, MetricType, 1000, [{SubscriptionType, {from_name, 3}}], true)
+                                        end, MetricsList);
+                      false ->
+                          ok
+                  end
     end,
     exometer_report:list_reporters()),
 
@@ -29,26 +56,22 @@ subscribe_server(IP, Port, SubscriptionType) ->
     case SubscriptionType of
         server ->
             StartTime = round(timestamp()),
-            exometer:update_or_create(eradius_metrics:get_metric_name(IP, Port, start_time, server), StartTime, gauge, []),
-            exometer:update_or_create(eradius_metrics:get_metric_name(IP, Port, reset_time, server), StartTime, gauge, []),
-            UptimeMetricName = eradius_metrics:get_metric_name(IP, Port, uptime, server),
-            exometer:new(UptimeMetricName, {function, eradius_metrics, update_uptime, [{IP, Port}], proplist, [counter]}),
-            lists:foreach(fun({Reporter, _}) ->
-                exometer_report:subscribe(Reporter, UptimeMetricName, counter, 10000, [{uptime, {from_name, 3}}], true)
-	    end,
-	    exometer_report:list_reporters());
+            exometer:update_or_create([eradius, server, ServerId, start_time], StartTime, gauge, []),
+            exometer:update_or_create([eradius, server, ServerId, reset_time], StartTime, gauge, []),
+            UptimeMetricName = [eradius, server, ServerId, uptime],
+            case exometer:info(UptimeMetricName) of
+                [] ->
+                    exometer:new(UptimeMetricName, {function, eradius_metrics, update_uptime, [ServerId], proplist, [counter]}),
+                    lists:foreach(fun({Reporter, _}) ->
+                                          exometer_report:subscribe(Reporter, UptimeMetricName, counter, 10000, [{uptime, {from_name, 3}}], true)
+                                  end,
+                                  exometer_report:list_reporters());
+                _ ->
+                    % we already have this metric, so, do nothing
+                    ok
+            end;
         _ ->
             ok
-    end.
-
-server_metric_name(IP, Port, Metric, Type) ->
-    case Type of
-	server ->
-	    eradius_metrics:get_metric_name(IP, Port, Metric, Type);
-	_ ->
-	    FormatNasName = [IP, <<":">>, integer_to_binary(Port)],
-	    Key = binary_to_atom(erlang:iolist_to_binary(FormatNasName), utf8),
-	    [eradius, Type, Key, Metric]
     end.
 
 subscribe_client(Name) ->
@@ -57,24 +80,23 @@ subscribe_client(Name) ->
 client_subscriptions({IP, Port}, Reporter, Metrics) ->
     {ok, EnabledMetrics} = application:get_env(eradius, metrics),
     case lists:member(client, EnabledMetrics) of
-	true ->
-	    lists:foreach(fun({Metric, MetricType}) ->
-				  DataPoint = case MetricType of
-						  counter ->   value;
-						  histogram -> mean;
-						  _ -> ok
-					      end,
-				  exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric, client),
-							    DataPoint, 1000, [{client, {from_name, 3}}], true)
-			  end, Metrics);
-	false ->
-	    ok
+        true ->
+            lists:foreach(fun({Metric, MetricType}) ->
+                                  DataPoint = case MetricType of
+                                                  counter ->   value;
+                                                  histogram -> mean;
+                                                  _ -> ok
+                                              end,
+                                  exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric, client),
+                                                            DataPoint, 1000, [{client, {from_name, 3}}], true)
+                          end, Metrics);
+        false ->
+            ok
     end.
 
 %% Helper
-update_nas_prop_metric(Metric, {nas_prop, _, Port, NAS, _, _ ,_, _} = _N, Value) ->
-    Key = binary_to_atom(erlang:iolist_to_binary([NAS, <<":">>, integer_to_binary(Port)]), utf8),
-    exometer:update_or_create([eradius, nas, Key, Metric], Value, counter, []).
+update_nas_prop_metric(Metric, {nas_prop, _, _Port, NAS, _, _ ,_, _} = _N, Value) ->
+    exometer:update_or_create([eradius, nas, binary_to_atom(NAS, utf8), Metric], Value, counter, []).
 
 %% Helpers for client metrics
 update_client_histogram_metric(Metric, ClientIp, Port, Value) ->
@@ -92,12 +114,12 @@ get_metric_name(IP, Port, MetricName, MetricType) ->
 addr_to_bin(IP, Port) ->
     {N1, N2, N3, N4} = IP,
     erlang:iolist_to_binary([integer_to_binary(N1), <<".">>,
-			     integer_to_binary(N2), <<".">>,
-			     integer_to_binary(N3), <<".">>,
-			     integer_to_binary(N4), <<":">>, integer_to_binary(Port)]).
+                             integer_to_binary(N2), <<".">>,
+                             integer_to_binary(N3), <<".">>,
+                             integer_to_binary(N4), <<":">>, integer_to_binary(Port)]).
 
-update_uptime({IP, Port}) ->
-    {ok, [{value, ServerStartTime}, _]} = exometer:get_value(get_metric_name(IP, Port, start_time, server)),
+update_uptime(ServerName) ->
+    {ok, [{value, ServerStartTime}, _]} = exometer:get_value([eradius, server, binary_to_atom(ServerName, utf8), start_time]),
     CurrentTime = timestamp(),
     [{counter, round(CurrentTime - ServerStartTime)}].
 
@@ -112,8 +134,6 @@ timestamp() ->
 
 get_metric_name_test() ->
     ?assertEqual(eradius_metrics:get_metric_name({127, 0, 0, 1}, 1813, reset_time, client),
-		 [eradius, client, '127.0.0.1:1813', reset_time]),
-    ?assertEqual(eradius_metrics:get_metric_name({127, 0, 0, 1}, 1812, reset_time, server),
-		 [eradius, server, '127.0.0.1:1812', reset_time]),
+                 [eradius, client, '127.0.0.1:1813', reset_time]),
     ok.
 -endif.

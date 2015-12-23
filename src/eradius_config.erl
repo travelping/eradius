@@ -29,17 +29,17 @@ validate_new_config_start(Servers, Nodes) ->
     map_helper(fun(Server) -> validate_new_server_config(Server, Nodes) end, Servers, flatten).
 
 validate_new_server_config({Name, {IP, ListOfPorts}}, Nodes) ->
-    validate_new_server_config(get_app_env(Name), validate_ip(IP), validate_ports(ListOfPorts), Nodes).
+    validate_new_server_config(Name, get_app_env(Name), validate_ip(IP), validate_ports(ListOfPorts), Nodes).
 
-validate_new_server_config({invalid, _} = Invalid, _IP, _ListOfPorts, _Nodes) -> Invalid;
-validate_new_server_config(_NasList, {invalid, _} = Invalid, _ListOfPorts, _Nodes) -> Invalid;
-validate_new_server_config(_NasList, _IP, {invalid, _} = Invalid, _Nodes) -> Invalid;
-validate_new_server_config(NasList, IP, ListOfPorts, Nodes) ->
+validate_new_server_config(_Server, {invalid, _} = Invalid, _IP, _ListOfPorts, _Nodes) -> Invalid;
+validate_new_server_config(_Server, _NasList, {invalid, _} = Invalid, _ListOfPorts, _Nodes) -> Invalid;
+validate_new_server_config(_Server, _NasList, _IP, {invalid, _} = Invalid, _Nodes) -> Invalid;
+validate_new_server_config(Server, NasList, IP, ListOfPorts, Nodes) ->
     case validate_new_nas_list(NasList, {IP, ListOfPorts, Nodes}) of
         {invalid, _} = Invalid ->
             Invalid;
         Values ->
-            lists:map(fun(Port) -> {{IP, Port}, Values} end, ListOfPorts)
+            lists:map(fun(Port) -> {Server, {IP, Port}, Values} end, ListOfPorts)
     end.
 
 validate_new_nas_list(NasLists, ServerConfig) ->
@@ -98,7 +98,7 @@ validate_nas(_NasId, IP, _Secret, Name, {invalid, _}) ->
     ?invalid("group ~p for nas ~p is undefined", [Name, IP]);
 validate_nas(NasId, IP, Secret, _Name, Nodes) when ?is_io(Secret) andalso (?is_io(NasId) orelse NasId == undefined) ->
     case is_list(IP) andalso string:tokens(IP, "/") of
-        [IP0, Mask] -> 
+        [IP0, Mask] ->
             [{NasId, validate_ip(IP1), validate_secret(Secret), Nodes} || IP1 <- generate_ip_list(validate_ip(IP0), Mask)];
         _ -> {NasId, validate_ip(IP), validate_secret(Secret), Nodes}
     end;
@@ -365,7 +365,7 @@ generate_ip(S, E) ->
 -include_lib("eunit/include/eunit.hrl").
 
 generate_ip_list_test() ->
-    ?assertEqual([{192, 168, 11, 148}, {192, 168, 11, 149}, {192, 168, 11, 150}, {192, 168, 11, 151}], 
+    ?assertEqual([{192, 168, 11, 148}, {192, 168, 11, 149}, {192, 168, 11, 150}, {192, 168, 11, 151}],
                  generate_ip_list({192, 168, 11, 150}, "30")),
     R = generate_ip_list({192, 168, 11, 150}, 24),
     ?assertEqual(256, length(generate_ip_list({192, 168, 11, 150}, 24))),
