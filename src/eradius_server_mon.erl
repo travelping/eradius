@@ -118,7 +118,7 @@ configure(#state{running = Running}) ->
                                       {nas,{{_, Port},_},_, {_,_,_,NasIP,_,_,_,_}} = Nas,
 				      eradius_metrics:subscribe_server(NasIP, Port, nas),
                                       done;
-                                  false   -> ets:delete(?NAS_TAB, Nas)
+                                  false   -> ets:delete_object(?NAS_TAB, Nas)
                               end
                       end, [], ?NAS_TAB),
 

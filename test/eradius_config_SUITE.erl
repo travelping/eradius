@@ -22,7 +22,7 @@
                   end
           end)())).
 
-all() -> [config_1, config_2, config_with_ranges, log_test].
+all() -> [config_1, config_2, config_nas_removing, config_with_ranges, log_test].
 
 init_per_suite(Config) ->
     % Is it a good practise? Copied fron client test
@@ -113,6 +113,13 @@ config_2(_Config) ->
                           nas_ip = {10,18,14,2},
                           handler_nodes = ['node3@host3', 'node4@host4']
                          }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,2})),
+    ok.
+
+config_nas_removing(_Config) ->
+    Conf = [{servers, [ {root, {"127.0.0.1", [1812, 1813]}} ]},
+            {root, [ ]}],
+    apply_conf(Conf),
+    ?match([], ets:tab2list(eradius_nas_tab)),
     ok.
 
 config_with_ranges(_Config) ->
