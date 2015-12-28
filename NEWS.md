@@ -3,6 +3,24 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.7.0 - 28 Dec 2015
+---------------------------
+* use NasId instead of NasIp and Server name instead of Server name + port
+* Fixed removing nas from nas_tab when reconfiguring
+* Fixed metrics datapoints
+* deleted uptime from SERVER_METRICS list to prevent duplicated subscriptions
+* fixed return value of the update_uptime/1
+* add IP ranges for NAS clients
+* added request-type and -id to request logging
+* add tetrapak override for erlang:timestamp/0
+* add possibility to reconfigure logger
+* disable logging on failure
+* fix ip4_address format for NAS IP and add test case
+* ensure the encoded values do not exceed the maximum attribute length
+* properly initialize the authenticator
+* initial support for exometer metrics
+* add client metrics
+
 Version 0.6.5 - 1 Jul 2015
 ---------------------------
 * remote handler doesn't change io to standart io of local node anymore
