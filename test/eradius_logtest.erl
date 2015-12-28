@@ -16,6 +16,9 @@
 -define(CLIENT_REQUESTS_COUNT, 1).
 -define(CLIENT_PROXY_REQUESTS_COUNT, 4).
 
+-define(NAS1_ACCESS_REQS, 1).
+-define(NAS2_ACCESS_REQS, 4).
+
 start() ->
     application:load(eradius),
     ProxyConfig = [{default_route, {{127, 0, 0, 1}, 1813, ?SECRET}},
@@ -30,13 +33,13 @@ start() ->
                         ]},
               {session_nodes, [node()]},
               {root, [
-                       { {eradius_logtest, "root", [] }, [{"127.0.0.1/24", ?SECRET}] }
+                       { {eradius_logtest, "root", [] }, [{"127.0.0.1/24", ?SECRET, [{nas_id, <<"Test_Nas_Id">>}]}] }
               ]},
               {test, [
-                       { {eradius_logtest, "test", [] }, [{"127.0.0.1", ?SECRET3}] }
+                       { {eradius_logtest, "test", [] }, [{"127.0.0.1", ?SECRET3, [{nas_id, <<"Test_Nas_Id_test">>}]}] }
               ]},
               {proxy, [
-                       { {eradius_proxy, "proxy", ProxyConfig }, [{"127.0.0.1", ?SECRET2}] }
+                       { {eradius_proxy, "proxy", ProxyConfig }, [{"127.0.0.1", ?SECRET2, [{nas_id, <<"Test_Nas_proxy">>}]}] }
               ]}
              ],
     [application:set_env(eradius, Key, Value) || {Key, Value} <- Config],
@@ -53,9 +56,11 @@ test() ->
     eradius_logtest:test_client(),
     exometer:reset([eradius, client, '127.0.0.1:1813', access_requests]),
     exometer:reset([eradius, client, '127.0.0.1:1813', accept_requests]),
+    check_nas_metrics(1),
     eradius_logtest:test_proxy(),
     exometer:reset([eradius, client, '127.0.0.1:11813', access_requests]),
     exometer:reset([eradius, client, '127.0.0.1:11813', accept_requests]),
+    check_nas_metrics(2),
     ok.
 
 radius_request(#radius_request{cmd = request} = Request, _NasProp, _) ->
@@ -124,14 +129,32 @@ check_client_metrics(ValidReqCount, Addr, Metric) ->
             lager:error("Wrong value of the `access_requests` metric: ~p~n", [exometer:get_value([eradius, access_requests])])
     end.
 
+check_nas_metrics(1) ->
+    timer:sleep(5000),
+    case exometer:get_value([eradius, nas, 'Test_Nas_Id', access_requests]) of
+        {ok, [{value, ?NAS1_ACCESS_REQS}, {ms_since_reset, _}]} ->
+            ok;
+        _ ->
+            lager:error("Wrong value of the `access_requests` metric: ~p~n", [exometer:get_value([eradius, access_requests])])
+    end;
+
+check_nas_metrics(2) ->
+    timer:sleep(5000),
+    case exometer:get_value([eradius, nas, 'Test_Nas_proxy', access_requests]) of
+        {ok, [{value, ?NAS2_ACCESS_REQS}, {ms_since_reset, _}]} ->
+            ok;
+        _ ->
+            lager:error("Wrong value of the `access_requests` metric: ~p~n", [exometer:get_value([eradius, access_requests])])
+    end.
+
 check_server_metrics() ->
     timer:sleep(5000),
-    case exometer:get_value([eradius, server, binary_to_atom(<<"127.0.0.1:11813">>, utf8), uptime]) of
+    case exometer:get_value([eradius, server, root, uptime]) of
        {ok, [{counter, 5}]} -> ok;
        _ -> lager:error("Wrong value of the server `uptime` metric: ~n")
     end,
     timer:sleep(15000),
-    case exometer:get_value([eradius, server, binary_to_atom(<<"127.0.0.1:11813">>, utf8), uptime]) of
+    case exometer:get_value([eradius, server, proxy, uptime]) of
        {ok, [{counter, 20}]} -> ok;
        _ -> lager:error("Wrong value of the server `uptime` metric: ~n")
     end.

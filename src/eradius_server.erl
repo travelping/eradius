@@ -42,7 +42,7 @@
 %%   }).
 %%   '''
 -module(eradius_server).
--export([start_link/2, behaviour_info/1]).
+-export([start_link/3, behaviour_info/1]).
 -export_type([port_number/0, req_id/0]).
 
 %% internal
@@ -68,18 +68,20 @@
     ip = {0,0,0,0} :: inet:ip_address(), % IP to which this socket is bound
     port = 0       :: port_number(),     % Port number we are listening on
     transacts      :: ets:tid(),         % ETS table containing current transactions
-    counter        :: #server_counter{}  % statistics counter
+    counter        :: #server_counter{}, % statistics counter,
+    name           :: atom()             % server name
 }).
 
 -spec behaviour_info('callbacks') -> [{module(), non_neg_integer()}].
 behaviour_info(callbacks) -> [{radius_request,3}].
 
 %% @private
--spec start_link(inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
-start_link(IP = {A,B,C,D}, Port) ->
+-spec start_link(atom(), inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
+start_link(ServerName, IP = {A,B,C,D}, Port) ->
     Name = list_to_atom(lists:flatten(io_lib:format("eradius_server_~b.~b.~b.~b:~b", [A,B,C,D,Port]))),
     io:format("Name: ~p~n", [Name]),
-    gen_server:start_link({local, Name}, ?MODULE, {IP, Port}, []).
+    eradius_metrics:subscribe_server(ServerName, server),
+    gen_server:start_link({local, Name}, ?MODULE, {ServerName, IP, Port}, []).
 
 stats(Server, Function) ->
     gen_server:call(Server, {stats, Function}).
@@ -87,13 +89,12 @@ stats(Server, Function) ->
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server Callbacks
 %% @private
-init({IP, Port}) ->
+init({ServerName, IP, Port}) ->
     process_flag(trap_exit, true),
     case gen_udp:open(Port, [{active, once}, {ip, IP}, binary]) of
         {ok, Socket} ->
-            eradius_metrics:subscribe_server(IP, Port, server),
             {ok, #state{socket = Socket,
-                        ip = IP, port = Port,
+                        ip = IP, port = Port, name = ServerName,
                         transacts = ets:new(transacts, []),
                         counter = eradius_counter:init_counter({IP, Port})}};
         {error, Reason} ->
@@ -101,7 +102,7 @@ init({IP, Port}) ->
     end.
 
 %% @private
-handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{transacts = Transacts, ip = IP, port = Port}) ->
+handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{transacts = Transacts, ip = _IP, port = Port}) ->
     case lookup_nas(State, FromIP, Packet) of
         {ok, ReqID, Handler, NasProp} ->
             #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
@@ -129,10 +130,10 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{t
             end,
             NewState = State;
         {discard, Reason} when Reason == no_nodes_local, Reason == no_nodes ->
-            exometer:update_or_create(eradius_metrics:get_metric_name(IP, Port, invalid_requests, server), 1, counter, []),
+            exometer:update_or_create([eradius, server, State#state.name, invalid_requests], 1, counter, []),
             NewState = State#state{counter = eradius_counter:inc_counter(discardNoHandler, State#state.counter)};
         {discard, _Reason} ->
-            exometer:update_or_create(eradius_metrics:get_metric_name(IP, Port, discards_no_handler, server), 1, counter, []),
+            exometer:update_or_create([eradius, server, State#state.name, discards_no_handler], 1, counter, []),
             NewState = State#state{counter = eradius_counter:inc_counter(invalidRequests, State#state.counter)}
     end,
     inet:setopts(Socket, [{active, once}]),
@@ -316,8 +317,8 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
         {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs, msg_hmac = MsgHMAC, eap_msg = EAPmsg}} ->
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             EncReply = eradius_lib:encode_reply_request(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
-									       msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
-									       eap_msg = EAPmsg}),
+                                                                               msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
+                                                                               eap_msg = EAPmsg}),
             reply_inc_counter(ReplyCmd, NasProp),
             lager:info(eradius_log:collect_meta(Sender, Reply),"~s",
                        [eradius_log:collect_message(Sender, Reply)]),
@@ -326,9 +327,9 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
         noreply ->
             {discard, handler_returned_noreply};
         OtherReturn ->
-	    lager:error("~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",
+            lager:error("~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",
             [printable_peer(ServerIP, Port), Request, HandlerArg, OtherReturn]),
-	    {discard, {bad_return, OtherReturn}}
+            {discard, {bad_return, OtherReturn}}
     catch
         Class:Reason ->
             lager:error("~s INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
