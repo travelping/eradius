@@ -22,7 +22,7 @@ unsubscribe_server(SubscriptionName, SubscriptionType) ->
                                                 Name = [eradius, SubscriptionType, ServerId, Metric],
                                                 exometer_report:unsubscribe_all(Reporter, Name),
                                                 exometer:delete(Name)
-                                        end, MetricsList);
+                                        end, MetricsList ++ [uptime]);
                       false ->
                           ok
                   end
@@ -60,7 +60,7 @@ subscribe_server(SubscriptionName, SubscriptionType) ->
             exometer:update_or_create([eradius, server, ServerId, reset_time], StartTime, gauge, []),
             UptimeMetricName = [eradius, server, ServerId, uptime],
             case exometer:info(UptimeMetricName) of
-                [] ->
+                undefined ->
                     exometer:new(UptimeMetricName, {function, eradius_metrics, update_uptime, [ServerId], proplist, [counter]}),
                     lists:foreach(fun({Reporter, _}) ->
                                           exometer_report:subscribe(Reporter, UptimeMetricName, counter, 10000, [{uptime, {from_name, 3}}], true)
