@@ -119,7 +119,7 @@ addr_to_bin(IP, Port) ->
                              integer_to_binary(N4), <<":">>, integer_to_binary(Port)]).
 
 update_uptime(ServerName) ->
-    {ok, [{value, ServerStartTime}, _]} = exometer:get_value([eradius, server, binary_to_atom(ServerName, utf8), start_time]),
+    {ok, [{value, ServerStartTime}, _]} = exometer:get_value([eradius, server, ServerName, start_time]),
     CurrentTime = timestamp(),
     [{counter, round(CurrentTime - ServerStartTime)}].
 
