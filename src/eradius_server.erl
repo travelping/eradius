@@ -103,7 +103,7 @@ init({ServerName, IP, Port}) ->
 
 %% @private
 handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{name = ServerName, transacts = Transacts, ip = _IP, port = Port}) ->
-    TS1 = erlang:timestamp(),
+    TS1 = eradius_metrics:timestamp(ms),
     case lookup_nas(State, FromIP, Packet) of
         {ok, ReqID, Handler, NasProp} ->
             #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
@@ -186,16 +186,16 @@ lookup_nas(_State, _NasIP, _Packet) ->
 %% ------------------------------------------------------------------------------------------
 %% -- Request Handler
 %% @private
--spec do_radius(pid(), term(), eradius_server_mon:handler(), #nas_prop{}, udp_packet(), atom(), erlang:timestamp()) -> any().
-do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, FromIP, FromPort, EncRequest}, ServerName, TS) ->
+-spec do_radius(pid(), term(), eradius_server_mon:handler(), #nas_prop{}, udp_packet(), atom(), integer()) -> any().
+do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, FromIP, FromPort, EncRequest}, ServerName, TS1) ->
     #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
     Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
     case run_handler(Nodes, NasProp, Handler, EncRequest) of
         {reply, EncReply} ->
             lager:debug("~s From: ~s INF: Sending response for request ~p",
                  [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), ReqKey]),
-            TS2 = erlang:timestamp(),
-            RequestHandletime = timer:now_diff(TS2, TS) / 1000,
+            TS2 = eradius_metrics:timestamp(ms),
+            RequestHandletime = TS2 - TS1,
             exometer:update_or_create([eradius, server, ServerName, request_handle_time], RequestHandletime, histogram, [{truncate, false}]),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             ServerPid ! {replied, ReqKey, self()},
