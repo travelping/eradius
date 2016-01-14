@@ -90,11 +90,10 @@ client_subscriptions({IP, Port}, Reporter, Metrics) ->
         true ->
             lists:foreach(fun({Metric, MetricType}) ->
                                   DataPoint = case MetricType of
-                                                  counter ->   value;
+                                                  counter -> value;
                                                   histogram -> [mean, max]
                                               end,
-                                  exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric, client),
-                                                            DataPoint, 1000, [{client, {from_name, 3}}], true)
+                                  maybe_subscribe(Reporter, Metric, IP, Port, DataPoint)
                           end, Metrics);
         false ->
             ok
@@ -132,6 +131,14 @@ update_uptime(ServerName) ->
 timestamp() ->
     {MegaSecs, Secs, MicroSecs} = os:timestamp(),
     Secs + (MegaSecs * 1000000) + (MicroSecs / 10000000).
+
+maybe_subscribe(Reporter, Metric, IP, Port, DataPoint) ->
+    SubscribedReporters = exometer_report:list_subscriptions(Reporter),
+    SubscribersList = lists:filter(fun({ReporterMetric, ReporterDataPoint, _, _}) ->
+                                       (ReporterMetric == get_metric_name(IP, Port, Metric, client)) and (ReporterDataPoint == DataPoint)
+                                   end, SubscribedReporters),
+    SubscribersList == [] andalso exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric, client),
+                                                            DataPoint, 1000, [{client, {from_name, 3}}], true).
 
 %% ------------------------------------------------------------------------------------------
 %% -- EUnit Tests
