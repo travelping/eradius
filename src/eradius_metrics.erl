@@ -44,7 +44,14 @@ subscribe_server(SubscriptionName, SubscriptionType) ->
                       true ->
                           lists:foreach(fun(Metric) ->
                                             Name = [eradius, SubscriptionType, ServerId, Metric],
-                                            exometer_report:subscribe(Reporter, Name, MetricType, 1000, [{SubscriptionType, {from_name, 3}}], true)
+                                            case Metric of
+                                                request_handle_time ->
+                                                    exometer_report:subscribe(Reporter, Name, [mean, max], 1000,
+                                                                              [{SubscriptionType, {from_name, 3}}], true);
+                                                _ ->
+                                                    exometer_report:subscribe(Reporter, Name, MetricType, 1000,
+                                                                              [{SubscriptionType, {from_name, 3}}], true)
+                                            end
                                         end, MetricsList);
                       false ->
                           ok
