@@ -84,8 +84,7 @@ client_subscriptions({IP, Port}, Reporter, Metrics) ->
             lists:foreach(fun({Metric, MetricType}) ->
                                   DataPoint = case MetricType of
                                                   counter ->   value;
-                                                  histogram -> mean;
-                                                  _ -> ok
+                                                  histogram -> [mean, max]
                                               end,
                                   exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric, client),
                                                             DataPoint, 1000, [{client, {from_name, 3}}], true)
