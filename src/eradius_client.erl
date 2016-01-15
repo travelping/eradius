@@ -205,12 +205,12 @@ init([]) ->
 handle_call({wanna_send, Peer}, _From, State) ->
     {PortIdx, ReqId, NewIdCounters} = next_port_and_req_id(Peer, State#state.no_ports, State#state.idcounters),
     {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip, State#state.sup),
-    SubscribedClients = lists:member(Peer, State#state.subscribed_clients),
-    NewState = case SubscribedClients of
-                   true ->
+    IsSubscribed = lists:member(Peer, State#state.subscribed_clients),
+    NewState = case IsSubscribed of
+                   false ->
                        eradius_metrics:subscribe_client(Peer),
                        State#state{idcounters = NewIdCounters, sockets = NewSockets, subscribed_clients = [Peer | State#state.subscribed_clients]};
-                   _ ->
+                   true  ->
                        State#state{idcounters = NewIdCounters, sockets = NewSockets}
                end,
     {reply, {SocketProcess, ReqId}, NewState};
