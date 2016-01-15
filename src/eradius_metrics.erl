@@ -2,7 +2,7 @@
 
 -include("metrics.hrl").
 
--export([get_metric_name/4, subscribe_client/1, subscribe_server/2, timestamp/0, update_uptime/1, unsubscribe_server/2]).
+-export([get_metric_name/4, subscribe_client/1, subscribe_server/2, timestamp/1, update_uptime/1, unsubscribe_server/2]).
 -export([update_client_counter_metric/4, update_nas_prop_metric/3, update_client_histogram_metric/4]).
 
 get_metrics_by_type(Type) ->
@@ -62,7 +62,7 @@ subscribe_server(SubscriptionName, SubscriptionType) ->
     % update server uptime and reset time metrics
     case SubscriptionType of
         server ->
-            StartTime = round(timestamp()),
+            StartTime = round(timestamp(s)),
             exometer:update_or_create([eradius, server, ServerId, start_time], StartTime, gauge, []),
             exometer:update_or_create([eradius, server, ServerId, reset_time], StartTime, gauge, []),
             UptimeMetricName = [eradius, server, ServerId, uptime],
@@ -125,12 +125,15 @@ addr_to_bin(IP, Port) ->
 
 update_uptime(ServerName) ->
     {ok, [{value, ServerStartTime}, _]} = exometer:get_value([eradius, server, ServerName, start_time]),
-    CurrentTime = timestamp(),
+    CurrentTime = timestamp(s),
     [{counter, round(CurrentTime - ServerStartTime)}].
 
-timestamp() ->
+timestamp(Unit) ->
     {MegaSecs, Secs, MicroSecs} = os:timestamp(),
-    Secs + (MegaSecs * 1000000) + (MicroSecs / 10000000).
+    case Unit of
+        s   ->         Secs + (MegaSecs * 1000000) + (MicroSecs / 10000000);
+        ms  -> 1000 * (Secs + (MegaSecs * 1000000) + (MicroSecs / 10000000))
+    end.
 
 maybe_subscribe(Reporter, Metric, IP, Port, DataPoint) ->
     SubscribedReporters = exometer_report:list_subscriptions(Reporter),
