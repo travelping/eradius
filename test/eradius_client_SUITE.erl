@@ -73,7 +73,8 @@ testSocket(Pid) ->
     no_ports = 1 :: pos_integer(),
     idcounters = dict:new() :: dict:dict(),
     sockets = array:new() :: array:array(),
-    sup :: pid()
+    sup :: pid(),
+    subscribed_clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
 }).
 
 split(N, List) -> split2(N, [], List).

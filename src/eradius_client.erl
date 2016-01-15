@@ -189,7 +189,8 @@ reconfigure() ->
     no_ports = 1 :: pos_integer(),
     idcounters = dict:new() :: dict:dict(),
     sockets = array:new() :: array:array(),
-    sup :: pid()
+    sup :: pid(),
+    subscribed_clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
 }).
 
 %% @private
@@ -202,10 +203,16 @@ init([]) ->
 
 %% @private
 handle_call({wanna_send, Peer}, _From, State) ->
-    eradius_metrics:subscribe_client(Peer),
     {PortIdx, ReqId, NewIdCounters} = next_port_and_req_id(Peer, State#state.no_ports, State#state.idcounters),
     {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip, State#state.sup),
-    NewState = State#state{idcounters = NewIdCounters, sockets = NewSockets},
+    SubscribedClients = lists:member(Peer, State#state.subscribed_clients),
+    NewState = case SubscribedClients of
+                   true ->
+                       eradius_metrics:subscribe_client(Peer),
+                       State#state{idcounters = NewIdCounters, sockets = NewSockets, subscribed_clients = [Peer | State#state.subscribed_clients]};
+                   _ ->
+                       State#state{idcounters = NewIdCounters, sockets = NewSockets}
+               end,
     {reply, {SocketProcess, ReqId}, NewState};
 
 %% @private
