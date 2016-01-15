@@ -93,7 +93,8 @@ client_subscriptions({IP, Port}, Reporter, Metrics) ->
                                                   counter -> value;
                                                   histogram -> [mean, max]
                                               end,
-                                  maybe_subscribe(Reporter, Metric, IP, Port, DataPoint)
+                                  exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric, client),
+                                                            DataPoint, 1000, [{client, {from_name, 3}}], true)
                           end, Metrics);
         false ->
             ok
@@ -134,14 +135,6 @@ timestamp(Unit) ->
         s   ->         Secs + (MegaSecs * 1000000) + (MicroSecs / 10000000);
         ms  -> 1000 * (Secs + (MegaSecs * 1000000) + (MicroSecs / 10000000))
     end.
-
-maybe_subscribe(Reporter, Metric, IP, Port, DataPoint) ->
-    SubscribedReporters = exometer_report:list_subscriptions(Reporter),
-    SubscribersList = lists:filter(fun({ReporterMetric, ReporterDataPoint, _, _}) ->
-                                       (ReporterMetric == get_metric_name(IP, Port, Metric, client)) and (ReporterDataPoint == DataPoint)
-                                   end, SubscribedReporters),
-    SubscribersList == [] andalso exometer_report:subscribe(Reporter, get_metric_name(IP, Port, Metric, client),
-                                                            DataPoint, 1000, [{client, {from_name, 3}}], true).
 
 %% ------------------------------------------------------------------------------------------
 %% -- EUnit Tests
