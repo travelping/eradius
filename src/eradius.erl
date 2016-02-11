@@ -43,16 +43,6 @@ statistics(pull) ->
 statistics(read) ->
     eradius_counter_aggregator:read().
 
-ensure_ip(IP = {_,_,_,_}) -> IP;
-ensure_ip(IP = {_,_,_,_,_,_,_,_}) -> IP;
-ensure_ip(IPString) when is_list(IPString) ->
-    case inet_parse:address(IPString) of
-        {ok, Address}   -> Address;
-        {error, einval} -> error(badarg, [IPString])
-    end;
-ensure_ip(IP) ->
-    error(badarg, [IP]).
-
 
 %% ----------------------------------------------------------------------------------------------------
 %% -- application callbacks
