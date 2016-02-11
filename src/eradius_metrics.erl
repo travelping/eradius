@@ -13,7 +13,7 @@ get_metrics_by_type(Type) ->
 
 unsubscribe_server(SubscriptionName, SubscriptionType) ->
     {ok, EnabledMetrics} = application:get_env(eradius, metrics),
-    {MetricsList, MetricType} = get_metrics_by_type(SubscriptionType),
+    {MetricsList, _MetricType} = get_metrics_by_type(SubscriptionType),
     lists:foreach(fun({Reporter, _}) ->
                   case lists:member(SubscriptionType, EnabledMetrics) of
                       true ->
