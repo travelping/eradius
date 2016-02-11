@@ -477,7 +477,9 @@ timestamp() ->
         erlang:timestamp()
     catch
         error:undef ->
-            erlang:now()
+            % call erlang:now() via erlang:apply/3 
+            % for getting rid annoying compile warning on OTP >= 18
+            erlang:apply(erlang, now, [])
     end.
 
 -ifdef(TEST).
