@@ -16,13 +16,12 @@
 -type route() :: erproxyadius_client:nas_address().
 -type routes() :: [{Name :: string(), route()}].
 
-radius_request(Request, NasProp, Args) ->
-    #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
+radius_request(Request, _NasProp, Args) ->
     DefaultRoute = proplists:get_value(default_route, Args),
     Options = proplists:get_value(options, Args, ?DEFAULT_OPTIONS),
     Username = eradius_lib:get_attr(Request, ?User_Name),
     Routes = proplists:get_value(routes, Args, []),
-    {NewUsername, Route} = resolve_routes(Username, DefaultRoute, Routes, {ServerIP, Port}, Options),
+    {NewUsername, Route} = resolve_routes(Username, DefaultRoute, Routes, Options),
     send_to_server(new_request(Request, Username, NewUsername), Route).
 
 validate_arguments(Args) ->
@@ -95,12 +94,12 @@ new_request(Request, _Username, NewUsername) ->
                          ?User_Name, NewUsername).
 
 % @private
--spec resolve_routes(Username :: undefined | binary(), DefaultRoute :: route(), Routes :: routes(),
-		     NasIpPort :: {inet:ip_address(), integer()}, Options :: [proplists:property()]) ->
+-spec resolve_routes(Username :: undefined | binary(), DefaultRoute :: route(), 
+                     Routes :: routes(), Options :: [proplists:property()]) ->
                      {NewUsername :: string(), Route :: route()}.
-resolve_routes( undefined, {_, _, _DefaultSecret} = DefaultRoute, _Routes, Nas, _Options) ->
+resolve_routes( undefined, {_, _, _DefaultSecret} = DefaultRoute, _Routes, _Options) ->
     {undefined, DefaultRoute};
-resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Nas, Options) ->
+resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) ->
     Type = proplists:get_value(type, Options, ?DEFAULT_TYPE),
     Strip = proplists:get_value(strip, Options, ?DEFAULT_STRIP),
     Separator = proplists:get_value(separator, Options, ?DEFAULT_SEPARATOR),
@@ -167,25 +166,23 @@ resolve_routes_test() ->
     Test = {{127, 0, 0, 1}, 11813, <<"test">>},
     Routes = [{"prod", Prod}, {"test", Test}],
     % default
-    ?assertEqual({undefined, DefaultRoute}, resolve_routes(undefined, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, [])),
-    ?assertEqual({"user", DefaultRoute}, resolve_routes(<<"user">>, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, [])),
-    ?assertEqual({"user@prod", Prod}, resolve_routes(<<"user@prod">>, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, [])),
-    ?assertEqual({"user@test", Test}, resolve_routes(<<"user@test">>, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, [])),
+    ?assertEqual({undefined, DefaultRoute}, resolve_routes(undefined, DefaultRoute, Routes,[])),
+    ?assertEqual({"user", DefaultRoute}, resolve_routes(<<"user">>, DefaultRoute, Routes, [])),
+    ?assertEqual({"user@prod", Prod}, resolve_routes(<<"user@prod">>, DefaultRoute, Routes,[])),
+    ?assertEqual({"user@test", Test}, resolve_routes(<<"user@test">>, DefaultRoute, Routes,[])),
     % strip
     Opts = [{strip, true}],
-    ?assertEqual({"user", DefaultRoute}, resolve_routes(<<"user">>, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, Opts)),
-    ?assertEqual({"user", Prod}, resolve_routes(<<"user@prod">>, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, Opts)),
-    ?assertEqual({"user", Test}, resolve_routes(<<"user@test">>, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, Opts)),
+    ?assertEqual({"user", DefaultRoute}, resolve_routes(<<"user">>, DefaultRoute, Routes, Opts)),
+    ?assertEqual({"user", Prod}, resolve_routes(<<"user@prod">>, DefaultRoute, Routes, Opts)),
+    ?assertEqual({"user", Test}, resolve_routes(<<"user@test">>, DefaultRoute, Routes, Opts)),
     % prefix
     Opts1 = [{type, prefix}, {separator, "/"}],
-    ?assertEqual({"user/example", DefaultRoute}, resolve_routes(<<"user/example">>, DefaultRoute, Routes,
-								{{127, 0, 0, 1}, 1813}, Opts1)),
-    ?assertEqual({"test/user", Test}, resolve_routes(<<"test/user">>, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, Opts1)),
+    ?assertEqual({"user/example", DefaultRoute}, resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts1)),
+    ?assertEqual({"test/user", Test}, resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts1)),
     % prefix and strip
     Opts2 = Opts ++ Opts1,
-    ?assertEqual({"example", DefaultRoute}, resolve_routes(<<"user/example">>, DefaultRoute, Routes,
-							   {{127, 0, 0, 1}, 1813}, Opts2)),
-    ?assertEqual({"user", Test}, resolve_routes(<<"test/user">>, DefaultRoute, Routes, {{127, 0, 0, 1}, 1813}, Opts2)),
+    ?assertEqual({"example", DefaultRoute}, resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts2)),
+    ?assertEqual({"user", Test}, resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts2)),
     ok.
 
 validate_arguments_test() ->
