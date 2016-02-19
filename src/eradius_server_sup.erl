@@ -1,7 +1,7 @@
 %% @private
 %% @doc Supervisor for RADIUS server processes.
 -module(eradius_server_sup).
--export([start_link/0, start_instance/3, stop_instance/3, all/0]).
+-export([start_link/0, start_instance/1, stop_instance/2, all/0]).
 
 -behaviour(supervisor).
 -export([init/1]).
@@ -13,12 +13,16 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_instance(ServerName, IP, Port) ->
+start_instance(ServerAddr = {ServerName, {IP, Port}}) ->
     lager:info("Starting RADIUS Listener at ~s", [eradius_server:printable_peer(IP, Port)]),
+    MetricsAddress = eradius_metrics:make_addr_info(ServerAddr),
+    eradius_metrics:create_server(MetricsAddress),
     supervisor:start_child(?SERVER, [ServerName, IP, Port]).
 
-stop_instance(IP, Port, Pid) ->
+stop_instance(ServerAddr = {_ServerName, {IP, Port}}, Pid) ->
     lager:info("Stopping RADIUS Listener at ~s", [eradius_server:printable_peer(IP, Port)]),
+    MetricsAddress = eradius_metrics:make_addr_info(ServerAddr),
+    eradius_metrics:delete_server(MetricsAddress),
     supervisor:terminate_child(?SERVER, Pid).
 
 all() ->

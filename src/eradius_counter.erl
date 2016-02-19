@@ -2,7 +2,7 @@
 %%  This module implements the statitics counter for RADIUS servers and clients
 
 -module(eradius_counter).
--export([init_counter/1, inc_counter/2, reset_counter/1]).
+-export([init_counter/1, inc_counter/2, reset_counter/1, inc_request_counter/2, inc_reply_counter/2]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -36,10 +36,21 @@ reset_counter(#server_counter{startTime = Up}) -> #server_counter{startTime = Up
 reset_counter(Nas = #nas_prop{}) ->
     init_counter(Nas).
 
-%% @doc increment a specific counter value
-inc_counter(invalidRequests,  Counters = #server_counter{invalidRequests  = Value}) -> Counters#server_counter{invalidRequests  = Value + 1};
-inc_counter(discardNoHandler, Counters = #server_counter{discardNoHandler = Value}) -> Counters#server_counter{discardNoHandler = Value + 1};
+%% @doc increment requests counters
+inc_request_counter(Counter, Nas) ->
+    inc_counter(requests, Nas),
+    inc_counter(Counter, Nas).
 
+%% @doc increment reply counters
+inc_reply_counter(Counter, Nas) ->
+    inc_counter(replies, Nas),
+    inc_counter(Counter, Nas).
+
+%% @doc increment a specific counter value
+inc_counter(invalidRequests,  Counters = #server_counter{invalidRequests  = Value}) ->
+    Counters#server_counter{invalidRequests  = Value + 1};
+inc_counter(discardNoHandler, Counters = #server_counter{discardNoHandler = Value}) ->
+    Counters#server_counter{discardNoHandler = Value + 1};
 inc_counter(Counter, Nas = #nas_prop{}) ->
     gen_server:cast(?MODULE, {inc_counter, Counter, Nas}).
 

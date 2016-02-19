@@ -1,5 +1,14 @@
 -define(BYTE, integer-unit:8).    % Nice syntactic sugar...
 
+-type server()  :: {inet:ip_address(), eradius_server:port_number()}.
+-type handler() :: {module(), term()}.
+-type server_name() :: atom().
+-type atom_name() :: atom().
+-type atom_ip() :: atom().
+-type atom_port() :: atom().
+-type atom_address() :: {atom_name(), {atom_ip(), atom_port()}}.
+-type atom_address_pair() :: {atom_address(), atom_address()}.
+
 %%- cmds
 -define(RAccess_Request,       1).
 -define(RAccess_Accept,        2).
@@ -74,7 +83,7 @@
 
 -record(server_counter, {
           key                  :: term(),
-          startTime            :: eralng:timestamp(),
+          startTime            :: erlang:timestamp(),
           resetTime            :: erlang:timestamp(),
           invalidRequests = 0  :: non_neg_integer(),
           discardNoHandler = 0 :: non_neg_integer()
@@ -86,6 +95,7 @@
     nas_id        :: term(),
     nas_ip        :: inet:ip_address(),
     nas_port      :: eradius_server:port_number(),
+    metrics_info  :: {atom_address(), atom_address()},
     secret        :: eradius_lib:secret(),
     handler_nodes = local :: list(atom()) | local
 }).

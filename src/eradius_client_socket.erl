@@ -1,7 +1,5 @@
 -module(eradius_client_socket).
 
--include("metrics.hrl").
-
 -behaviour(gen_server).
 
 -export([start/3]).
@@ -36,7 +34,6 @@ handle_info({SenderPid, send_request, {IP, Port}, ReqId, EncRequest},
         ok ->
             ReqKey = {IP, Port, ReqId},
             NPending = dict:store(ReqKey, SenderPid, Pending),
-            eradius_metrics:update_client_counter_metric(pending_requests, IP, Port, 1),
             {noreply, State#state{pending = NPending, counter = Counter+1}};
         {error, Reason} ->
             SenderPid ! {error, Reason},
@@ -56,7 +53,6 @@ handle_info({udp, Socket, FromIP, FromPort, EncRequest},
                     WaitingSender ! {self(), response, ReqId, EncRequest},
                     inet:setopts(Socket, [{active, once}]),
                     NPending = dict:erase({FromIP, FromPort, ReqId}, Pending),
-		    eradius_metrics:update_client_counter_metric(pending_requests, FromIP, FromPort, -1),
                     NState = State#state{pending = NPending, counter = Counter-1},
                     case {Mode, Counter-1} of
                         {inactive, 0}   -> {stop, normal, NState};
