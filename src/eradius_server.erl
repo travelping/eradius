@@ -345,12 +345,6 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
 printable_peer({IA,IB,IC,ID}, Port) ->
     io_lib:format("~b.~b.~b.~b:~b",[IA,IB,IC,ID,Port]).
 
--spec printable_date() -> io_lib:chars().
-printable_date() ->
-    {_ , _, MicroSecs} = Now = eradius_lib:timestamp(),
-    {{Y, Mo, D}, {H, M, S}} = calendar:now_to_local_time(Now),
-    io_lib:format("~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b:~4..0b", [Y,Mo,D,H,M,S,MicroSecs div 1000]).
-
 request_inc_counter(request, NasProp) ->
     eradius_metrics:update_nas_prop_metric(access_requests, NasProp, 1),
     eradius_counter:inc_counter(accessRequests, NasProp);
