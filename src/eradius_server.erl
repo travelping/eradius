@@ -142,7 +142,7 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State = #state{n
 handle_info({replied, ReqKey, HandlerPid}, State = #state{transacts = Transacts}) ->
     ets:insert(Transacts, {ReqKey, {replied, HandlerPid}}),
     {noreply, State};
-handle_info({discarded, ReqKey}, State = #state{transacts = Transacts}) ->
+handle_info({free, ReqKey}, State = #state{transacts = Transacts}) ->
     ets:delete(Transacts, ReqKey),
     {noreply, State};
 handle_info({'EXIT', _HandlerPid, normal}, State) ->
@@ -198,22 +198,26 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
             RequestHandletime = TS2 - TS1,
             exometer:update_or_create([eradius, server, ServerName, request_handle_time], RequestHandletime, histogram, [{truncate, false}]),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
-            ServerPid ! {replied, ReqKey, self()},
             eradius_metrics:update_nas_prop_metric(replies, NasProp, 1),
             eradius_counter:inc_counter(replies, NasProp),
-            {ok, ResendTimeout} = application:get_env(eradius, resend_timeout),
-            wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES);
+            case application:get_env(eradius, resend_timeout, 2000) of
+                0 -> 
+                    ServerPid ! {free, ReqKey};
+                ResendTimeout ->
+                    ServerPid ! {replied, ReqKey, self()},
+                    wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES)
+            end;
         {discard, Reason} ->
             lager:debug("~s From: ~s INF: Handler discarded the request ~p for reason ~1000.p",
                 [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
             discard_inc_counter(Reason, NasProp),
-            ServerPid ! {discarded, ReqKey};
+            ServerPid ! {free, ReqKey};
         {exit, Reason} ->
             lager:debug("~s From: ~s INF: Handler exited for reason ~p, discarding request ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
             eradius_metrics:update_nas_prop_metric(handler_failures, NasProp, 1),
             eradius_counter:inc_counter(handlerFailure, NasProp),
-            ServerPid ! {discarded, ReqKey}
+            ServerPid ! {free, ReqKey}
     end.
 
 %% @TODO: extend for other failures
@@ -228,15 +232,13 @@ wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, R
     erlang:send_after(ResendTimeout, self(), timeout),
     wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries).
 
-wait_resend(ServerPid, ReqKey, _FromIP, _FromPort, _EncReply, 0) ->
-    ServerPid ! {discarded, ReqKey};
 wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries) ->
     receive
         {ServerPid, resend, Socket} ->
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries - 1);
         timeout ->
-            ServerPid ! {discarded, ReqKey}
+            ServerPid ! {free, ReqKey}
     end.
 
 run_handler([], _NasProp, _Handler, _EncRequest) ->
