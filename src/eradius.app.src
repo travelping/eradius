@@ -12,7 +12,6 @@
       {tables, [dictionary]},
       {client_ip, undefined},
       {client_ports, 20},
-      {resend_timeout, 30000},
       %% Metrics configuration:
       %%
       %% The `metrics` configuration option provides the list which
