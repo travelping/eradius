@@ -4,6 +4,7 @@
    {registered, [eradius_dict, eradius_sup, eradius_server_top_sup, eradius_server_sup, eradius_server_mon]},
    {applications, [kernel, stdlib, crypto, jobs]},
    {mod, {eradius, []}},
+   {vsn, "0.4.1"},
    {env, [
       {servers, []},
       {logging, true},
