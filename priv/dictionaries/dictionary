@@ -400,6 +400,8 @@ VALUE		Acct-Terminate-Cause	Supplicant-Restart	19
 VALUE		Acct-Terminate-Cause	Reauthentication-Failure 20
 VALUE		Acct-Terminate-Cause	Port-Reinit		21
 VALUE		Acct-Terminate-Cause	Port-Disabled		22
+VALUE		Acct-Terminate-Cause	Lost-Power		23
+VALUE		Acct-Terminate-Cause	Volumen-Exhausted	24
 
 #VALUE		Tunnel-Type		L2TP			3
 #VALUE		Tunnel-Medium-Type	IP			1
