@@ -24,7 +24,6 @@ init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(eradius),
     startSocketCounter(),
     application:set_env(lager, handlers, [{lager_journald_backend, []}]),
-    io:format(standard_error, "running..~n", []),
     Config.
 
 end_per_suite(_Config) ->
@@ -149,7 +148,8 @@ wanna_send(_Config) ->
     lists:map(fun(_) ->
                         IP = {random:uniform(100), random:uniform(100), random:uniform(100), random:uniform(100)},
                         Port = random:uniform(100),
-                        FUN = fun() -> gen_server:call(eradius_client, {wanna_send, {IP, Port}}) end,
+                        MetricsInfo = {{undefined, undefined, undefined}, {undefined, undefined, undefined}},
+                        FUN = fun() -> gen_server:call(eradius_client, {wanna_send, {undefined, {IP, Port}}, MetricsInfo}) end,
                         send(FUN, null, null)
                 end, lists:seq(1, 10)).
 

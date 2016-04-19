@@ -48,19 +48,13 @@ start() ->
                   eradius:modules_ready([?MODULE, eradius_proxy]),
                   timer:sleep(infinity)
           end),
-    check_server_metrics().
+    ok.
 
 test() ->
     application:set_env(lager, handlers, [{lager_journald_backend, []}]),
     eradius_logtest:start(),
     eradius_logtest:test_client(),
-    exometer:reset([eradius, client, '127.0.0.1:1813', access_requests]),
-    exometer:reset([eradius, client, '127.0.0.1:1813', accept_requests]),
-    check_nas_metrics(1),
     eradius_logtest:test_proxy(),
-    exometer:reset([eradius, client, '127.0.0.1:11813', access_requests]),
-    exometer:reset([eradius, client, '127.0.0.1:11813', accept_requests]),
-    check_nas_metrics(2),
     ok.
 
 radius_request(#radius_request{cmd = request} = Request, _NasProp, _) ->
@@ -83,8 +77,7 @@ test_client() ->
 test_client(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
     Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user")),
-    send_request({127, 0, 0, 1}, 1813, ?SECRET, Request),
-    check_client_metrics(?CLIENT_REQUESTS_COUNT, binary_to_atom(<<"127.0.0.1:1813">>, utf8), access_requests).
+    send_request({127, 0, 0, 1}, 1813, ?SECRET, Request).
 
 test_proxy() ->
   test_proxy(request).
@@ -97,8 +90,7 @@ test_proxy(Command) ->
     Request2 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@test")),
     send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request2),
     Request3 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@domain@test")),
-    send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request3),
-    check_client_metrics(?CLIENT_PROXY_REQUESTS_COUNT, binary_to_atom(<<"127.0.0.1:11813">>, utf8), accept_requests).
+    send_request({127, 0, 0, 1}, 11813, ?SECRET2, Request3).
 
 send_request(Ip, Port, Secret, Request) ->
     case eradius_client:send_request({Ip, Port, Secret}, Request) of
@@ -120,41 +112,3 @@ attrs(User) ->
      {{10415,1}, "1337"},                 %X_3GPP-IMSI
      {{127,42},18}                        %Unbekannte ID
     ].
-
-check_client_metrics(ValidReqCount, Addr, Metric) ->
-    case exometer:get_value([eradius, client, Addr, Metric]) of
-        {ok,[{value, ValidReqCount}, {ms_since_reset, _}]} ->
-            ok;
-        _ ->
-            lager:error("Wrong value of the `access_requests` metric: ~p~n", [exometer:get_value([eradius, access_requests])])
-    end.
-
-check_nas_metrics(1) ->
-    timer:sleep(5000),
-    case exometer:get_value([eradius, nas, 'Test_Nas_Id', access_requests]) of
-        {ok, [{value, ?NAS1_ACCESS_REQS}, {ms_since_reset, _}]} ->
-            ok;
-        _ ->
-            lager:error("Wrong value of the `access_requests` metric: ~p~n", [exometer:get_value([eradius, access_requests])])
-    end;
-
-check_nas_metrics(2) ->
-    timer:sleep(5000),
-    case exometer:get_value([eradius, nas, 'Test_Nas_proxy', access_requests]) of
-        {ok, [{value, ?NAS2_ACCESS_REQS}, {ms_since_reset, _}]} ->
-            ok;
-        _ ->
-            lager:error("Wrong value of the `access_requests` metric: ~p~n", [exometer:get_value([eradius, access_requests])])
-    end.
-
-check_server_metrics() ->
-    timer:sleep(5000),
-    case exometer:get_value([eradius, server, root, uptime]) of
-       {ok, [{counter, 5}]} -> ok;
-       _ -> lager:error("Wrong value of the server `uptime` metric: ~n")
-    end,
-    timer:sleep(15000),
-    case exometer:get_value([eradius, server, proxy, uptime]) of
-       {ok, [{counter, 20}]} -> ok;
-       _ -> lager:error("Wrong value of the server `uptime` metric: ~n")
-    end.

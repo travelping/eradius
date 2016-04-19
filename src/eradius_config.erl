@@ -367,7 +367,7 @@ generate_ip(S, E) ->
 generate_ip_list_test() ->
     ?assertEqual([{192, 168, 11, 148}, {192, 168, 11, 149}, {192, 168, 11, 150}, {192, 168, 11, 151}],
                  generate_ip_list({192, 168, 11, 150}, "30")),
-    R = generate_ip_list({192, 168, 11, 150}, 24),
+    generate_ip_list({192, 168, 11, 150}, 24),
     ?assertEqual(256, length(generate_ip_list({192, 168, 11, 150}, 24))),
     ?assertEqual(2048, length(generate_ip_list({192, 168, 11, 10}, 21))),
     ?assertMatch({invalid, _}, generate_ip_list({192, 168, 11, 150}, "34")),

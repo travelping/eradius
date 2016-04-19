@@ -17,11 +17,10 @@
 -define(SERVER, ?MODULE).
 -define(NAS_TAB, eradius_nas_tab).
 -export_type([server/0]).
--type server()  :: {inet:ip_address(), eradius_server:port_number()}.
--type handler() :: {module(), term()}.
 
 -record(nas, {
     key :: {server(), inet:ip_address()},
+    server_name :: server_name(),
     handler :: handler(),
     prop :: #nas_prop{}
 }).
@@ -106,65 +105,64 @@ configure(#state{running = Running}) ->
         {invalid, Message} ->
             lager:error("Invalid server config, ~s", [Message]),
             {error, invalid_config};
-        ServList ->
-            Nases = lists:map(fun({_ServerName, Addr, NasInfo}) -> {Addr, NasInfo} end, ServList),
-            NasList = lists:flatmap(fun(Server) -> server_naslist(Server) end, Nases),
+        ServList -> %% list of {ServerName, ServerAddr, NasHandler} tuples
+            NasList = lists:flatmap(fun(Server) -> server_naslist(Server) end, ServList),
             Tab = ets:tab2list(?NAS_TAB),
-            NewNasIds = lists:map(fun(Nas) -> Nas#nas.prop#nas_prop.nas_id end, NasList),
-            OldNasIds = lists:usort(lists:map(fun(Nas) -> Nas#nas.prop#nas_prop.nas_id end, Tab)),
-            ToDeleteNasIds = OldNasIds -- NewNasIds,
-            ToInsertNasIds = NewNasIds -- OldNasIds,
             ToDelete = Tab -- NasList,
             ToInsert = NasList -- Tab,
-            lists:foreach(fun(Nas) -> ets:insert(?NAS_TAB, Nas) end, ToInsert),
-            lists:foreach(fun(Nas) -> ets:delete_object(?NAS_TAB, Nas) end, ToDelete),
-            lists:foreach(fun(NasId) -> eradius_metrics:subscribe_server(NasId, nas) end, ToInsertNasIds),
-            lists:foreach(fun(NasId) -> eradius_metrics:unsubscribe_server(NasId, nas) end, ToDeleteNasIds),
-            Servers = lists:usort([{element(1, T), element(2, T)} || T <- ServList]),
-            Run     = sets:from_list([element(2, T) || T <- Running]),
-            New     = sets:from_list([element(1, T) || T <- Nases]),
-            ToStart = sets:subtract(New, Run),
-            ToStop  = sets:subtract(Run, New),
-            % Started - set of servers runnned after stop
-            Started = sets:fold(fun (Key, List) ->
-                                        {_Server, {IP, Port}, Pid} = lists:keyfind(Key, 2, Running),
-                                        eradius_server_sup:stop_instance(IP, Port, Pid),
-                                        lists:keydelete(Key, 2, List)
-                                end, Running, ToStop),
-            NRunning = sets:fold(fun ({IP, Port}, Acc) ->
-                                         {Name, _} = lists:keyfind({IP, Port}, 2, Servers),
-                                         case eradius_server_sup:start_instance(Name, IP, Port) of
-                                             {ok, Pid} ->
-                                                 [{Name, {IP, Port}, Pid} | Acc];
-                                             {error, Error} ->
-                                                 lager:error("Could not start listener on host: ~s, occuring error: ~p",
-                                                  [eradius_server:printable_peer(IP, Port), Error]),
-                                                 Acc
-                                         end
-                                 end, Started, ToStart),
-            RunnedServersName = [element(1, T) || T <- Running],
-            lists:foreach(fun(ServerName) ->
-                                  case lists:keyfind(ServerName, 1, NRunning) of
-                                      false ->
-                                          eradius_metrics:unsubscribe_server(ServerName, server);
-                                      _ ->
-                                          ok
-                                  end
-                          end,
-                          RunnedServersName),
-            eradius_node_mon:set_nodes(config_nodes(Nases)),
-            {ok, #state{running = NRunning}}
+            update_nases(ToDelete, ToInsert),
+            NewServAddrs = [{ServerName, ServerAddr} || {ServerName, ServerAddr, _} <- ServList],
+            OldServAddrs =[{ServerName, ServerAddr} || {ServerName, ServerAddr, _} <- Running],
+            ToStop  = OldServAddrs -- NewServAddrs,
+            ToStart = NewServAddrs -- OldServAddrs,
+            NewRunning = update_server(Running, ToStop, ToStart),
+            NasHandler = [ NasInfo || {_ServerName, _Addr, NasInfo} <- ServList],
+            eradius_node_mon:set_nodes(config_nodes(NasHandler)),
+            {ok, #state{running = NewRunning}}
     end.
 
-%-spec server_naslist(valid_server()) -> list(#nas{}).
-server_naslist({{IP, Port}, HandlerList}) ->
-    [#nas{key = {{IP, Port}, NasIP},
-          handler = {HandlerMod, HandlerArgs},
-          prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret}}
-      || {NasId, NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs} <- HandlerList].
+server_naslist({ServerName, {IP, Port}, HandlerList}) ->
+    lists:map(fun({NasId, NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs}) ->
+                ServerInfo = eradius_metrics:make_addr_info({ServerName, {IP, Port}}),
+                NasInfo = eradius_metrics:make_addr_info({NasId, {NasIP, undefined}}),
+                #nas{key = {{IP, Port}, NasIP}, server_name = ServerName, handler = {HandlerMod, HandlerArgs},
+                prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret,
+                                 metrics_info = {ServerInfo, NasInfo}}}
+              end, HandlerList).
 
-%-spec config_nodes(valid_config()) -> list(node()).
-config_nodes(Config) ->
-    ordsets:from_list(lists:concat([N || {_Server, HandlerList} <- Config,
-                                         {_, _, N, _, _} <- HandlerList,
-                                         N /= local, N /= node()])).
+config_nodes(NasHandler) ->
+    ordsets:from_list(lists:concat([N || {_, _, N, _, _} <- NasHandler, N /= local, N/= node()])).
+
+update_server(Running, ToStop, ToStart) ->
+    Stopped = lists:map(fun(ServerAddr = {_ServerName, Addr}) ->
+                                 StoppedServer = {_, _, Pid} = lists:keyfind(Addr, 2, Running),
+                                 eradius_server_sup:stop_instance(ServerAddr, Pid),
+                                 StoppedServer
+                        end, ToStop),
+    NewStarted = lists:map(fun(ServerAddr = {ServerName, Addr = {IP, Port}}) ->
+                               case eradius_server_sup:start_instance(ServerAddr) of
+                                   {ok, Pid} ->
+                                       {ServerName, Addr, Pid};
+                                   {error, Error} ->
+                                       lager:error("Could not start listener on host: ~s, occuring error: ~p",
+                                       [eradius_server:printable_peer(IP, Port), Error])
+                               end
+                           end, ToStart),
+    (Running -- Stopped) ++ NewStarted.
+
+update_nases(ToDelete, ToInsert) ->
+    lists:foreach(fun(Nas) ->
+                      ets:delete_object(?NAS_TAB, Nas),
+                      NasProp = Nas#nas.prop,
+                      MetricsInfo = {ServerAddr, _} = NasProp#nas_prop.metrics_info,
+                      eradius_metrics:delete_nas(MetricsInfo),
+                      eradius_metrics:update_server_time(config_reset, ServerAddr)
+                  end, ToDelete),
+    lists:foreach(fun(Nas) ->
+                      ets:insert(?NAS_TAB, Nas),
+                      NasProp = Nas#nas.prop,
+                      MetricsInfo = {ServerAddr, _} = NasProp#nas_prop.metrics_info,
+                      eradius_metrics:create_nas(MetricsInfo),
+                      eradius_metrics:update_server_time(config_reset, ServerAddr)
+                  end, ToInsert).
+
