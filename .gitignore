@@ -21,3 +21,4 @@ tetrapak/.*.cache
 logs
 erl_crash.dump
 rebar
+_build

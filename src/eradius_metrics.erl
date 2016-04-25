@@ -257,5 +257,5 @@ update_since_last_request(Service, Address) ->
                client    -> client_layout(Address)
            end,
     LastRequestId = lists:append([?DEFAULT_ENTRIES, [time, last_request], Args, [ticks]]),
-    {ok, [{ms_since_reset, Uptime}]} = exometer:get_value(LastRequestId, ms_since_reset),
-    [{value, round(Uptime)}].
+    {ok, [{value, LastRequestTs}]} = exometer:get_value(LastRequestId, value),
+    [{value, round(timestamp(milli_seconds) - LastRequestTs)}].
