@@ -97,13 +97,13 @@ mk_outfiles(Res, Dir, File) ->
 %%     emit(T, Hrl, Map);
 
 emit([A|T], Hrl, Map) when is_record(A, attribute) ->
-    io:format(Hrl, "-define( ~s , ~w ).~n",
+    io:format(Hrl, "-define( '~s' , ~w ).~n",
         [d2u(A#attribute.name), A#attribute.id]),
     io:format(Map, "~w.~n", [A]),
     emit(T, Hrl, Map);
 
 emit([V|T], Hrl, Map) when is_record(V, vendor) ->
-    io:format(Hrl, "-define( ~s , ~w ).~n",
+    io:format(Hrl, "-define( '~s' , ~w ).~n",
         [d2u(V#vendor.name), V#vendor.type]),
     io:format(Map, "~w.~n", [V]),
     emit(T, Hrl, Map);
