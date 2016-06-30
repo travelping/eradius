@@ -13,7 +13,7 @@
                           {strip, ?DEFAULT_STRIP},
                           {separator, ?DEFAULT_SEPARATOR}]).
 
--type route() :: erproxyadius_client:nas_address().
+-type route() :: eradius_client:nas_address().
 -type routes() :: [{Name :: string(), route()}].
 
 radius_request(Request, _NasProp, Args) ->
