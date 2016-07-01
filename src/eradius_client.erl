@@ -88,8 +88,10 @@ send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(R
                            _ ->
                                Request1
                        end,
+            Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
+            Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
             SenderPid = spawn(Node, ?MODULE, send_remote_request_loop,
-                             [self(), Socket, ReqId, Peer, Request2, Options]),
+                             [self(), Socket, ReqId, Peer, Request2, Retries, Timeout, MetricsInfo]),
             SenderMonitor = monitor(process, SenderPid),
             Value = receive
                        {SenderPid, Result} ->
