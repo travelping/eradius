@@ -49,7 +49,8 @@ send_request(NAS, Request) ->
 
 % @doc Send a radius request to the given NAS.
 %   If no answer is received within the specified timeout, the request will be sent again.
--spec send_request(nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'socket_down'}.
+-spec send_request(nas_address(), #radius_request{}, options()) -> 
+    {ok, binary(), eradius_lib:authenticator()} | {error, 'timeout' | 'socket_down'}.
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
     TS1 = eradius_metrics:timestamp(milli_seconds),
     ServerName = proplists:get_value(server_name, Options, undefined),
@@ -106,8 +107,6 @@ send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(R
 send_remote_request(_Node, {_IP, _Port, _Secret}, _Request, _Options) ->
     error(badarg).
 
-proceed_response(Request, Value, Peer, TS1, undefined) ->
-    proceed_response(Request, Value, Peer, TS1, eradius_metrics:make_addr_info(Peer));
 proceed_response(Request, Value, _Peer, TS1, MetricsInfo) ->
     TS2 = eradius_metrics:timestamp(milli_seconds),
     case Value of
@@ -204,7 +203,7 @@ reconfigure() ->
 %% ------------------------------------------------------------------------------------------
 %% -- socket process manager
 -record(state, {
-    socket_ip :: inet:ip_address(),
+    socket_ip :: null | inet:ip_address(),
     no_ports = 1 :: pos_integer(),
     idcounters = dict:new() :: dict:dict(),
     sockets = array:new() :: array:array(),
