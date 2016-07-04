@@ -55,7 +55,7 @@ decode_request(Result, ReqID, Secret, Auth) ->
     end.
 
 % @private
--spec validate_route({Ip :: inet:ip_address(), Port :: eradius_server:port_number(), Secret :: eradius_lib:secret()}) ->
+-spec validate_route({Ip :: list() | inet:ip_address(), Port :: eradius_server:port_number(), Secret :: eradius_lib:secret()}) ->
     boolean().
 validate_route({_Ip, Port, _Secret}) when not is_integer(Port); Port =< 0; Port > 65535 -> false;
 validate_route({_Ip, _Port, Secret}) when not is_list(Secret), not is_binary(Secret) -> false;
@@ -86,7 +86,9 @@ validate_option(_, _) -> false.
 
 
 % @private
--spec new_request(Request :: #radius_request{}, Username :: string(), NewUsername :: string()) ->
+-spec new_request(Request :: #radius_request{}, 
+                  Username :: undefined | binary(), 
+                  NewUsername :: string()) ->
     NewRequest :: #radius_request{}.
 new_request(Request, Username, Username) -> Request;
 new_request(Request, _Username, NewUsername) ->
@@ -105,7 +107,7 @@ resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) 
     Separator = proplists:get_value(separator, Options, ?DEFAULT_SEPARATOR),
     case get_key(Username, Type, Strip, Separator) of
         {not_found, NewUsername} ->
-	    {NewUsername, DefaultRoute};
+            {NewUsername, DefaultRoute};
         {Key, NewUsername} ->
             case lists:keyfind(Key, 1, Routes) of
                 {Key, {_IP, _Port, _Secret} = Route} -> {NewUsername, Route};
@@ -116,7 +118,7 @@ resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) 
 
 % @private
 -spec get_key(Username :: binary() | string(), Type :: atom(), Strip :: boolean(), Separator :: list()) ->
-    {Key :: string(), NewUsername :: string()}.
+    {Key :: not_found | string(), NewUsername :: string()}.
 get_key(Username, Type, Strip, Separator) when is_binary(Username) ->
     get_key(binary_to_list(Username), Type, Strip, Separator);
 get_key(Username, realm, Strip, Separator) ->
