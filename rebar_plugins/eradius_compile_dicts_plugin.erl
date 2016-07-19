@@ -32,7 +32,7 @@ clean(Config, Appfile) ->
 out_files(_Config, DictionaryFile) ->
     {ok, Basedir} = file:get_cwd(),
     DictionaryFileBase = filename:basename(DictionaryFile),
-    OutfileBase = re:replace(DictionaryFileBase, "\\.", "_", [{return, list}]),
+    OutfileBase = re:replace(DictionaryFileBase, "\\.", "_", [global, {return, list}]),
     Headerfile = string:join([OutfileBase, "hrl"], "."),
     HeaderfileFQ = filename:join([Basedir, "include", Headerfile]),
     Mapfile = string:join([OutfileBase, "map"], "."),
