@@ -216,6 +216,7 @@ encode_value(date, Date = {{_,_,_},{_,_,_}}) ->
 %% -- Wire Decoding
 
 -record(decoder_state, {
+	  request_authenticator :: 'undefined' | binary(),
 	  attrs = []       :: eradius_lib:attribute_list(),
 	  hmac_pos         :: 'undefined' | non_neg_integer(),
 	  eap_msg = []     :: [binary()]
@@ -251,7 +252,7 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, PacketAuthenticator:16/binary, Body0/b
 
     Command = decode_command(Cmd),
     PartialRequest = #radius_request{cmd = Command, reqid = ReqId, authenticator = PacketAuthenticator, secret = Secret, msg_hmac = false},
-    DecodedState = decode_attributes(PartialRequest, Body),
+    DecodedState = decode_attributes(PartialRequest, RequestAuthenticator, Body),
     Request = PartialRequest#radius_request{attrs = lists:reverse(DecodedState#decoder_state.attrs),
 					    eap_msg = list_to_binary(lists:reverse(DecodedState#decoder_state.eap_msg))},
     validate_authenticator(Command, <<Cmd:8, ReqId:8, Len:16>>, PacketAuthenticator, Body, Secret),
@@ -302,9 +303,9 @@ decode_command(_)                     -> error(bad_pdu).
 append_attr(Attr, State) ->
     State#decoder_state{attrs = [Attr | State#decoder_state.attrs]}.
 
--spec decode_attributes(#radius_request{}, binary()) -> #decoder_state{}.
-decode_attributes(Req, As) ->
-    decode_attributes(Req, As, 0, #decoder_state{}).
+-spec decode_attributes(#radius_request{}, binary(), binary()) -> #decoder_state{}.
+decode_attributes(Req, RequestAuthenticator, As) ->
+    decode_attributes(Req, As, 0, #decoder_state{request_authenticator = RequestAuthenticator}).
 
 -spec decode_attributes(#radius_request{}, binary(), non_neg_integer(), #decoder_state{}) -> #decoder_state{}.
 decode_attributes(_Req, <<>>, _Pos, State) ->
@@ -329,9 +330,9 @@ decode_attribute(<<Value/binary>>, _Req, Attr = #attribute{id = ?REAP_Message}, 
     NewState = State#decoder_state{eap_msg = [Value | State#decoder_state.eap_msg]},
     append_attr({Attr, Value}, NewState);
 decode_attribute(<<EncValue/binary>>, Req, Attr = #attribute{id = ?RMessage_Authenticator, type = Type, enc = Encryption}, Pos, State) ->
-    append_attr({Attr, decode_value(decrypt_value(Req, EncValue, Encryption), Type)}, State#decoder_state{hmac_pos = Pos});
+    append_attr({Attr, decode_value(decrypt_value(Req, State, EncValue, Encryption), Type)}, State#decoder_state{hmac_pos = Pos});
 decode_attribute(<<EncValue/binary>>, Req, Attr = #attribute{type = Type, enc = Encryption}, _Pos, State) when is_atom(Type) ->
-    append_attr({Attr, decode_value(decrypt_value(Req, EncValue, Encryption), Type)}, State);
+    append_attr({Attr, decode_value(decrypt_value(Req, State, EncValue, Encryption), Type)}, State);
 decode_attribute(WholeBin = <<Tag:8, Bin/binary>>, Req, Attr = #attribute{type = {tagged, Type}}, _Pos, State) ->
     case {decode_tag_value(Tag), Attr#attribute.enc} of
         {0, no} ->
@@ -341,7 +342,7 @@ decode_attribute(WholeBin = <<Tag:8, Bin/binary>>, Req, Attr = #attribute{type =
             append_attr({Attr, {TagV, decode_value(Bin, Type)}}, State);
         {TagV, Encryption} ->
             % for encrypted attributes, tag byte is never part of the value
-            append_attr({Attr, {TagV, decode_value(decrypt_value(Req, Bin, Encryption), Type)}}, State)
+            append_attr({Attr, {TagV, decode_value(decrypt_value(Req, State, Bin, Encryption), Type)}}, State)
     end.
 
 -compile({inline, decode_tag_value/1}).
@@ -392,10 +393,18 @@ decode_integer(Bin) ->
         _                     -> Bin
     end.
 
--spec decrypt_value(#radius_request{}, binary(), eradius_dict:attribute_encryption()) -> eradius_dict:attr_value().
-decrypt_value(Req,  <<Val/binary>>, scramble)   -> scramble(Req#radius_request.secret, Req#radius_request.authenticator, Val);
-decrypt_value(Req,  <<Val/binary>>, salt_crypt) -> salt_decrypt(Req#radius_request.secret, Req#radius_request.authenticator, Val);
-decrypt_value(_Req, <<Val/binary>>, no)         -> Val.
+-spec decrypt_value(#radius_request{}, #decoder_state{}, binary(),
+		    eradius_dict:attribute_encryption()) -> eradius_dict:attr_value().
+decrypt_value(#radius_request{secret = Secret, authenticator = Authenticator},
+	      _, <<Val/binary>>, scramble) ->
+    scramble(Secret, Authenticator, Val);
+decrypt_value(#radius_request{secret = Secret},
+	      #decoder_state{request_authenticator = RequestAuthenticator},
+	      <<Val/binary>>, salt_crypt)
+when is_binary(RequestAuthenticator) ->
+    salt_decrypt(Secret, RequestAuthenticator, Val);
+decrypt_value(_Req, _State, <<Val/binary>>, _Type) ->
+    Val.
 
 -spec decode_vendor_specific_attribute(#radius_request{}, non_neg_integer(), binary(), non_neg_integer(), #decoder_state{}) -> #decoder_state{}.
 decode_vendor_specific_attribute(_Req, _VendorID, <<>>, _Pos, State) ->
@@ -435,12 +444,12 @@ generate_salt() ->
 
 -spec salt_encrypt(salt(), secret(), authenticator(), binary()) -> binary().
 salt_encrypt(Salt, SharedSecret, RequestAuthenticator, PlainText) ->
-    CipherText = do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, (pad_to(16, << (byte_size(PlainText)):8, PlainText/binary >>))),
+    CipherText = do_salt_crypt(encrypt, Salt, SharedSecret, RequestAuthenticator, (pad_to(16, << (byte_size(PlainText)):8, PlainText/binary >>))),
     <<Salt/binary, CipherText/binary>>.
 
 -spec salt_decrypt(secret(), authenticator(), binary()) -> binary().
 salt_decrypt(SharedSecret, RequestAuthenticator, <<Salt:2/binary, CipherText/binary>>) ->
-    << Length:8/integer, PlainText/binary >> = do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, CipherText),
+    << Length:8/integer, PlainText/binary >> = do_salt_crypt(decrypt, Salt, SharedSecret, RequestAuthenticator, CipherText),
     if
         Length < byte_size(PlainText) ->
             binary:part(PlainText, 0, Length);
@@ -448,16 +457,19 @@ salt_decrypt(SharedSecret, RequestAuthenticator, <<Salt:2/binary, CipherText/bin
             PlainText
     end.
 
-do_salt_crypt(Salt, SharedSecret, RequestAuthenticator, <<CipherText/binary>>) ->
+do_salt_crypt(Op, Salt, SharedSecret, RequestAuthenticator, <<CipherText/binary>>) ->
     B = crypto:hash(md5, [SharedSecret, RequestAuthenticator, Salt]),
-    salt_crypt(SharedSecret, B, CipherText, << >>).
+    salt_crypt(Op, SharedSecret, B, CipherText, << >>).
 
-salt_crypt(SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, CipherText) ->
+salt_crypt(Op, SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, CipherText) ->
     NewCipherText = crypto:exor(PlainText, B),
-    Bnext = crypto:hash(md5, [SharedSecret, NewCipherText]),
-    salt_crypt(SharedSecret, Bnext, Remaining, <<CipherText/binary, NewCipherText/binary>>);
+    Bnext = case Op of
+		decrypt -> crypto:hash(md5, [SharedSecret, PlainText]);
+		encrypt -> crypto:hash(md5, [SharedSecret, NewCipherText])
+	    end,
+    salt_crypt(Op, SharedSecret, Bnext, Remaining, <<CipherText/binary, NewCipherText/binary>>);
 
-salt_crypt(_SharedSecret, _B, << >>, CipherText) ->
+salt_crypt(Op, _SharedSecret, _B, << >>, CipherText) ->
     CipherText.
 
 %% @doc pad binary to specific length
