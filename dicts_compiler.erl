@@ -1,3 +1,4 @@
+#!/usr/bin/env escript
 %%%-------------------------------------------------------------------
 %%% @author sdhillon
 %%% @copyright (C) 2014, <COMPANY>
@@ -6,30 +7,41 @@
 %%% @end
 %%% Created : 16. Nov 2014 6:25 PM
 %%%-------------------------------------------------------------------
--module(eradius_compile_dicts_plugin).
--include("../include/eradius_dict.hrl").
--compile(export_all).
+-include("include/eradius_dict.hrl").
 
-pre_compile(Config, Appfile) ->
-    case rebar_utils:find_files("priv/dictionaries", "^dictionary.*") of
-        [] ->
+main(["compile"]) -> compile();
+main(["clean"]) -> clean();
+main(_) -> ok.
+
+compile() ->
+    case find_files("priv/dictionaries", "^dictionary.*") of
+        [] -> 
             ok;
         Dictionaries ->
             {ok, Basedir} = file:get_cwd(),
             IncludeDir = filename:join([Basedir, "include"]),
             ok = filelib:ensure_dir(IncludeDir),
-            dictionary_compile(Config, Appfile, Dictionaries)
+            Targets = [{Dictionary, out_files(Dictionary)} || Dictionary <- Dictionaries],
+            compile_each(Targets)
     end.
 
-clean(Config, Appfile) ->
-    case rebar_utils:find_files("priv/dictionaries", "^dictionary.*") of
-        [] ->
+clean() ->
+    case find_files("priv/dictionaries", "^dictionary.*") of
+        [] -> 
             ok;
         Dictionaries ->
-            dictionary_clean(Config, Appfile, Dictionaries)
+            Targets = [{Dictionary, out_files(Dictionary)} || Dictionary <- Dictionaries],
+            clean_each(Targets)
     end.
 
-out_files(_Config, DictionaryFile) ->
+find_files(Dir, Regex) ->
+    find_files(Dir, Regex, true).
+
+find_files(Dir, Regex, Recursive) ->
+    filelib:fold_files(Dir, Regex, Recursive,
+                       fun(F, Acc) -> [F | Acc] end, []).
+
+out_files(DictionaryFile) ->
     {ok, Basedir} = file:get_cwd(),
     DictionaryFileBase = filename:basename(DictionaryFile),
     OutfileBase = re:replace(DictionaryFileBase, "\\.", "_", [global, {return, list}]),
@@ -39,63 +51,35 @@ out_files(_Config, DictionaryFile) ->
     MapfileFQ = filename:join([Basedir, "priv", Mapfile]),
     {HeaderfileFQ, MapfileFQ}.
 
-
-dictionary_clean(Config, _Appfile, Dictionaries) ->
-    Targets = [{Dictionary, out_files(Config, Dictionary)} || Dictionary <- Dictionaries],
-    clean_each(Targets, Config).
-
-dictionary_compile(Config, _Appfile, Dictionaries) ->
-    Targets = [{Dictionary, out_files(Config, Dictionary)} || Dictionary <- Dictionaries],
-    compile_each(Targets, Config).
-
 needs_compile(Src, Target) ->
     filelib:last_modified(Src) > filelib:last_modified(Target).
 
-compile_each([], _Config) ->
+compile_each([]) ->
     ok;
-compile_each([{Dictionary, {Headerfile, Mapfile}}|Rest], Config) ->
+compile_each([{Dictionary, {Headerfile, Mapfile}}|Rest]) ->
     case needs_compile(Dictionary, Headerfile)
         or needs_compile(Dictionary, Mapfile) of
         false ->
-            compile_each(Rest, Config);
+            compile_each(Rest);
         true ->
             Res = parse_dict(Dictionary),
             {ok, Hrl} = file:open(Headerfile, [write]),
             {ok, Map} = file:open(Mapfile, [write]),
             emit(Res, Hrl, Map),
-            compile_each(Rest, Config)
+            io:format("Compiled ~s~n", [Dictionary]),
+            compile_each(Rest)
     end.
 
-clean_each([], _Config) ->
+clean_each([]) ->
     ok;
-clean_each([{_Dictionary, {Headerfile, Mapfile}}|Rest], Config) ->
-    rebar_log:log(info, "Delete ~p~n", [Headerfile]),
+clean_each([{_Dictionary, {Headerfile, Mapfile}}|Rest]) ->
     file:delete(Headerfile),
-    rebar_log:log(info, "Delete ~p~n", [Mapfile]),
     file:delete(Mapfile),
-    clean_each(Rest, Config).
+    clean_each(Rest).
 
 %%% --------------------------------------------------------------------
 %%% Dictionary making
 %%% --------------------------------------------------------------------
-
-mk_dict(File) ->
-    Res = parse_dict(File),
-    Dir = dir(?MODULE),
-    mk_outfiles(Res, Dir, o2u(File)).
-
-mk_outfiles(Res, Dir, File) ->
-    {Hrl, Map} = open_files(Dir, File),
-    emit(Res, Hrl, Map),
-    close_files(Hrl, Map).
-
-%% emit([A|T], Hrl, Map) when is_record(A, attribute), A#attribute.attrs =:= undefined ->
-%%     io:format(Hrl, "-define( ~s , ~w ).~n",
-%% 	      [d2u(A#attribute.name), A#attribute.id]),
-%%     io:format(Map, "{attribute, ~w, ~w, \"~s\"}.~n",
-%% 	      [A#attribute.id, A#attribute.type, A#attribute.name]),
-%%     emit(T, Hrl, Map);
-
 emit([A|T], Hrl, Map) when is_record(A, attribute) ->
     io:format(Hrl, "-define( '~s' , ~w ).~n",
         [d2u(A#attribute.name), A#attribute.id]),
@@ -108,27 +92,12 @@ emit([V|T], Hrl, Map) when is_record(V, vendor) ->
     io:format(Map, "~w.~n", [V]),
     emit(T, Hrl, Map);
 emit([V|T], Hrl, Map) when is_record(V, value) ->
-%%    io:format(Hrl, "-define( ~s , ~w ).~n",
-%%	      [V#value.attribute, d2u(V#value.name), V#value.id]),
     io:format(Map, "~w.~n", [V]),
     emit(T, Hrl, Map);
 emit([_|T], Hrl, Map) ->
     emit(T, Hrl, Map);
 emit([], _, _) ->
     true.
-
-open_files(Dir, File) ->
-    [Name|_] = lists:reverse(string:tokens(File, "/")),
-    Hfile = Dir ++ "/include/" ++ Name ++ ".hrl",
-    {ok,Hrl} = file:open(Hfile, [write]),
-    Mfile = Dir ++ "/priv/" ++ Name ++ ".map",
-    {ok,Map} = file:open(Mfile, [write]),
-    io:format("Creating files: ~n  <~s>~n  <~s>~n", [Hfile, Mfile]),
-    {Hrl, Map}.
-
-close_files(Hrl, Map) ->
-    file:close(Hrl),
-    file:close(Map).
 
 parse_dict(File) when is_list(File) ->
     {ok,B} = file:read_file(File),
@@ -201,7 +170,6 @@ pd(["VALUE", Attr, Name, Id]) ->
             {ok,#value{id = {AttrId, id2i(Id)}, name = Name}}
     end;
 pd(_X) ->
-    %%io:format("Skipping: ~p~n", [X]),
     false.
 
 pd(["END-VENDOR", _Name], _VendId) ->
@@ -220,14 +188,7 @@ pd(["VALUE", Attr, Name, Id], _VendId) ->
         AttrId ->
             {ok,#value{id = {AttrId, id2i(Id)}, name = Name}}
     end;
-pd(_X, _VendId) ->
-    %%io:format("Skipping: ~p~n", [_X]),
-    false.
-
-dir(Mod) ->
-    P = code:which(Mod),
-    [_,_|R] = lists:reverse(string:tokens(P,"/")),
-    lists:foldl(fun(X,Acc) -> Acc ++ [$/|X] end, "", lists:reverse(R)).
+pd(_X, _VendId) -> false.
 
 id2i(Id) ->
     case catch l2i(Id) of
@@ -250,10 +211,6 @@ l2a(A) when is_atom(A) -> A.
 %%% Replace all dashes with underscore characters.
 d2u(L) when is_list(L) ->
     repl(L, $-, $_).
-
-%%% Replace all dots with underscore characters.
-o2u(L) when is_list(L) ->
-    repl(L, $., $_).
 
 repl(L,X,Y) when is_list(L) ->
     F = fun(Z) when Z == X -> Y;

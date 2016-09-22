@@ -469,7 +469,7 @@ salt_crypt(Op, SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, Ciphe
 	    end,
     salt_crypt(Op, SharedSecret, Bnext, Remaining, <<CipherText/binary, NewCipherText/binary>>);
 
-salt_crypt(Op, _SharedSecret, _B, << >>, CipherText) ->
+salt_crypt(_Op, _SharedSecret, _B, << >>, CipherText) ->
     CipherText.
 
 %% @doc pad binary to specific length
