@@ -4,6 +4,7 @@
 % Config validating API functions:
 -export([get_app_env/2, validate_ip/1, validate_port/1, validate_ports/1,
          map_helper/3, map_helper/2, ok_error_helper/2, validate_secret/1]).
+-export([generate_ip_list/2]).
 
 %% ------------------------------------------------------------------------------------------
 %% -- config validation
