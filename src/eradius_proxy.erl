@@ -117,8 +117,9 @@ resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) 
     end.
 
 % @private
--spec get_key(Username :: binary() | string(), Type :: atom(), Strip :: boolean(), Separator :: list()) ->
+-spec get_key(Username :: binary() | string() | [], Type :: atom(), Strip :: boolean(), Separator :: list()) ->
     {Key :: not_found | string(), NewUsername :: string()}.
+get_key([], _, _, _) -> {not_found, []};
 get_key(Username, Type, Strip, Separator) when is_binary(Username) ->
     get_key(binary_to_list(Username), Type, Strip, Separator);
 get_key(Username, realm, Strip, Separator) ->
@@ -228,6 +229,7 @@ get_key_test() ->
     ?assertEqual({"example", "user@domain"}, get_key("user@domain@example", realm, true, "@")),
     ?assertEqual({"user", "domain@example"}, get_key("user/domain@example", prefix, true, "/")),
     ?assertEqual({"user", "domain/domain2@example"}, get_key("user/domain/domain2@example", prefix, true, "/")),
+    ?assertEqual({not_found, []}, get_key([], ?DEFAULT_TYPE, ?DEFAULT_STRIP, ?DEFAULT_SEPARATOR)),
     ok.
 
 
