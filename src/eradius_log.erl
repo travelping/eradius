@@ -68,8 +68,7 @@ collect_meta({_NASIP, _NASPort, ReqID}, Request) ->
 -spec collect_message(sender(),#radius_request{}) -> iolist().
 collect_message({NASIP, NASPort, ReqID}, Request) ->
     StatusType = format_acct_status_type(Request),
-    Class = format_acc_class(Request),
-    io_lib:format("~s:~p [~p]: ~s ~s ~s",[inet:ntoa(NASIP), NASPort, ReqID, format_cmd(Request#radius_request.cmd), StatusType, Class]).
+    io_lib:format("~s:~p [~p]: ~s ~s",[inet:ntoa(NASIP), NASPort, ReqID, format_cmd(Request#radius_request.cmd), StatusType]).
 
 -spec reconfigure() -> ok.
 reconfigure() ->
@@ -298,14 +297,6 @@ hexchar(X) when X >= 10, X < 16 ->
 -compile({inline, bin_to_hexstr/1}).
 bin_to_hexstr(Bin) ->
     << << (hexchar(X)) >> || <<X:4>> <= Bin >>.
-
-format_acc_class(Request) ->
-    case eradius_lib:get_attr(Request, ?Class) of
-	undefined ->
-	    "";
-	RequestClass ->
-	    RequestClass
-    end.
 
 format_acct_status_type(Request) ->
     StatusType = eradius_lib:get_attr(Request, ?Acct_Status_Type),
