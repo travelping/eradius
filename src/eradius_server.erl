@@ -55,6 +55,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("eradius_lib.hrl").
+-include("dictionary.hrl").
 
 -define(RESEND_TIMEOUT, 5000).          % how long the binary response is kept after sending it on the socket
 -define(RESEND_RETRIES, 3).             % how often a reply may be resent
@@ -325,6 +326,15 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             {reply, EncReply,{Request#radius_request.cmd, ReplyCmd}};
         noreply ->
             {discard, handler_returned_noreply};
+        {error, timeout} ->
+            ReqType = eradius_log:format_cmd(Request#radius_request.cmd),
+            ReqId = integer_to_list(Request#radius_request.reqid),
+            S = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
+            NAS = eradius_lib:get_attr(Request, ?NAS_Identifier),
+            NAS_IP = inet_parse:ntoa(NasProp#nas_prop.nas_ip),
+            lager:error(eradius_log:collect_meta(S, Request), "timeout after waiting for response to ~s(~s) from RADIUS NAS: ~s ~s",
+                        [ReqType, ReqId, NAS, NAS_IP]),
+            {discard, {bad_return, {error, timeout}}};
         OtherReturn ->
             lager:error("~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",
             [printable_peer(ServerIP, Port), Request, HandlerArg, OtherReturn]),
@@ -393,4 +403,3 @@ inc_discard_counter(malformed, NasProp, Ms) ->
 inc_discard_counter(_Reason, NasProp, Ms) ->
     eradius_metrics:update_nas_request(dropped, NasProp#nas_prop.metrics_info, Ms),
     eradius_counter:inc_counter(packetsDropped, NasProp).
-
