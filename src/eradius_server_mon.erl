@@ -18,6 +18,8 @@
 -define(NAS_TAB, eradius_nas_tab).
 -export_type([server/0]).
 
+-import(eradius_lib, [printable_peer/2]).
+
 -record(nas, {
     key :: {server(), inet:ip_address()},
     server_name :: server_name(),
@@ -145,7 +147,7 @@ update_server(Running, ToStop, ToStart) ->
                                        {ServerName, Addr, Pid};
                                    {error, Error} ->
                                        lager:error("Could not start listener on host: ~s, occuring error: ~p",
-                                       [eradius_server:printable_peer(IP, Port), Error])
+                                       [printable_peer(IP, Port), Error])
                                end
                            end, ToStart),
     (Running -- Stopped) ++ NewStarted.
