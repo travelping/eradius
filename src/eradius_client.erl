@@ -113,6 +113,7 @@ proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_Serve
     update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_metrics:timestamp(milli_seconds) - TS1),
     case eradius_lib:decode_request(Response, Secret, Authenticator) of
         {bad_pdu, Reason} ->
+            update_client_response(dropped, MetricsInfo),
             lager:error("~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         Decoded ->
@@ -188,6 +189,8 @@ update_client_response(discnak, MetricsInfo) ->
     eradius_metrics:update_client_response(disconnect_nak, MetricsInfo);
 update_client_response(discack, MetricsInfo) ->
     eradius_metrics:update_client_response(disconnect_ack, MetricsInfo);
+update_client_response(dropped, MetricsInfo) ->
+    eradius_metrics:update_client_response(dropped, MetricsInfo);
 update_client_response(_, _) ->
     ok.
 
