@@ -24,14 +24,11 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, write_request/2,
-         collect_meta/2, collect_message/2,
-         reconfigure/0]).
--export([bin_to_hexstr/1]).
+-export([start_link/0, write_request/2, collect_meta/2, collect_message/2, reconfigure/0]).
+-export([bin_to_hexstr/1, format_cmd/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
