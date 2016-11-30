@@ -289,7 +289,8 @@ handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, na
                        [eradius_log:collect_message(Sender, Request)]),
             eradius_log:write_request(Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
-        bad_pdu ->
+        {bad_pdu, Reason} ->
+            lager:error("~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
             {discard, malformed}
     end.
 

@@ -227,18 +227,18 @@ encode_value(date, Date = {{_,_,_},{_,_,_}}) ->
 	  eap_msg = []     :: [binary()]
 }).
 
--spec decode_request_id(binary()) -> {0..255, binary()} | bad_pdu.
+-spec decode_request_id(binary()) -> {0..255, binary()} | {bad_pdu, list()}.
 decode_request_id(Req = <<_Cmd:8, ReqId:8, _Rest/binary>>) -> {ReqId, Req};
-decode_request_id(_Req) -> bad_pdu.
+decode_request_id(_Req) -> {bad_pdu, "invalid request id"}.
 
--spec decode_request(binary(), secret()) -> #radius_request{} | bad_pdu.
+-spec decode_request(binary(), secret()) -> #radius_request{} | {bad_pdu, list()}.
 decode_request(Packet, Secret) ->
     decode_request(Packet, Secret, undefined).
 
--spec decode_request(binary(), secret(), authenticator()) -> #radius_request{} | bad_pdu.
+-spec decode_request(binary(), secret(), authenticator()) -> #radius_request{} | {bad_pdu, list()}.
 decode_request(Packet, Secret, Authenticator) ->
     case (catch decode_request0(Packet, Secret, Authenticator)) of
-        {'EXIT', _} -> bad_pdu;
+        {'EXIT', _} -> {bad_pdu, "decode packet error"};
         Else        -> Else
     end.
 
@@ -248,7 +248,7 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, PacketAuthenticator:16/binary, Body0/b
     GivenBodySize  = Len - 20,
     Body = if
               ActualBodySize > GivenBodySize ->
-                  throw(bad_pdu);
+                  throw({bad_pdu, "false packet size"});
               ActualBodySize == GivenBodySize ->
                   Body0;
               true ->
@@ -281,10 +281,10 @@ validate_packet_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
             Value -> 
                 ok;
             _     -> 
-                throw(bad_pdu)
+                throw({bad_pdu, "Message-Authenticator Attribute is invalid"})
             end;
         _ ->
-            throw(bad_pdu)
+            throw({bad_pdu, "Message-Authenticator Attribute is malformed"})
     end.
 
 validate_authenticator(accreq, Head, _RequestAuthenticator, PacketAuthenticator, Body, Secret) ->
@@ -306,7 +306,7 @@ validate_authenticator(_Cmd, _Head, _RequestAuthenticator, _PacketAuthenticator,
 compare_authenticator(Authenticator, Authenticator) -> 
     true;
 compare_authenticator(_RequestAuthenticator, _PacketAuthenticator) ->
-    throw(bad_pdu).
+    throw({bad_pdu, "Authenticator Attribute is invalid"}).
 
 -spec decode_command(byte()) -> command().
 decode_command(?RAccess_Request)      -> request;
@@ -321,7 +321,7 @@ decode_command(?RCoa_Nak)             -> coanak;
 decode_command(?RDisconnect_Request)  -> discreq;
 decode_command(?RDisconnect_Ack)      -> discack;
 decode_command(?RDisconnect_Nak)      -> discnak;
-decode_command(_)                     -> error(bad_pdu).
+decode_command(_)                     -> error({bad_pdu, "unknown request type"}).
 
 append_attr(Attr, State) ->
     State#decoder_state{attrs = [Attr | State#decoder_state.attrs]}.

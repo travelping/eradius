@@ -112,7 +112,8 @@ send_remote_request(_Node, {_IP, _Port, _Secret}, _Request, _Options) ->
 proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_ServerName, {ServerIP, Port}}, TS1, MetricsInfo) ->
     update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_metrics:timestamp(milli_seconds) - TS1),
     case eradius_lib:decode_request(Response, Secret, Authenticator) of
-        bad_pdu ->
+        {bad_pdu, Reason} ->
+            lager:error("~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         Decoded ->
             update_client_response(Decoded#radius_request.cmd, MetricsInfo),
