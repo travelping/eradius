@@ -50,7 +50,7 @@ decode_request(Result, ReqID, Secret, Auth) ->
         Reply = #radius_request{} ->
             {reply, Reply#radius_request{reqid = ReqID}};
         Error ->
-            lager:error("~p: error during decode_request (~p)", [?MODULE, Error]),
+            lager:error("~p: request is incorrect (~p)", [?MODULE, Error]),
             Error
     end.
 

@@ -59,7 +59,7 @@ handle_info({udp, Socket, FromIP, FromPort, EncRequest},
                         _               -> {noreply, NState}
                     end
             end;
-        bad_pdu ->
+        {bad_pdu, _} ->
             %% discard reply because it was malformed
             inet:setopts(Socket, [{active, once}]),
             {noreply, State}

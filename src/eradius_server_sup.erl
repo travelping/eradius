@@ -5,6 +5,7 @@
 
 -behaviour(supervisor).
 -export([init/1]).
+-import(eradius_lib, [printable_peer/2]).
 
 -define(SERVER, ?MODULE).
 
@@ -14,13 +15,13 @@ start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 start_instance(ServerAddr = {ServerName, {IP, Port}}) ->
-    lager:info("Starting RADIUS Listener at ~s", [eradius_server:printable_peer(IP, Port)]),
+    lager:info("Starting RADIUS Listener at ~s", [printable_peer(IP, Port)]),
     MetricsAddress = eradius_metrics:make_addr_info(ServerAddr),
     eradius_metrics:create_server(MetricsAddress),
     supervisor:start_child(?SERVER, [ServerName, IP, Port]).
 
 stop_instance(ServerAddr = {_ServerName, {IP, Port}}, Pid) ->
-    lager:info("Stopping RADIUS Listener at ~s", [eradius_server:printable_peer(IP, Port)]),
+    lager:info("Stopping RADIUS Listener at ~s", [printable_peer(IP, Port)]),
     MetricsAddress = eradius_metrics:make_addr_info(ServerAddr),
     eradius_metrics:delete_server(MetricsAddress),
     supervisor:terminate_child(?SERVER, Pid).

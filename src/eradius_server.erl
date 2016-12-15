@@ -49,7 +49,8 @@
 
 %% internal
 -export([do_radius/6, handle_request/3, handle_remote_request/5, stats/2]).
--export([printable_peer/2]).
+
+-import(eradius_lib, [printable_peer/2]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -280,15 +281,16 @@ run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, EncRequest) ->
 
 %% @private
 -spec handle_request(eradius_server_mon:handler(), #nas_prop{}, binary()) -> any().
-handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest) ->
-    case eradius_lib:decode_request(EncRequest, NasProp#nas_prop.secret) of
+handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, nas_ip = ServerIP, nas_port = Port}, EncRequest) ->
+    case eradius_lib:decode_request(EncRequest, Secret) of
         Request = #radius_request{} ->
-            Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
+            Sender = {ServerIP, Port, Request#radius_request.reqid},
             lager:info(eradius_log:collect_meta(Sender, Request),"~s",
                        [eradius_log:collect_message(Sender, Request)]),
             eradius_log:write_request(Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
-        bad_pdu ->
+        {bad_pdu, Reason} ->
+            lager:error("~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
             {discard, malformed}
     end.
 
@@ -317,14 +319,16 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
     try HandlerMod:radius_request(Request, NasProp, HandlerArg) of
         {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs, msg_hmac = MsgHMAC, eap_msg = EAPmsg}} ->
             Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
-            EncReply = eradius_lib:encode_reply_request(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
-                                                                               msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
-                                                                               eap_msg = EAPmsg}),
+            EncReply = eradius_lib:encode_reply(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
+                                                                       msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
+                                                                       eap_msg = EAPmsg}),
             lager:info(eradius_log:collect_meta(Sender, Reply),"~s",
                        [eradius_log:collect_message(Sender, Reply)]),
             eradius_log:write_request(Sender, Reply),
             {reply, EncReply,{Request#radius_request.cmd, ReplyCmd}};
         noreply ->
+            lager:error("~s INF: Noreply for request ~p from handler ~p: returned value: ~p", 
+                        [printable_peer(ServerIP, Port), Request, HandlerArg, noreply]),
             {discard, handler_returned_noreply};
         {error, timeout} ->
             ReqType = eradius_log:format_cmd(Request#radius_request.cmd),
@@ -332,7 +336,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             S = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             NAS = eradius_lib:get_attr(Request, ?NAS_Identifier),
             NAS_IP = inet_parse:ntoa(NasProp#nas_prop.nas_ip),
-            lager:error(eradius_log:collect_meta(S, Request), 
+            lager:error(eradius_log:collect_meta(S, Request),
                         "~s INF: Timeout after waiting for response to ~s(~s) from RADIUS NAS: ~s NAS_IP:~s",
                         [printable_peer(ServerIP, Port), ReqType, ReqId, NAS, NAS_IP]),
             {discard, {bad_return, {error, timeout}}};
@@ -346,10 +350,6 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
                         [printable_peer(ServerIP, Port), Request, Class, Reason, erlang:get_stacktrace()]),
             {exit, {Class, Reason}}
     end.
-
--spec printable_peer(inet:ip4_address(),eradius_server:port_number()) -> io_lib:chars().
-printable_peer({IA,IB,IC,ID}, Port) ->
-    io_lib:format("~b.~b.~b.~b:~b",[IA,IB,IC,ID,Port]).
 
 inc_counter({ReqCmd, RespCmd}, NasProp, Ms) ->
     inc_request_counter(ReqCmd, NasProp, Ms),

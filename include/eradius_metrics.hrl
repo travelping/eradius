@@ -142,6 +142,6 @@
        {counter, ?COUNTER}]},
      {response, unknown_type, [         %TODO: this metric is just initialized and not updated within eradius
        {counter, ?COUNTER}]},
-     {response, dropped, [              %TODO: this metric is just initialized and not updated within eradius
+     {response, dropped, [
        {counter, ?COUNTER}]}
      ] ++ ?BASIC_REQUEST_METRICS).
