@@ -93,7 +93,8 @@ stats(Server, Function) ->
 %% @private
 init({ServerName, IP, Port}) ->
     process_flag(trap_exit, true),
-    case gen_udp:open(Port, [{active, once}, {ip, IP}, binary]) of
+    RecBuf = application:get_env(eradius, recbuf, 8192),
+    case gen_udp:open(Port, [{active, once}, {ip, IP}, binary, {recbuf, RecBuf}]) of
         {ok, Socket} ->
             MetricsAddress = eradius_metrics:make_addr_info({ServerName, {IP, Port}}),
             eradius_metrics:update_server_time(reset, MetricsAddress),

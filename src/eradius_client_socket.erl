@@ -18,7 +18,8 @@ init([SocketIP, Client, PortIdx]) ->
         SocketIP when is_tuple(SocketIP) ->
             ExtraOptions = [{ip, SocketIP}]
     end,
-    {ok, Socket} = gen_udp:open(0, [{active, once}, binary | ExtraOptions]),
+    RecBuf = application:get_env(eradius, recbuf, 8192),
+    {ok, Socket} = gen_udp:open(0, [{active, once}, binary , {recbuf, RecBuf} | ExtraOptions]),
     Pending = dict:new(),
     {ok, #state{client = Client, socket = Socket, pending = Pending, mode = active, counter = 0}}.
 

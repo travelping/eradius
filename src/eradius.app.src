@@ -13,7 +13,8 @@
       {resend_timeout, 30000},
       {logging, false},
       {logfile, "./radius.log"},
-      {metrics, [{enabled, [server, nas, client]}]}
+      {metrics, [{enabled, [server, nas, client]}]},
+      {recbuf, 8192} % maximum socket receive buffer in bytes
 
       %% RADIUS server configuration:
       %%
