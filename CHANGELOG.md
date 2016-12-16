@@ -3,6 +3,40 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.8.0 - 16 Dec 2016
+---------------------------
+* add socket receive buffer configuration
+* [metrics] add metric for dropped packets on the client
+* [logs] extend authentication check logs
+* [radius] add authentication of response
+* [logs] improve logging timeout error
+* [bug] fix crash in eradius_proxy when User-Name is empty
+* [logs] update lager to 3.2.2
+* [tests] increase Erlang versions in Travis and add rebar3 env
+* [radius] proper type for RFC 3162 IPv6 attributes
+* [radius] use hooks to compile and clean Radius dictionaries
+* [radius] ruckus radius dictionary
+* [metrics] counter and handle time are available for all kinds of requests
+* [metrics] counter are now available for all kinds of responses
+* [metrics] all metrics are uniformly available for client, server and nas
+  callbacks
+* [metrics] retransmissions are handled separately on client side according
+  to RFC 2620
+* [metrics] metrics are deactivated if no reporter is given (updates of metrics
+  only result in a ets lookup, which is empty)
+* [metrics] exometer updates don't involve any type transformations, every
+  of an exometer id is an atom
+* [metrics] metrics are instantly and completely visible after application start
+* [metrics] removal of the dependence on exometer_influxdb
+* [metrics] exometer ids are uniformly formatted which makes the configuration
+  of potential subscribe options easy
+* [metrics] metrics are defined and read from a data structure in metrics.hrl
+  which makes extensions and documentation much easier for the future
+* make possible to disable retransmittion by setting resend_timeout to 0
+* [logs] default disable file logging
+* set default client_ports to 100 to allow more parallel sockets in the client
+* [metrics] fix server uptime metric
+
 Version 0.7.0 - 28 Dec 2015
 ---------------------------
 * use NasId instead of NasIp and Server name instead of Server name + port
