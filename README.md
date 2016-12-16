@@ -36,10 +36,3 @@ the build in metrics.
 
 The handle time metrics are generated internally using histograms. These histograms
 all have a time span of 60s. The precise metrics are defined in `include/eradius_metrics`.
-
-### TODO
-
-  * unify request/response keywords
-  * make duplicates and retransmissions available for all type of
-    requests/responses
-
