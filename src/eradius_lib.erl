@@ -64,10 +64,11 @@ get_attr_loop(_, [])                                     -> undefined.
 %%   The Message-Authenticator MUST be used in Access-Request that include an EAP-Message attribute [RFC 3579].
 -spec encode_request(#radius_request{}) -> {binary(), binary()}.
 encode_request(Req = #radius_request{reqid = ReqID, cmd = Command, attrs = Attributes}) when (Command == request) ->
-    EncReq1 = encode_attributes(Req, Attributes),
-    EncReq2 = encode_eap_message(Req, EncReq1),
     Authenticator = random_authenticator(),
-    {Body, BodySize} = encode_message_authenticator(Req#radius_request{authenticator = Authenticator}, EncReq2),
+    Req1 = Req#radius_request{authenticator = Authenticator},
+    EncReq1 = encode_attributes(Req1, Attributes),
+    EncReq2 = encode_eap_message(Req1, EncReq1),
+    {Body, BodySize} = encode_message_authenticator(Req1, EncReq2),
     {Authenticator, <<(encode_command(Command)):8, ReqID:8, (BodySize + 20):16, Authenticator:16/binary, Body/binary>>};
 encode_request(Req = #radius_request{reqid = ReqID, cmd = Command, attrs = Attributes}) ->
     {Body, BodySize} = encode_attributes(Req, Attributes),
