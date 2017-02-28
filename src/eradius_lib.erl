@@ -27,7 +27,7 @@
 %% ------------------------------------------------------------------------------------------
 %% -- Request Accessors
 -spec random_authenticator() -> authenticator().
-random_authenticator() -> crypto:rand_bytes(16).
+random_authenticator() -> crypto:strong_rand_bytes(16).
 
 -spec zero_authenticator() -> authenticator().
 zero_authenticator() -> <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>.
