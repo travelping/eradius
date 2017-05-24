@@ -1018,8 +1018,8 @@ VALUE	Ascend-FR-Direct		FR-Direct-Yes	1
 VALUE	Ascend-FR-Link-Mgt		Ascend-FR-No-Link-Mgt	0
 VALUE	Ascend-FR-Link-Mgt		Ascend-FR-Q-933A	2
 VALUE	Ascend-FR-Link-Mgt		Ascend-FR-T1-617D	1
-VALUE	Ascend-FR-Link-Status-Dlci		Ascend-FR-LMI-Dlci-0	0
-VALUE	Ascend-FR-Link-Status-Dlci		Ascend-FR-LMI-Dlci-1023	1023
+VALUE	Ascend-FR-Link-Status-DLCI		Ascend-FR-LMI-DLCI-0	0
+VALUE	Ascend-FR-Link-Status-DLCI		Ascend-FR-LMI-DLCI-1023	1023
 VALUE	Ascend-FR-LinkUp		Ascend-LinkUp-AlwaysUp	1
 VALUE	Ascend-FR-LinkUp		Ascend-LinkUp-Default	0
 VALUE	Ascend-FR-Type		Ascend-FR-DCE	1

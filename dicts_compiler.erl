@@ -17,10 +17,15 @@ compile() ->
     case find_files("priv/dictionaries", "^dictionary.*") of
         [] -> 
             ok;
-        Dictionaries ->
+        Dictionaries0 ->
             {ok, Basedir} = file:get_cwd(),
             IncludeDir = filename:join([Basedir, "include"]),
             ok = filelib:ensure_dir(IncludeDir),
+            % sort dictionaries in alphabetical order to be sure that
+            % basic `priv/dictionaries/dictionary` builds first
+            % because it contains some attributes which may be needed 
+            % for vendor's dictionaries
+            Dictionaries = lists:sort(Dictionaries0),
             Targets = [{Dictionary, out_files(Dictionary)} || Dictionary <- Dictionaries],
             compile_each(Targets)
     end.
