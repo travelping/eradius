@@ -5,6 +5,7 @@ before_install:
     - chmod u+x ./rebar3
 language: erlang
 otp_release:
+    - 18.0
     - 18.3
     - 19.0
 install: "true"
