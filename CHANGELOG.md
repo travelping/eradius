@@ -3,6 +3,16 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.8.1 - 18 Jul 2017
+---------------------------
+* add TP-Trace-Id to Travelping dictionary
+* set minimum OTP version to 18.0 in rebar.config
+* fix dictionary compiler to build basic dictionaries first
+* use crypto:strong_rand_bytes/1 instead of crypto:rand_bytes/1
+* use correct authenticator in attribute encoding
+* fix compile warnings for OTP20
+* simplify the server freeing TX mechanism
+
 Version 0.8.0 - 16 Dec 2016
 ---------------------------
 * add socket receive buffer configuration
