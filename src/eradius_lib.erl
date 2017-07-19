@@ -4,8 +4,6 @@
 -export([timestamp/0, printable_peer/2]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
--compile(export_all).
-
 % -compile(bin_opt_info).
 
 -ifdef(TEST).
@@ -462,9 +460,8 @@ do_scramble(_SharedSecret, _B, << >>, CipherText) ->
 
 -spec generate_salt() -> salt().
 generate_salt() ->
-    Salt1 = crypto:rand_uniform(128, 256),
-    Salt2 = crypto:rand_uniform(0, 256),
-    <<Salt1, Salt2>>.
+    <<Salt1, Salt2>> = crypto:strong_rand_bytes(2), 
+    <<(Salt1 bor 16#80), Salt2>>.
 
 -spec salt_encrypt(salt(), secret(), authenticator(), binary()) -> binary().
 salt_encrypt(Salt, SharedSecret, RequestAuthenticator, PlainText) ->

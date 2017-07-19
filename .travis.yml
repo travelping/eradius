@@ -8,6 +8,7 @@ otp_release:
     - 18.0
     - 18.3
     - 19.0
+    - 20.0
 install: "true"
 env:
     - BUILDTOOL=rebar
