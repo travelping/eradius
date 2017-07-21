@@ -107,7 +107,8 @@ init({ServerName, IP, Port}) ->
     end.
 
 %% @private
-handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State  = #state{name = ServerName, transacts = Transacts, ip = IP, port = Port}) ->
+handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, 
+            State  = #state{name = ServerName, transacts = Transacts, ip = IP, port = Port}) ->
     TS1 = eradius_metrics:timestamp(milli_seconds),
     ServerAddress = {ServerName, {IP, Port}},
     case lookup_nas(State, FromIP, Packet) of
@@ -119,6 +120,7 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State  = #state{
                 [] ->
                     HandlerPid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqKey, Handler, NNasProp, ReqUDP, TS1]),
                     ets:insert(Transacts, {ReqKey, {handling, HandlerPid}}),
+                    ets:insert(Transacts, {HandlerPid, ReqKey}),
                     eradius_metrics:update_nas_request(pending, NasProp#nas_prop.metrics_info, 1);
                 [{_ReqKey, {handling, HandlerPid}}] ->
                     %% handler process is still working on the request
@@ -149,13 +151,8 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, State  = #state{
 handle_info({replied, ReqKey, HandlerPid}, State = #state{transacts = Transacts}) ->
     ets:insert(Transacts, {ReqKey, {replied, HandlerPid}}),
     {noreply, State};
-handle_info({free, ReqKey}, State = #state{transacts = Transacts}) ->
-    ets:delete(Transacts, ReqKey),
-    {noreply, State};
-handle_info({'EXIT', _HandlerPid, normal}, State) ->
-    {noreply, State};
-handle_info({'EXIT', HandlerPid, _OtherReason}, State = #state{transacts = Transacts}) ->
-    ets:match_delete(Transacts, {'_', {'_', HandlerPid}}),
+handle_info({'EXIT', HandlerPid, _Reason}, State = #state{transacts = Transacts}) ->
+    [ets:delete(Transacts, ReqKey) || {_, ReqKey} <- ets:take(Transacts, HandlerPid)],
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -205,24 +202,21 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
             inc_counter(Cmds, NasProp, TS2 - TS1),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             case application:get_env(eradius, resend_timeout, 2000) of
-                0 -> 
-                    ServerPid ! {free, ReqKey};
-                ResendTimeout ->
-                    ServerPid ! {replied, ReqKey, self()},
-                    wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES)
+                ResendTimeout when ResendTimeout > 0, is_integer(ResendTimeout) ->
+                   ServerPid ! {replied, ReqKey, self()},
+                   wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES);
+                _ -> ok
             end;
         {discard, Reason} ->
             lager:debug("~s From: ~s INF: Handler discarded the request ~p for reason ~1000.p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
             TS2 = eradius_metrics:timestamp(milli_seconds),
-            inc_discard_counter(Reason, NasProp, TS2 - TS1),
-            ServerPid ! {free, ReqKey};
+            inc_discard_counter(Reason, NasProp, TS2 - TS1);
         {exit, Reason} ->
             lager:debug("~s From: ~s INF: Handler exited for reason ~p, discarding request ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
             TS2 = eradius_metrics:timestamp(milli_seconds),
-            inc_discard_counter(Reason, NasProp, TS2 - TS1),
-            ServerPid ! {free, ReqKey}
+            inc_discard_counter(Reason, NasProp, TS2 - TS1)
     end,
     eradius_metrics:update_nas_request(pending, NasProp#nas_prop.metrics_info, -1).
 
@@ -230,13 +224,13 @@ wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, R
     erlang:send_after(ResendTimeout, self(), timeout),
     wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries).
 
+wait_resend(_ServerPid, _ReqKey, _FromIP, _FromPort, _EncReply, 0) -> ok;
 wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries) ->
     receive
         {ServerPid, resend, Socket} ->
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries - 1);
-        timeout ->
-            ServerPid ! {free, ReqKey}
+        timeout -> ok
     end.
 
 run_handler([], _NasProp, _Handler, _EncRequest) ->
