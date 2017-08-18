@@ -169,6 +169,8 @@ update_client_request(retransmission, MetricsInfo, Ms) ->
     eradius_metrics:update_client_request(retransmission, MetricsInfo, Ms);
 update_client_request(pending, MetricsInfo, Pending) ->
     eradius_metrics:update_client_request(pending, MetricsInfo, Pending);
+update_client_request(timeout, MetricsInfo, Ms) ->
+    eradius_metrics:update_client_request(timeout, MetricsInfo, Ms);
 update_client_request(_, _, _) ->
     ok.
 
