@@ -1,6 +1,4 @@
 before_install:
-    - wget https://github.com/rebar/rebar/wiki/rebar
-    - chmod u+x ./rebar
     - wget https://s3.amazonaws.com/rebar3/rebar3
     - chmod u+x ./rebar3
 language: erlang
@@ -10,16 +8,5 @@ otp_release:
     - 19.0
     - 20.0
 install: "true"
-env:
-    - BUILDTOOL=rebar
-    - BUILDTOOL=rebar3
 script:
-    - case "$BUILDTOOL" in
-        rebar) ./rebar get-deps compile && ./rebar skip_deps=true eunit ct send-coveralls;;
-        rebar3) ./rebar3 do compile, eunit && ./rebar3 ct;; 
-      esac
-+after_failure:
-    - case "$BUILDTOOL" in
-        rebar) cat logs/raw/log;;
-        rebar3) echo "no raw.log on rebar3";;
-      esac
+    - ./rebar3 do compile, eunit && ./rebar3 ct
