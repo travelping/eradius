@@ -8,6 +8,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-export([encode_value/2, decode_value/2]).
 -endif.
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
@@ -202,8 +203,8 @@ encode_value(ipv6addr, {A,B,C,D,E,F,G,H}) ->
     <<A:16, B:16, C:16, D:16, E:16, F:16, G:16, H:16>>;
 encode_value(ipv6prefix, {{A,B,C,D,E,F,G,H}, PLen}) ->
     L = (PLen + 7) div 8,
-    <<IP:L, _R/binary>> = <<A:16, B:16, C:16, D:16, E:16, F:16, G:16, H:16>>,
-    <<0, PLen, IP>>;
+    <<IP:L/bytes, _R/binary>> = <<A:16, B:16, C:16, D:16, E:16, F:16, G:16, H:16>>,
+    <<0, PLen, IP/binary>>;
 encode_value(string, V) when is_list(V) ->
     unicode:characters_to_binary(V);
 encode_value(octets, V) when is_list(V) ->
@@ -403,7 +404,7 @@ decode_value(<<Bin/binary>>, Type) ->
             {B,C,D,E,F,G,H,I};
         ipv6prefix ->
             <<0,PLen,P/binary>> = Bin,
-            <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16>> = pad_to(128, P),
+            <<B:16,C:16,D:16,E:16,F:16,G:16,H:16,I:16>> = pad_to(16, P),
             {{B,C,D,E,F,G,H,I}, PLen}
     end.
 
