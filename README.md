@@ -8,10 +8,6 @@ several authentication mechanisms and dynamic configuration
 ## Building eradius
 
 ```
-$ rebar get-deps && rebar compile
-```
-
-```
 $ rebar3 compile
 ```
 
