@@ -72,6 +72,7 @@ ATTRIBUTE	TP-Excess-Input-Octets                  60      integer64
 ATTRIBUTE	TP-Excess-Output-Octets                 61      integer64
 ATTRIBUTE	TP-Excess-Total-Octets                  62      integer64
 ATTRIBUTE	TP-Trace-Id				63	string
+ATTRIBUTE	TP-X-NAS-Id				64      string
 
 VALUE		TP-TLS-Auth-Type	Pre-Shared-Key           0
 VALUE		TP-TLS-Auth-Type	X509-Subject-CommonName  1
