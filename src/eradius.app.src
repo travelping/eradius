@@ -1,7 +1,7 @@
 %% vim: ft=erlang
 {application, eradius, [
    {description, "Erlang RADIUS server"},
-   {vsn, "0.8.1"},
+   {vsn, git},
    {registered, [eradius_dict, eradius_sup, eradius_server_top_sup, eradius_server_sup, eradius_server_mon]},
    {applications, [kernel, stdlib, crypto, lager, exometer_core]},
    {mod, {eradius, []}},
@@ -104,5 +104,15 @@
       %%   * server - enables server metrics (server uptime and etc..)
       %%   * client - enables client metrics (count of access requests and etc...)
       %%
-   ]}
+   ]},
+   {maintainers, ["Andreas Schultz", "Vladimir Tarasenko", "Yury Gargay"]},
+   {licenses, ["MIT"]},
+   {links, [{"Github", "https://github.com/travelping/eradius"}]},
+   %% List copied from rebar3_hex.hrl ?DEFAULT_FILES, adding "Makefile"
+   {files, ["src", "c_src", "include/eradius_*.hrl", "rebar.config.script"
+            ,"priv/dictionaries", "rebar.config", "rebar.lock"
+            ,"README*", "readme*"
+            ,"LICENSE*", "license*"
+            ,"NOTICE"
+            ,"dicts_compiler.erl"]}
 ]}.
