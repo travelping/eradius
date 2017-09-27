@@ -343,18 +343,18 @@ ok_error_helper({error, _Error}, ErrorMsg) when is_list(ErrorMsg) -> ErrorMsg;
 ok_error_helper({ok, Value}, _ErrorMessage) -> Value;
 ok_error_helper(Value, _ErrorMessage) -> Value.
 
-generate_ip_list(IP, Mask) when is_list(Mask) -> 
+generate_ip_list(IP, Mask) when is_list(Mask) ->
     generate_ip_list(IP, catch list_to_integer(Mask));
-generate_ip_list({A, B, C, D}, Mask) when Mask >=0, Mask =< 32 -> 
+generate_ip_list({A, B, C, D}, Mask) when Mask >=0, Mask =< 32 ->
     <<Address:32/integer>> = <<A, B, C, D>>,
     Wildcard = 16#ffffffff bsr Mask,
     <<Netmask:32/unsigned-integer>> = << (bnot Wildcard):32 >>,
     generate_ip(Address band Netmask, Address bor Wildcard);
 generate_ip_list(_, Mask) -> ?invalid("invalid mask ~p", [Mask]).
 
-generate_ip(E, E) -> 
+generate_ip(E, E) ->
     <<A:8, B:8, C:8, D:8>> = <<E:32/integer>>,
     [{A, B, C, D}];
-generate_ip(S, E) -> 
+generate_ip(S, E) ->
     <<A:8, B:8, C:8, D:8>> = <<S:32/integer>>,
     [{A, B, C, D} | generate_ip(S+1, E)].

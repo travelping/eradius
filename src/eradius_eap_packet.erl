@@ -61,7 +61,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 decode(<<Code:8, Id:8, Len:16, Rest/binary>>) ->
     DataLen = Len - 4,
     case Rest of
-	<<Data:DataLen/bytes, _/binary>> -> 
+	<<Data:DataLen/bytes, _/binary>> ->
 	    do_decode_payload(code(Code), Id, Data);
 	_ ->
 	    {error, invalid_length}

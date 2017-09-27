@@ -107,7 +107,7 @@ init({ServerName, IP, Port}) ->
     end.
 
 %% @private
-handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet}, 
+handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet},
             State  = #state{name = ServerName, transacts = Transacts, ip = IP, port = Port}) ->
     TS1 = eradius_metrics:timestamp(milli_seconds),
     ServerAddress = {ServerName, {IP, Port}},
@@ -322,7 +322,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             eradius_log:write_request(Sender, Reply),
             {reply, EncReply,{Request#radius_request.cmd, ReplyCmd}};
         noreply ->
-            lager:error("~s INF: Noreply for request ~p from handler ~p: returned value: ~p", 
+            lager:error("~s INF: Noreply for request ~p from handler ~p: returned value: ~p",
                         [printable_peer(ServerIP, Port), Request, HandlerArg, noreply]),
             {discard, handler_returned_noreply};
         {error, timeout} ->
