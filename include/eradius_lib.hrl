@@ -109,3 +109,11 @@
     msg_hmac = false :: boolean(),
     eap_msg = <<>>   :: binary()
 }).
+
+
+-record(decoder_state, {
+	  request_authenticator :: 'undefined' | binary(),
+	  attrs = []       :: eradius_lib:attribute_list(),
+	  hmac_pos         :: 'undefined' | non_neg_integer(),
+	  eap_msg = []     :: [binary()]
+}).

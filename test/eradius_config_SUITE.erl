@@ -1,28 +1,29 @@
-%    __                        __      _
-%   / /__________ __   _____  / /___  (_)___  ____ _
-%  / __/ ___/ __ `/ | / / _ \/ / __ \/ / __ \/ __ `/
-% / /_/ /  / /_/ /| |/ /  __/ / /_/ / / / / / /_/ /
-% \__/_/   \__,_/ |___/\___/_/ .___/_/_/ /_/\__, /
-%                           /_/            /____/
-%
-% Copyright (c) Travelping GmbH <info@travelping.com>
+% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
+
+% Permission is hereby granted, free of charge, to any person obtaining a
+% copy of this software and associated documentation files (the "Software"),
+% to deal in the Software without restriction, including without limitation
+% the rights to use, copy, modify, merge, publish, distribute, sublicense,
+% and/or sell copies of the Software, and to permit persons to whom the
+% Software is furnished to do so, subject to the following conditions:
+
+% The above copyright notice and this permission notice shall be included in
+% all copies or substantial portions of the Software.
+
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+% DEALINGS IN THE SOFTWARE.
 
 -module(eradius_config_SUITE).
 -compile(export_all).
 -include("../include/eradius_lib.hrl").
+-include("eradius_test.hrl").
 
--define(match(Guard, Expr),
-        ((fun () ->
-                  case (Expr) of
-                      Guard ->
-                          ok;
-                      V ->
-                          ct:pal("MISMATCH(~s:~b, ~s)~nExpected: ~p~nActual:   ~p~n", [?FILE, ?LINE, ??Expr, ??Guard, V]),
-                          error(badmatch)
-                  end
-          end)())).
-
-all() -> [config_1, config_2, config_nas_removing, config_with_ranges, log_test].
+all() -> [config_1, config_2, config_nas_removing, config_with_ranges, log_test, generate_ip_list_test].
 
 init_per_suite(Config) ->
     % Is it a good practise? Copied fron client test
@@ -215,3 +216,12 @@ set_env(Config) ->
 apply_conf(Config) ->
     set_env(Config),
     eradius_server_mon:reconfigure().
+
+generate_ip_list_test(_) ->
+    ?equal([{192, 168, 11, 148}, {192, 168, 11, 149}, {192, 168, 11, 150}, {192, 168, 11, 151}],
+                 eradius_config:generate_ip_list({192, 168, 11, 150}, "30")),
+    eradius_config:generate_ip_list({192, 168, 11, 150}, 24),
+    ?equal(256, length(eradius_config:generate_ip_list({192, 168, 11, 150}, 24))),
+    ?equal(2048, length(eradius_config:generate_ip_list({192, 168, 11, 10}, 21))),
+    ?match({invalid, _}, eradius_config:generate_ip_list({192, 168, 11, 150}, "34")),
+    ok.

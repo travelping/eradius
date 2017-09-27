@@ -1,3 +1,2 @@
-{incl_app, eradius, details}.  
-{import, ".eunit/cover.coverdata"}.
+{incl_app, eradius, details}.
 {export, "logs/all.coverdata"}.

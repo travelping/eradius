@@ -3,12 +3,18 @@
 -behaviour(eradius_server).
 -export([radius_request/3, validate_arguments/1]).
 
+-ifdef(TEST).
+-export([resolve_routes/4, validate_options/1, new_request/3,
+         get_key/4, strip/4]).
+-endif.
+
 -include("eradius_lib.hrl").
 -include("dictionary.hrl").
 
 -define(DEFAULT_TYPE, realm).
 -define(DEFAULT_STRIP, false).
 -define(DEFAULT_SEPARATOR, "@").
+
 -define(DEFAULT_OPTIONS, [{type, ?DEFAULT_TYPE},
                           {strip, ?DEFAULT_STRIP},
                           {separator, ?DEFAULT_SEPARATOR}]).
@@ -158,89 +164,3 @@ strip(Username, prefix, true, Separator) ->
 %	    exometer:update_or_create(MetricName, 1, spiral, [{time_span, 1000}])
 %    end.
 
-%% ------------------------------------------------------------------------------------------
-%% -- EUnit Tests
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-resolve_routes_test() ->
-    DefaultRoute = {{127, 0, 0, 1}, 1813, <<"secret">>},
-    Prod = {{127, 0, 0, 1}, 1812, <<"prod">>},
-    Test = {{127, 0, 0, 1}, 11813, <<"test">>},
-    Routes = [{"prod", Prod}, {"test", Test}],
-    % default
-    ?assertEqual({undefined, DefaultRoute}, resolve_routes(undefined, DefaultRoute, Routes,[])),
-    ?assertEqual({"user", DefaultRoute}, resolve_routes(<<"user">>, DefaultRoute, Routes, [])),
-    ?assertEqual({"user@prod", Prod}, resolve_routes(<<"user@prod">>, DefaultRoute, Routes,[])),
-    ?assertEqual({"user@test", Test}, resolve_routes(<<"user@test">>, DefaultRoute, Routes,[])),
-    % strip
-    Opts = [{strip, true}],
-    ?assertEqual({"user", DefaultRoute}, resolve_routes(<<"user">>, DefaultRoute, Routes, Opts)),
-    ?assertEqual({"user", Prod}, resolve_routes(<<"user@prod">>, DefaultRoute, Routes, Opts)),
-    ?assertEqual({"user", Test}, resolve_routes(<<"user@test">>, DefaultRoute, Routes, Opts)),
-    % prefix
-    Opts1 = [{type, prefix}, {separator, "/"}],
-    ?assertEqual({"user/example", DefaultRoute}, resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts1)),
-    ?assertEqual({"test/user", Test}, resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts1)),
-    % prefix and strip
-    Opts2 = Opts ++ Opts1,
-    ?assertEqual({"example", DefaultRoute}, resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts2)),
-    ?assertEqual({"user", Test}, resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts2)),
-    ok.
-
-validate_arguments_test() ->
-    GoodConfig = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
-                  {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-                  {routes, [{"test", {{127, 0, 0, 1}, 1815, <<"secret1">>}}
-                           ]}
-                 ],
-    BadConfig = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
-                 {options, [{type, abc}]}
-                 ],
-    BadConfig1 = [{default_route, {{127, 0, 0, 1}, 0, <<"secret">>}}],
-    BadConfig2 = [{default_route, {abc, 123, <<"secret">>}}],
-    ?assertEqual(true, validate_arguments(GoodConfig)),
-    ?assertEqual(default_route, validate_arguments([])),
-    ?assertEqual(options, validate_arguments(BadConfig)),
-    ?assertEqual(default_route, validate_arguments(BadConfig1)),
-    ?assertEqual(default_route, validate_arguments(BadConfig2)),
-    ok.
-
-validate_options_test() ->
-    ?assertEqual(true, validate_options(?DEFAULT_OPTIONS)),
-    ?assertEqual(true, validate_options([{type, prefix}, {separator, "/"}, {strip, true}])),
-    ?assertEqual(false, validate_options([{type, unknow}])),
-    ?assertEqual(false, validate_options([strip, abc])),
-    ?assertEqual(false, validate_options([abc, abc])),
-    ok.
-
-new_request_test() ->
-    Req0 = #radius_request{},
-    Req1 = eradius_lib:set_attr(Req0, ?User_Name, "user1"),
-    ?assertEqual(Req0, new_request(Req0, "user", "user")),
-    ?assertEqual(Req1, new_request(Req0, "user", "user1")),
-    ?assertEqual(Req0, new_request(Req0, undefined, undefined)),
-    ok.
-
-get_key_test() ->
-    ?assertEqual({"example", "user@example"}, get_key("user@example", realm, false, "@")),
-    ?assertEqual({"user", "user/domain@example"}, get_key("user/domain@example", prefix, false, "/")),
-    ?assertEqual({"example", "user"}, get_key("user@example", realm, true, "@")),
-    ?assertEqual({"example", "user@domain"}, get_key("user@domain@example", realm, true, "@")),
-    ?assertEqual({"user", "domain@example"}, get_key("user/domain@example", prefix, true, "/")),
-    ?assertEqual({"user", "domain/domain2@example"}, get_key("user/domain/domain2@example", prefix, true, "/")),
-    ?assertEqual({not_found, []}, get_key([], ?DEFAULT_TYPE, ?DEFAULT_STRIP, ?DEFAULT_SEPARATOR)),
-    ok.
-
-
-strip_test() ->
-    ?assertEqual("user", strip("user", realm, false, "@")),
-    ?assertEqual("user", strip("user", prefix, false, "@")),
-    ?assertEqual("user", strip("user", realm, true, "@")),
-    ?assertEqual("user", strip("user", prefix, true, "@")),
-    ?assertEqual("user", strip("user@example", realm, true, "@")),
-    ?assertEqual("user2@example", strip("user/user2@example", prefix, true, "/")),
-    ?assertEqual("user/user2", strip("user/user2@example", realm, true, "@")),
-    ok.
-
--endif.
