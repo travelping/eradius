@@ -51,7 +51,7 @@ send_request(NAS, Request) ->
 
 % @doc Send a radius request to the given NAS.
 %   If no answer is received within the specified timeout, the request will be sent again.
--spec send_request(nas_address(), #radius_request{}, options()) -> 
+-spec send_request(nas_address(), #radius_request{}, options()) ->
     {ok, binary(), eradius_lib:authenticator()} | {error, 'timeout' | 'socket_down'}.
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
     TS1 = eradius_metrics:timestamp(milli_seconds),

@@ -97,7 +97,7 @@ handle_cast({write_request, Time, Sender, Request}, State) ->
         {noreply, State}
     catch
         _:Error ->
-            lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p, " 
+            lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p, "
                         "logging will be disabled", [Error, Request, Sender]),
             {noreply, logger_disabled}
     end.

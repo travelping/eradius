@@ -271,9 +271,9 @@ validate_packet_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
     case Body of
         <<Before:Pos/bytes, Value:16/bytes, After/binary>> ->
             case crypto:hmac(md5, Secret, [<<Cmd:8, ReqId:8, Len:16>>, Auth, Before, zero_authenticator(), After]) of
-            Value -> 
+            Value ->
                 ok;
-            _     -> 
+            _     ->
                 throw({bad_pdu, "Message-Authenticator Attribute is invalid"})
             end;
         _ ->
@@ -283,7 +283,7 @@ validate_packet_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
 validate_authenticator(accreq, Head, _RequestAuthenticator, PacketAuthenticator, Body, Secret) ->
     compare_authenticator(crypto:hash(md5, [Head, zero_authenticator(), Body, Secret]), PacketAuthenticator);
 validate_authenticator(Cmd, Head, RequestAuthenticator, PacketAuthenticator, Body, Secret)
-    when 
+    when
         (Cmd =:= accept)  orelse
         (Cmd =:= reject)  orelse
         (Cmd =:= accresp) orelse
@@ -294,10 +294,10 @@ validate_authenticator(Cmd, Head, RequestAuthenticator, PacketAuthenticator, Bod
         (Cmd =:= challenge) ->
     compare_authenticator(crypto:hash(md5, [Head, RequestAuthenticator, Body, Secret]), PacketAuthenticator);
 validate_authenticator(_Cmd, _Head, _RequestAuthenticator, _PacketAuthenticator,
-                       _Body, _Secret) -> 
+                       _Body, _Secret) ->
     true.
 
-compare_authenticator(Authenticator, Authenticator) -> 
+compare_authenticator(Authenticator, Authenticator) ->
     true;
 compare_authenticator(_RequestAuthenticator, _PacketAuthenticator) ->
     throw({bad_pdu, "Authenticator Attribute is invalid"}).
@@ -455,7 +455,7 @@ do_scramble(_SharedSecret, _B, << >>, CipherText) ->
 
 -spec generate_salt() -> salt().
 generate_salt() ->
-    <<Salt1, Salt2>> = crypto:strong_rand_bytes(2), 
+    <<Salt1, Salt2>> = crypto:strong_rand_bytes(2),
     <<(Salt1 bor 16#80), Salt2>>.
 
 -spec salt_encrypt(salt(), secret(), authenticator(), binary()) -> binary().
@@ -505,7 +505,7 @@ timestamp() ->
         erlang:timestamp()
     catch
         error:undef ->
-            % call erlang:now() via erlang:apply/3 
+            % call erlang:now() via erlang:apply/3
             % for getting rid annoying compile warning on OTP >= 18
             erlang:apply(erlang, now, [])
     end.

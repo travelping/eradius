@@ -92,8 +92,8 @@ validate_option(_, _) -> false.
 
 
 % @private
--spec new_request(Request :: #radius_request{}, 
-                  Username :: undefined | binary(), 
+-spec new_request(Request :: #radius_request{},
+                  Username :: undefined | binary(),
                   NewUsername :: string()) ->
     NewRequest :: #radius_request{}.
 new_request(Request, Username, Username) -> Request;
@@ -102,7 +102,7 @@ new_request(Request, _Username, NewUsername) ->
                          ?User_Name, NewUsername).
 
 % @private
--spec resolve_routes(Username :: undefined | binary(), DefaultRoute :: route(), 
+-spec resolve_routes(Username :: undefined | binary(), DefaultRoute :: route(),
                      Routes :: routes(), Options :: [proplists:property()]) ->
                      {NewUsername :: string(), Route :: route()}.
 resolve_routes( undefined, {_, _, _DefaultSecret} = DefaultRoute, _Routes, _Options) ->
