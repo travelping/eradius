@@ -7,8 +7,8 @@
 % -compile(bin_opt_info).
 
 -ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--export([encode_value/2, decode_value/2]).
+-export([encode_value/2, decode_value/2, scramble/3]).
+-export([salt_encrypt/4, salt_decrypt/3, encode_attribute/3, decode_attribute/5]).
 -endif.
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
@@ -220,13 +220,6 @@ encode_value(date, Date = {{_,_,_},{_,_,_}}) ->
 %% ------------------------------------------------------------------------------------------
 %% -- Wire Decoding
 
--record(decoder_state, {
-	  request_authenticator :: 'undefined' | binary(),
-	  attrs = []       :: eradius_lib:attribute_list(),
-	  hmac_pos         :: 'undefined' | non_neg_integer(),
-	  eap_msg = []     :: [binary()]
-}).
-
 -spec decode_request_id(binary()) -> {0..255, binary()} | {bad_pdu, list()}.
 decode_request_id(Req = <<_Cmd:8, ReqId:8, _Rest/binary>>) -> {ReqId, Req};
 decode_request_id(_Req) -> {bad_pdu, "invalid request id"}.
@@ -300,7 +293,8 @@ validate_authenticator(Cmd, Head, RequestAuthenticator, PacketAuthenticator, Bod
         (Cmd =:= discnak) orelse
         (Cmd =:= challenge) ->
     compare_authenticator(crypto:hash(md5, [Head, RequestAuthenticator, Body, Secret]), PacketAuthenticator);
-validate_authenticator(_Cmd, _Head, _RequestAuthenticator, _PacketAuthenticator, _Body, _Secret) -> 
+validate_authenticator(_Cmd, _Head, _RequestAuthenticator, _PacketAuthenticator,
+                       _Body, _Secret) -> 
     true.
 
 compare_authenticator(Authenticator, Authenticator) -> 
@@ -519,100 +513,3 @@ timestamp() ->
 -spec printable_peer(inet:ip4_address(),eradius_server:port_number()) -> io_lib:chars().
 printable_peer({IA,IB,IC,ID}, Port) ->
     io_lib:format("~b.~b.~b.~b:~b",[IA,IB,IC,ID,Port]).
-
--ifdef(TEST).
-
-%%
-%% EUnit Tests
-%%
--define(SALT, <<171,213>>).
--define(REQUEST_AUTHENTICATOR, << 1, 2, 3, 4, 5, 6, 7, 8 >>).
--define(USER, "test").
--define(SECRET, <<"secret">>).
--define(PLAIN_TEXT, "secret").
--define(PLAIN_TEXT_PADDED, <<"secret",0,0,0,0,0,0,0,0,0,0>>).
--define(CIPHER_TEXT, <<171,213,166,95,152,126,124,120,86,10,78,216,190,216,26,87,55,15>>).
--define(ENC_PASSWORD, 186,128,194,207,68,25,190,19,23,226,48,206,244,143,56,238).
--define(PDU, #radius_request{ reqid = 1, secret = ?SECRET, authenticator = ?REQUEST_AUTHENTICATOR }).
-
-selt_encrypt_test() ->
-    ?CIPHER_TEXT = salt_encrypt(?SALT, ?SECRET, ?REQUEST_AUTHENTICATOR, << ?PLAIN_TEXT >>).
-
-salt_decrypt_test() ->
-    << ?PLAIN_TEXT >> = salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, ?CIPHER_TEXT).
-
-scramble_enc_test() ->
-    << ?ENC_PASSWORD >> = scramble(?SECRET, ?REQUEST_AUTHENTICATOR, << ?PLAIN_TEXT >>).
-
-scramble_dec_test() ->
-    ?PLAIN_TEXT_PADDED = scramble(?SECRET, ?REQUEST_AUTHENTICATOR, << ?ENC_PASSWORD >>).
-
-enc_simple_test() ->
-    L = length(?USER) + 2,
-    << ?RUser_Name, L:8, ?USER >> = encode_attribute(?PDU, #attribute{id = ?RUser_Name, type = string, enc = no}, << ?USER >>).
-
-enc_scramble_test() ->
-    L = 16 + 2,
-    << ?RUser_Passwd, L:8, ?ENC_PASSWORD >> = encode_attribute(?PDU, #attribute{id = ?RUser_Passwd, type = string, enc = scramble}, << ?PLAIN_TEXT >>).
-
-enc_salt_test() ->
-    L = 16 + 4,
-    << ?RUser_Passwd, L:8, Enc/binary >> = encode_attribute(?PDU, #attribute{id = ?RUser_Passwd, type = string, enc = salt_crypt}, << ?PLAIN_TEXT >>),
-    %% need to decrypt to verfiy due to salt
-    << ?PLAIN_TEXT >> = salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, Enc).
-
-enc_vendor_test() ->
-    L = length(?USER),
-    E = << ?RVendor_Specific, (L+8):8, 18681:32, 1:8, (L+2):8, ?USER >>,
-    E = encode_attribute(?PDU, #attribute{id = {18681,1}, type = string, enc = no}, << ?USER >>).
-
-enc_vendor_octet_test() ->
-    E = << ?RVendor_Specific, (4+8):8, 311:32, 7:8, (4+2):8, 7:32 >>,
-    E = encode_attribute(?PDU, #attribute{id = {311,7}, type = octets, enc = no}, 7).
-
-decode_attribute(A, B, C) -> decode_attribute(A, B, C, 0, #decoder_state{}).
-
-dec_simple_integer_test() ->
-    State = decode_attribute(<<0,0,0,1>>, ?PDU, #attribute{id = 40, type = integer, enc = no}),
-    [{_, 1}] = State#decoder_state.attrs.
-
-dec_simple_string_test() ->
-    State = decode_attribute(<<"29113">>, ?PDU, #attribute{id = 44, type = string, enc = no}),
-    [{_, <<"29113">>}] = State#decoder_state.attrs.
-
-dec_simple_ipv4_test() ->
-    State = decode_attribute(<<10,33,0,1>>, ?PDU, #attribute{id = 4, type = ipaddr, enc = no}),
-    [{_, {10,33,0,1}}] = State#decoder_state.attrs.
-
-dec_vendor_test_() ->
-    {setup,
-        fun() ->
-            application:set_env(eradius, tables, [dictionary]),
-            eradius_dict:start_link(),
-            ok
-        end,
-        fun(_) ->
-            ok
-        end,
-        [
-            {"dec_vendor_ipv4_t", fun dec_vendor_integer_t/0},
-            {"dec_vendor_string_t", fun dec_vendor_string_t/0},
-            {"dec_vendor_ipv4_t", fun dec_vendor_ipv4_t/0}
-        ]
-    }.
-
-dec_vendor_integer_t() ->
-    State = decode_attribute(<<0,0,40,175,3,6,0,0,0,0>>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}),
-    [{_, <<0, 0, 0, 0>>}] = State#decoder_state.attrs.
-
-dec_vendor_string_t() ->
-    State = decode_attribute(<<0,0,40,175,8,7,"23415">>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}),
-    [{_, <<"23415">>}] = State#decoder_state.attrs.
-
-dec_vendor_ipv4_t() ->
-    State = decode_attribute(<<0,0,40,175,6,6,212,183,144,246>>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}),
-    [{_, <<212,183,144,246>>}] = State#decoder_state.attrs.
-
-%% TODO: add more tests
-
--endif.

@@ -9,4 +9,4 @@ otp_release:
     - 20.0
 install: "true"
 script:
-    - ./rebar3 do compile, eunit && ./rebar3 ct
+    - ./rebar3 do compile && ./rebar3 do ct && ./rebar3  coveralls send

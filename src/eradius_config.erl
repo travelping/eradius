@@ -358,20 +358,3 @@ generate_ip(E, E) ->
 generate_ip(S, E) -> 
     <<A:8, B:8, C:8, D:8>> = <<S:32/integer>>,
     [{A, B, C, D} | generate_ip(S+1, E)].
-
-
-%% ------------------------------------------------------------------------------------------
-%% -- EUnit Tests
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-generate_ip_list_test() ->
-    ?assertEqual([{192, 168, 11, 148}, {192, 168, 11, 149}, {192, 168, 11, 150}, {192, 168, 11, 151}],
-                 generate_ip_list({192, 168, 11, 150}, "30")),
-    generate_ip_list({192, 168, 11, 150}, 24),
-    ?assertEqual(256, length(generate_ip_list({192, 168, 11, 150}, 24))),
-    ?assertEqual(2048, length(generate_ip_list({192, 168, 11, 10}, 21))),
-    ?assertMatch({invalid, _}, generate_ip_list({192, 168, 11, 150}, "34")),
-    ok.
-
--endif.
