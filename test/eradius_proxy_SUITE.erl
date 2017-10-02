@@ -37,7 +37,11 @@ resolve_routes_test(_) ->
     DefaultRoute = {{127, 0, 0, 1}, 1813, <<"secret">>},
     Prod = {{127, 0, 0, 1}, 1812, <<"prod">>},
     Test = {{127, 0, 0, 1}, 11813, <<"test">>},
-    Routes = [{"prod", Prod}, {"test", Test}],
+    Dev = {{127, 0, 0, 1}, 11814, <<"dev">>},
+    {ok, R1} = re:compile("prod"),
+    {ok, R2} = re:compile("test"),
+    {ok, R3} = re:compile("^dev_.*"),
+    Routes = [{R1, Prod}, {R2, Test}, {R3, Dev}],
     % default
     ?equal({undefined, DefaultRoute}, eradius_proxy:resolve_routes(undefined, DefaultRoute, Routes,[])),
     ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user">>, DefaultRoute, Routes, [])),
@@ -48,6 +52,9 @@ resolve_routes_test(_) ->
     ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user">>, DefaultRoute, Routes, Opts)),
     ?equal({"user", Prod}, eradius_proxy:resolve_routes(<<"user@prod">>, DefaultRoute, Routes, Opts)),
     ?equal({"user", Test}, eradius_proxy:resolve_routes(<<"user@test">>, DefaultRoute, Routes, Opts)),
+    ?equal({"user", Dev}, eradius_proxy:resolve_routes(<<"user@dev_server">>, DefaultRoute, Routes, Opts)),
+    ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user@dev-server">>, DefaultRoute, Routes, Opts)),
+
     % prefix
     Opts1 = [{type, prefix}, {separator, "/"}],
     ?equal({"user/example", DefaultRoute}, eradius_proxy:resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts1)),
@@ -69,11 +76,19 @@ validate_arguments_test(_) ->
                  ],
     BadConfig1 = [{default_route, {{127, 0, 0, 1}, 0, <<"secret">>}}],
     BadConfig2 = [{default_route, {abc, 123, <<"secret">>}}],
-    ?equal(true, eradius_proxy:validate_arguments(GoodConfig)),
+    BadConfig3 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+                  {options, [{type, realm}, {strip, true}, {separator, "@"}]},
+                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}}]}],
+    {Result, ConfigData} = eradius_proxy:validate_arguments(GoodConfig),
+    ?equal(true, Result),
+    {routes, Routes} = lists:keyfind(routes, 1, ConfigData),
+    [{{CompiledRegexp, _, _, _, _}, _}] = Routes,
+    ?equal(re_pattern, CompiledRegexp),
     ?equal(default_route, eradius_proxy:validate_arguments([])),
     ?equal(options, eradius_proxy:validate_arguments(BadConfig)),
     ?equal(default_route, eradius_proxy:validate_arguments(BadConfig1)),
     ?equal(default_route, eradius_proxy:validate_arguments(BadConfig2)),
+    ?equal(routes, eradius_proxy:validate_arguments(BadConfig3)),
     ok.
 
 validate_options_test(_) ->
