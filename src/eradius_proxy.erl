@@ -1,3 +1,18 @@
+%% @doc
+%%   This module implements a RADIUS proxy.
+%%
+%%   It accepts following configuration:
+%%
+%%   ```
+%%   [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+%%    {options, [{type, realm}, {strip, true}, {separator, "@"}]},
+%%    {routes,  [{"^test-[0-9].", {{127, 0, 0, 1}, 1815, <<"secret1">>}}]}],
+%%   ```
+%%
+%%   == WARNING ==
+%%
+%%   Define `routes` carefully. The `test` here in example above, is
+%%   a regular expression that may cause to problemts with performance.
 -module(eradius_proxy).
 
 -behaviour(eradius_server).
@@ -31,12 +46,34 @@ radius_request(Request, _NasProp, Args) ->
     send_to_server(new_request(Request, Username, NewUsername), Route).
 
 validate_arguments(Args) ->
-    Route = proplists:get_value(default_route, Args, {undefined, 0, []}),
+    DefaultRoute = proplists:get_value(default_route, Args, {undefined, 0, []}),
     Options = proplists:get_value(options, Args, ?DEFAULT_OPTIONS),
-    case {validate_route(Route), validate_options(Options)} of
-        {false, _} -> default_route;
-        {_, false} -> options;
-        _ -> true
+    Routes = proplists:get_value(routes, Args, []),
+    case {validate_route(DefaultRoute), validate_options(Options), compile_routes(Routes)} of
+        {false, _, _} -> default_route;
+        {_, false, _} -> options;
+        {_, _, false} -> routes;
+        {_, _, NewRoutes} ->
+            {true, [{default_route, DefaultRoute}, {options, Options}, {routes, NewRoutes}]}
+    end.
+
+compile_routes(Routes) ->
+    RoutesOpts = lists:map(fun ({Name, Relay}) ->
+        case re:compile(Name) of
+            {ok, R} ->
+                case validate_route(Relay) of
+                    false -> false;
+                    _ -> {R, Relay}
+                end;
+            {error, {Error, Position}} ->
+                throw("Error during regexp compilation - " ++ Error ++ " at position " ++ integer_to_list(Position))
+        end
+    end, Routes),
+    RelaysRegexps = lists:any(fun(Route) -> Route == false end, RoutesOpts),
+    if RelaysRegexps == false ->
+            RoutesOpts;
+       true ->
+            false
     end.
 
 % @private
@@ -115,11 +152,18 @@ resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) 
         {not_found, NewUsername} ->
             {NewUsername, DefaultRoute};
         {Key, NewUsername} ->
-            case lists:keyfind(Key, 1, Routes) of
+            case find_suitable_relay(Key, Routes) of
                 {Key, {_IP, _Port, _Secret} = Route} -> {NewUsername, Route};
                 {Key, {IP, Port}} -> {NewUsername, {IP, Port, DefaultSecret}};
                 _ -> {NewUsername, DefaultRoute}
             end
+    end.
+
+find_suitable_relay(_Key, []) -> [];
+find_suitable_relay(Key, [{Regexp, Relay} | Routes]) ->
+    case re:run(Key, Regexp, [{capture, none}]) of
+        nomatch -> find_suitable_relay(Key, Routes);
+        _ -> {Key, Relay}
     end.
 
 % @private

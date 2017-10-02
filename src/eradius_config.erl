@@ -71,9 +71,10 @@ validate_behavior({Module, _, _}) ->
 validate_behavior(Term) ->
     ?invalid("bad Term in Behavior specifification: ~p", [Term]).
 
-validate_arguments({Module, _Nas, Args} = Value) ->
+validate_arguments({Module, Nas, Args} = Value) ->
     case Module:validate_arguments(Args) of
         true -> Value;
+        {true, NewArgs} -> {Module, Nas, NewArgs};
         false -> ?invalid("~p: bad configuration", [Module]);
         Error -> ?invalid("~p: bad configuration: ~p", [Module, Error])
     end.
