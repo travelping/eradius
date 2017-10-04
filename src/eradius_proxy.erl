@@ -36,6 +36,7 @@
 
 -type route() :: eradius_client:nas_address().
 -type routes() :: [{Name :: string(), route()}].
+-type undefined_route() :: {undefined, 0, []}.
 
 radius_request(Request, _NasProp, Args) ->
     DefaultRoute = proplists:get_value(default_route, Args),
@@ -77,8 +78,10 @@ compile_routes(Routes) ->
     end.
 
 % @private
--spec send_to_server(Request :: #radius_request{}, Route :: route()) ->
+-spec send_to_server(Request :: #radius_request{}, Route :: undefined_route() | route()) ->
     {reply, Reply :: #radius_request{}} | term().
+send_to_server(_Request, {undefined, 0, []}) ->
+    {error, no_route};
 send_to_server(#radius_request{reqid = ReqID} = Request, {Server, Port, Secret}) ->
     case eradius_client:send_request({Server, Port, Secret}, Request, [{retries, 1}]) of
         {ok, Result, Auth} -> decode_request(Result, ReqID, Secret, Auth);
@@ -139,12 +142,13 @@ new_request(Request, _Username, NewUsername) ->
                          ?User_Name, NewUsername).
 
 % @private
--spec resolve_routes(Username :: undefined | binary(), DefaultRoute :: route(),
+-spec resolve_routes(Username :: undefined | binary(),
+                     DefaultRoute :: undefined_route() | route(),
                      Routes :: routes(), Options :: [proplists:property()]) ->
                      {NewUsername :: string(), Route :: route()}.
-resolve_routes( undefined, {_, _, _DefaultSecret} = DefaultRoute, _Routes, _Options) ->
+resolve_routes( undefined, DefaultRoute, _Routes, _Options) ->
     {undefined, DefaultRoute};
-resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) ->
+resolve_routes(Username, DefaultRoute, Routes, Options) ->
     Type = proplists:get_value(type, Options, ?DEFAULT_TYPE),
     Strip = proplists:get_value(strip, Options, ?DEFAULT_STRIP),
     Separator = proplists:get_value(separator, Options, ?DEFAULT_SEPARATOR),
@@ -154,7 +158,6 @@ resolve_routes(Username, {_, _, DefaultSecret} = DefaultRoute, Routes, Options) 
         {Key, NewUsername} ->
             case find_suitable_relay(Key, Routes) of
                 {Key, {_IP, _Port, _Secret} = Route} -> {NewUsername, Route};
-                {Key, {IP, Port}} -> {NewUsername, {IP, Port, DefaultSecret}};
                 _ -> {NewUsername, DefaultRoute}
             end
     end.
