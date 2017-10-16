@@ -29,10 +29,14 @@
 -define(DEFAULT_TYPE, realm).
 -define(DEFAULT_STRIP, false).
 -define(DEFAULT_SEPARATOR, "@").
+-define(DEFAULT_TIMEOUT, 5000).
+-define(DEFAULT_RETRIES, 1).
 
 -define(DEFAULT_OPTIONS, [{type, ?DEFAULT_TYPE},
                           {strip, ?DEFAULT_STRIP},
-                          {separator, ?DEFAULT_SEPARATOR}]).
+                          {separator, ?DEFAULT_SEPARATOR},
+                          {timeout, ?DEFAULT_TIMEOUT},
+                          {retries, ?DEFAULT_RETRIES}]).
 
 -type route() :: eradius_client:nas_address().
 -type routes() :: [{Name :: string(), route()}].
@@ -80,10 +84,21 @@ compile_routes(Routes) ->
 % @private
 -spec send_to_server(Request :: #radius_request{}, Route :: undefined_route() | route()) ->
     {reply, Reply :: #radius_request{}} | term().
-send_to_server(_Request, {undefined, 0, []}) ->
+send_to_server(Request, Route) ->
+    send_to_server(Request, Route, []).
+
+% @private
+-spec send_to_server(Request :: #radius_request{}, 
+                     Route :: undefined_route() | route(), 
+                     Options :: eradius_client:options()) ->
+    {reply, Reply :: #radius_request{}} | term().
+send_to_server(_Request, {undefined, 0, []}, _) ->
     {error, no_route};
-send_to_server(#radius_request{reqid = ReqID} = Request, {Server, Port, Secret}) ->
-    case eradius_client:send_request({Server, Port, Secret}, Request, [{retries, 1}]) of
+send_to_server(#radius_request{reqid = ReqID} = Request, {Server, Port, Secret}, Options) ->
+    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
+    Options = [{retries, Retries}, {timeout, Timeout}],
+    case eradius_client:send_request({Server, Port, Secret}, Request, Options) of
         {ok, Result, Auth} -> decode_request(Result, ReqID, Secret, Auth);
         Error ->
             lager:error("~p: error during send_request (~p)", [?MODULE, Error]),
@@ -128,6 +143,8 @@ validate_option(type, _Value) -> false;
 validate_option(strip, Value) when is_boolean(Value) -> true;
 validate_option(strip, _Value) -> false;
 validate_option(separator, Value) when is_list(Value) -> true;
+validate_option(timeout, Value) when is_integer(Value) -> true;
+validate_option(retries, Value) when is_integer(Value) -> true;
 validate_option(_, _) -> false.
 
 

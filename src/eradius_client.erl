@@ -36,7 +36,7 @@
                     {server_name, atom()} |
                     {metrics_info, {atom(), atom(), atom()}}].
 
--export_type([nas_address/0]).
+-export_type([nas_address/0, options/0]).
 
 %% ------------------------------------------------------------------------------------------
 %% -- API
