@@ -79,6 +79,12 @@ validate_arguments_test(_) ->
     BadConfig3 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}]},
                   {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}}]}],
+    BadConfig4 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+                  {options, [{type, realm}, {strip, true}, {separator, "@"}, {timeout, "wrong"}]},
+                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}}]}],
+    BadConfig5 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+                  {options, [{type, realm}, {strip, true}, {separator, "@"}, {retries, "wrong"}]},
+                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}}]}],
     {Result, ConfigData} = eradius_proxy:validate_arguments(GoodConfig),
     ?equal(true, Result),
     {routes, Routes} = lists:keyfind(routes, 1, ConfigData),
@@ -89,15 +95,22 @@ validate_arguments_test(_) ->
     ?equal(default_route, eradius_proxy:validate_arguments(BadConfig1)),
     ?equal(default_route, eradius_proxy:validate_arguments(BadConfig2)),
     ?equal(routes, eradius_proxy:validate_arguments(BadConfig3)),
+    ?equal(options, eradius_proxy:validate_arguments(BadConfig4)),
+    ?equal(options, eradius_proxy:validate_arguments(BadConfig5)),
     ok.
 
 validate_options_test(_) ->
     DefaultOptions = [{type, realm}, {strip, false}, {separator, "@"}],
     ?equal(true, eradius_proxy:validate_options(DefaultOptions)),
     ?equal(true, eradius_proxy:validate_options([{type, prefix}, {separator, "/"}, {strip, true}])),
+    ?equal(true, eradius_proxy:validate_options(DefaultOptions ++ [{timeout, 5000}])),
+    ?equal(true, eradius_proxy:validate_options(DefaultOptions ++ [{retries, 5}])),
+    ?equal(true, eradius_proxy:validate_options(DefaultOptions ++ [{timeout, 5000}, {retries, 5}])),
     ?equal(false, eradius_proxy:validate_options([{type, unknow}])),
     ?equal(false, eradius_proxy:validate_options([strip, abc])),
     ?equal(false, eradius_proxy:validate_options([abc, abc])),
+    ?equal(false, eradius_proxy:validate_options(DefaultOptions ++ [{timeout, "5000"}])),
+    ?equal(false, eradius_proxy:validate_options(DefaultOptions ++ [{retries, "5"}])),
     ok.
 
 new_request_test(_) ->
