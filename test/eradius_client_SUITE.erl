@@ -157,8 +157,8 @@ send(FUN, Ports, Address) ->
 
 wanna_send(_Config) ->
     lists:map(fun(_) ->
-                        IP = {random:uniform(100), random:uniform(100), random:uniform(100), random:uniform(100)},
-                        Port = random:uniform(100),
+                        IP = {rand:uniform(100), rand:uniform(100), rand:uniform(100), rand:uniform(100)},
+                        Port = rand:uniform(100),
                         MetricsInfo = {{undefined, undefined, undefined}, {undefined, undefined, undefined}},
                         FUN = fun() -> gen_server:call(eradius_client, {wanna_send, {undefined, {IP, Port}}, MetricsInfo}) end,
                         send(FUN, null, null)
