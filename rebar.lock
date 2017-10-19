@@ -5,7 +5,6 @@
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
  {<<"hut">>,{pkg,<<"hut">>,<<"1.2.0">>},1},
  {<<"lager">>,{pkg,<<"lager">>,<<"3.5.1">>},0},
- {<<"meck">>,{pkg,<<"meck">>,<<"0.8.8">>},0},
  {<<"parse_trans">>,{pkg,<<"parse_trans">>,<<"3.0.0">>},1},
  {<<"setup">>,{pkg,<<"setup">>,<<"1.8.4">>},1}]}.
 [
@@ -16,7 +15,6 @@
  {<<"goldrush">>, <<"F06E5D5F1277DA5C413E84D5A2924174182FB108DABB39D5EC548B27424CD106">>},
  {<<"hut">>, <<"0089DF0FAA2827C605BBADA88153F24FFF5EA7A4BE32ECF0250A7FDC2719CAFB">>},
  {<<"lager">>, <<"63897A61AF646C59BB928FEE9756CE8BDD02D5A1A2F3551D4A5E38386C2CC071">>},
- {<<"meck">>, <<"EEB3EFE811D4346E1A7F65B2738ABC2AD73CBE1A2C91B5DD909BAC2EA0414FA6">>},
  {<<"parse_trans">>, <<"9E96B1C9C3A0DF54E7B76F8F685D38BFA1EB21B31E042B1D1A5A70258E4DB1E3">>},
  {<<"setup">>, <<"738DB0685DC1741F45C6A9BF78478E0D5877F3D0876C0B50FD02F0210EDB5AA4">>}]}
 ].
