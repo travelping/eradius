@@ -97,8 +97,8 @@ send_to_server(_Request, {undefined, 0, []}, _) ->
 send_to_server(#radius_request{reqid = ReqID} = Request, {Server, Port, Secret}, Options) ->
     Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
-    Options = [{retries, Retries}, {timeout, Timeout}],
-    case eradius_client:send_request({Server, Port, Secret}, Request, Options) of
+    Options1 = [{retries, Retries}, {timeout, Timeout}],
+    case eradius_client:send_request({Server, Port, Secret}, Request, Options1) of
         {ok, Result, Auth} -> decode_request(Result, ReqID, Secret, Auth);
         Error ->
             lager:error("~p: error during send_request (~p)", [?MODULE, Error]),
