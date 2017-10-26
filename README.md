@@ -32,3 +32,5 @@ the build in metrics.
 
 The handle time metrics are generated internally using histograms. These histograms
 all have a time span of 60s. The precise metrics are defined in `include/eradius_metrics`.
+
+See more in [METRICS.md](METRICS.md).
