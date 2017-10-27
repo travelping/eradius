@@ -48,7 +48,10 @@ radius_request(Request, _NasProp, Args) ->
     Username = eradius_lib:get_attr(Request, ?User_Name),
     Routes = proplists:get_value(routes, Args, []),
     {NewUsername, Route} = resolve_routes(Username, DefaultRoute, Routes, Options),
-    send_to_server(new_request(Request, Username, NewUsername), Route).
+    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
+    SendOpts = [{retries, Retries}, {timeout, Timeout}],
+    send_to_server(new_request(Request, Username, NewUsername), Route, SendOpts).
 
 validate_arguments(Args) ->
     DefaultRoute = proplists:get_value(default_route, Args, {undefined, 0, []}),
@@ -82,12 +85,6 @@ compile_routes(Routes) ->
     end.
 
 % @private
--spec send_to_server(Request :: #radius_request{}, Route :: undefined_route() | route()) ->
-    {reply, Reply :: #radius_request{}} | term().
-send_to_server(Request, Route) ->
-    send_to_server(Request, Route, []).
-
-% @private
 -spec send_to_server(Request :: #radius_request{}, 
                      Route :: undefined_route() | route(), 
                      Options :: eradius_client:options()) ->
@@ -95,10 +92,7 @@ send_to_server(Request, Route) ->
 send_to_server(_Request, {undefined, 0, []}, _) ->
     {error, no_route};
 send_to_server(#radius_request{reqid = ReqID} = Request, {Server, Port, Secret}, Options) ->
-    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
-    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
-    Options1 = [{retries, Retries}, {timeout, Timeout}],
-    case eradius_client:send_request({Server, Port, Secret}, Request, Options1) of
+    case eradius_client:send_request({Server, Port, Secret}, Request, Options) of
         {ok, Result, Auth} -> decode_request(Result, ReqID, Secret, Auth);
         Error ->
             lager:error("~p: error during send_request (~p)", [?MODULE, Error]),
