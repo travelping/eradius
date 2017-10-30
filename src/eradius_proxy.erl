@@ -7,11 +7,11 @@
 %%   [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
 %%    {options, [{type, realm}, {strip, true}, {separator, "@"}]},
 %%    {routes,  [{"^test-[0-9].", {{127, 0, 0, 1}, 1815, <<"secret1">>}}]}],
-%%   ```
+%%   '''
 %%
 %%   == WARNING ==
 %%
-%%   Define `routes` carefully. The `test` here in example above, is
+%%   Define `routes' carefully. The `test' here in example above, is
 %%   a regular expression that may cause to problemts with performance.
 -module(eradius_proxy).
 
