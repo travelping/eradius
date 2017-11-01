@@ -3,6 +3,37 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.8.7 - 27 Oct 2017
+---------------------------
+* Add METRICS.md
+* Set client options in `radius_request` callback of proxy module
+
+Version 0.8.6 - 25 Oct 2017
+---------------------------
+* Fix badmatch when `eradius_proxy` sends to server
+
+Version 0.8.5 - 19 Oct 2017
+---------------------------
+* Move `meck` to the test profile
+
+Version 0.8.4 - 18 Oct 2017
+---------------------------
+* Fix warning when run common test suites
+* `timeout` and `retries` configuration options for `eradius_proxy`
+* Do not send RADIUS request if a suitable route was not found in proxy
+
+Version 0.8.3 - 4 Oct 2017
+---------------------------
+* `eradius_proxy` is able to match relays with a regular expression
+
+Version 0.8.2 - 28 Sep 2017
+---------------------------
+* Rework unit test to common test
+* Fix ipv6prefix coding
+* Fix compile error on Windows. Fix for Issue #102
+* Get rid of `rebar2` and move to `rebar3`
+* Add missed `update_client_request()` for a request timeout metric
+
 Version 0.8.1 - 18 Jul 2017
 ---------------------------
 * add TP-Trace-Id to Travelping dictionary
