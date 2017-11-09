@@ -47,8 +47,10 @@ reconfigure() ->
 -spec lookup_handler(inet:ip_address(), eradius_server:port_number(), inet:ip_address()) -> {ok, handler(), #nas_prop{}} | {error, not_found}.
 lookup_handler(IP, Port, NasIP) ->
     case ets:lookup(?NAS_TAB, {{IP, Port}, NasIP}) of
-        [] ->
+        [] when NasIP == {0, 0, 0, 0} ->
             {error, not_found};
+        [] ->
+            lookup_handler(IP, Port, {0, 0, 0, 0});
         [Rec] ->
             Prop = (Rec#nas.prop)#nas_prop{server_ip = IP, server_port = Port},
             {ok, Rec#nas.handler, Prop}
