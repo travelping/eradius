@@ -3,6 +3,10 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.8.8 - 09 Nov 2017
+---------------------------
+* Allow 0.0.0.0 as NAS IP to avoid checking source IP
+
 Version 0.8.7 - 27 Oct 2017
 ---------------------------
 * Add METRICS.md
