@@ -81,7 +81,7 @@ testSocket(Pid) ->
 -record(state, {
     socket_ip :: inet:ip_address(),
     no_ports = 1 :: pos_integer(),
-    idcounters = dict:new() :: dict:dict(),
+    idcounters = maps:new() :: map(),
     sockets = array:new() :: array:array(),
     sup :: pid(),
     subscribed_clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
@@ -133,7 +133,7 @@ check(#state{sockets = OS, no_ports = _OP, idcounters = _OC, socket_ip = OA},
         OA  ->
             {_, Rest} = split(NP, array:to_list(OS)),
             test(P == NP,"Ports not configured") and
-            test(dict:fold( fun(_Peer, {NextPortIdx, _NextReqId}, Akk) ->
+            test(maps:fold( fun(_Peer, {NextPortIdx, _NextReqId}, Akk) ->
                                     Akk and (NextPortIdx =< NP)
                             end, true, NC), "Invalid port counter") and
             test(getSocketCount() =< NP, "Sockets not closed") and

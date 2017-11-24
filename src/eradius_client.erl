@@ -205,7 +205,7 @@ reconfigure() ->
 -record(state, {
     socket_ip :: null | inet:ip_address(),
     no_ports = 1 :: pos_integer(),
-    idcounters = dict:new() :: dict:dict(),
+    idcounters = maps:new() :: map(),
     sockets = array:new() :: array:array(),
     sup :: pid(),
     clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
@@ -305,12 +305,9 @@ configure_ports(State = #state{no_ports = OPorts, sockets = Sockets}, NPorts) ->
     end.
 
 fix_counters(NPorts, Counters) ->
-    dict:map(   fun(_Peer, Value = {NextPortIdx, NextReqId}) ->
-                        case NextPortIdx >= NPorts of
-                            false   -> Value;
-                            true    -> {0, NextReqId}
-                        end
-                end, Counters).
+    maps:map(fun(_Peer, Value = {NextPortIdx, _NextReqId}) when NextPortIdx < NPorts -> Value;
+                (_Peer, {_NextPortIdx, NextReqId}) -> {0, NextReqId}
+             end, Counters).
 
 close_sockets(NPorts, Sockets) ->
     case array:size(Sockets) =< NPorts of
@@ -329,17 +326,17 @@ close_sockets(NPorts, Sockets) ->
     end.
 
 next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
-    case dict:find(Peer, Counters) of
-        {ok, {NextPortIdx, ReqId}} when ReqId < 255 ->
+    case Counters of
+        #{Peer := {NextPortIdx, ReqId}} when ReqId < 255 ->
             NextReqId = (ReqId + 1);
-        {ok, {PortIdx, 255}} ->
+        #{Peer := {PortIdx, 255}} ->
             NextPortIdx = (PortIdx + 1) rem (NumberOfPorts - 1),
             NextReqId = 0;
-        error ->
+        _ ->
             NextPortIdx = erlang:phash2(Peer, NumberOfPorts),
             NextReqId = 0
     end,
-    NewCounters = dict:store(Peer, {NextPortIdx, NextReqId}, Counters),
+    NewCounters = Counters#{Peer => {NextPortIdx, NextReqId}},
     {NextPortIdx, NextReqId, NewCounters}.
 
 find_socket_process(PortIdx, Sockets, SocketIP, Sup) ->
