@@ -33,8 +33,7 @@ start(SocketIP, Client, PortIdx) ->
 init([_SocketIP, Client, PortIdx]) ->
     Client ! {PortIdx, self()},
     eradius_client_SUITE:addSocket(),
-    Pending = dict:new(),
-    {ok, #state{pending = Pending, mode = active, counter = 0}}.
+    {ok, #state{pending = maps:new(), mode = active, counter = 0}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -45,7 +44,7 @@ handle_cast(_Msg, State) ->
 handle_info({SenderPid, send_request, {IP, Port}, ReqId, _EncRequest},
         State = #state{pending = Pending, counter = Counter}) ->
     ReqKey = {IP, Port, ReqId},
-    NPending = dict:store(ReqKey, SenderPid, Pending),
+    NPending = Pending#{ReqKey => SenderPid},
     {noreply, State#state{pending = NPending, counter = Counter+1}};
 
 handle_info(close, State) ->

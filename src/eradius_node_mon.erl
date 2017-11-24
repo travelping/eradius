@@ -52,7 +52,7 @@ get_remote_version(Node) ->
 -record(state, {
     live_registrar_nodes = sets:new() :: sets:set(),
     dead_registrar_nodes = sets:new() :: sets:set(),
-    app_masters = dict:new()          :: dict:dict(),
+    app_masters = maps:new()          :: map(),
     ping_timer                        :: reference()
 }).
 
@@ -64,7 +64,7 @@ init([]) ->
 
 handle_call(remote_get_regs_v1, From, State) ->
     check_eradius_version(From),
-    Registrations = dict:to_list(State#state.app_masters),
+    Registrations = maps:to_list(State#state.app_masters),
     {reply, {ok, Registrations}, State};
 handle_call({set_nodes, Nodes}, _From, State) ->
     NewState = State#state{live_registrar_nodes = sets:new(),
@@ -94,13 +94,13 @@ handle_info({'DOWN', _MRef, process, {?SERVER, Node}, _Reason}, State = #state{l
                                   dead_registrar_nodes = sets:add_element(Node, State#state.dead_registrar_nodes)}}
     end;
 handle_info({'DOWN', _MRef, process, Pid, _Reason}, State = #state{app_masters = AppMasters}) when is_pid(Pid) ->
-    case dict:find(Pid, AppMasters) of
+    case maps:find(Pid, AppMasters) of
         error ->
             {noreply, State};
         {ok, Modules} ->
             ServerNode = node(Pid),
             lists:foreach(fun (Mod) -> ets:delete_object(?NODE_TAB, {Mod, ServerNode}) end, Modules),
-            NewState = State#state{app_masters = dict:erase(Pid, AppMasters)},
+            NewState = State#state{app_masters = maps:remove(Pid, AppMasters)},
             {noreply, NewState}
     end;
 handle_info(ping_dead_nodes, State = #state{app_masters = AppMasters, live_registrar_nodes = LiveRegistrars}) ->
@@ -130,12 +130,27 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %% ------------------------------------------------------------------------------------------
 %% -- helpers
--spec dict_prepend(term(), list(term()), dict:dict()) -> dict:dict().
-dict_prepend(Key, List, Dict) ->
-    dict:update(Key, fun (Old) -> List ++ Old end, List, Dict).
+-spec dict_prepend(term(), list(term()), map()) -> map().
+dict_prepend(Key, List, Map) ->
+    update_with(Key, fun (Old) -> List ++ Old end, List, Map).
+
+% NOTE:
+% copy-pasted from maps.erl to have backward compatability with OTP 18
+% it can be rewmoved if minimal version of OTP will be set to 19.
+update_with(Key,Fun,Init,Map) when is_function(Fun,1), is_map(Map) ->
+    case maps:find(Key,Map) of
+        {ok,Val} -> maps:update(Key,Fun(Val),Map);
+        error -> maps:put(Key,Init,Map)
+    end;
+update_with(Key,Fun,Init,Map) ->
+    erlang:error(error_type(Map),[Key,Fun,Init,Map]).
+
+-define(IS_ITERATOR(I), is_tuple(I) andalso tuple_size(I) == 3; I == none; is_integer(hd(I)) andalso is_map(tl(I))).
+error_type(M) when is_map(M); ?IS_ITERATOR(M) -> badarg;
+error_type(V) -> {badmap, V}.
 
 register_locally({ApplicationMaster, Modules}, AppMasters) ->
-    case dict:is_key(ApplicationMaster, AppMasters) of
+    case maps:is_key(ApplicationMaster, AppMasters) of
         true ->
             ok; %% already monitored
         false ->

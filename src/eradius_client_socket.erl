@@ -20,8 +20,7 @@ init([SocketIP, Client, PortIdx]) ->
     end,
     RecBuf = application:get_env(eradius, recbuf, 8192),
     {ok, Socket} = gen_udp:open(0, [{active, once}, binary , {recbuf, RecBuf} | ExtraOptions]),
-    Pending = dict:new(),
-    {ok, #state{client = Client, socket = Socket, pending = Pending, mode = active, counter = 0}}.
+    {ok, #state{client = Client, socket = Socket, pending = maps:new(), mode = active, counter = 0}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -34,7 +33,7 @@ handle_info({SenderPid, send_request, {IP, Port}, ReqId, EncRequest},
     case gen_udp:send(Socket, IP, Port, EncRequest) of
         ok ->
             ReqKey = {IP, Port, ReqId},
-            NPending = dict:store(ReqKey, SenderPid, Pending),
+            NPending = maps:put(ReqKey, SenderPid, Pending),
             {noreply, State#state{pending = NPending, counter = Counter+1}};
         {error, Reason} ->
             SenderPid ! {error, Reason},
@@ -45,7 +44,7 @@ handle_info({udp, Socket, FromIP, FromPort, EncRequest},
         State = #state{socket = Socket, pending = Pending, mode = Mode, counter = Counter}) ->
     case eradius_lib:decode_request_id(EncRequest) of
         {ReqId, EncRequest} ->
-            case dict:find({FromIP, FromPort, ReqId}, Pending) of
+            case maps:find({FromIP, FromPort, ReqId}, Pending) of
                 error ->
                     %% discard reply because we didn't expect it
                     inet:setopts(Socket, [{active, once}]),
@@ -53,7 +52,7 @@ handle_info({udp, Socket, FromIP, FromPort, EncRequest},
                 {ok, WaitingSender} ->
                     WaitingSender ! {self(), response, ReqId, EncRequest},
                     inet:setopts(Socket, [{active, once}]),
-                    NPending = dict:erase({FromIP, FromPort, ReqId}, Pending),
+                    NPending = maps:remove({FromIP, FromPort, ReqId}, Pending),
                     NState = State#state{pending = NPending, counter = Counter-1},
                     case {Mode, Counter-1} of
                         {inactive, 0}   -> {stop, normal, NState};
