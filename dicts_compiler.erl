@@ -70,7 +70,7 @@ compile_each([{Dictionary, {Headerfile, Mapfile}}|Rest]) ->
             Res = parse_dict(Dictionary),
             {ok, Hrl} = file:open(Headerfile, [write]),
             {ok, Map} = file:open(Mapfile, [write]),
-            emit(Res, Hrl, Map),
+            emit(Res, {Hrl, Headerfile}, Map),
             io:format("Compiled ~s~n", [Dictionary]),
             compile_each(Rest)
     end.
@@ -85,19 +85,27 @@ clean_each([{_Dictionary, {Headerfile, Mapfile}}|Rest]) ->
 %%% --------------------------------------------------------------------
 %%% Dictionary making
 %%% --------------------------------------------------------------------
-emit([A|T], Hrl, Map) when is_record(A, attribute) ->
-    io:format(Hrl, "-define( '~s' , ~w ).~n",
+emit([A|T], {HrlPid, _} = Hrl, Map) when is_record(A, attribute) ->
+    io:format(HrlPid, "-define( '~s' , ~w ).~n",
         [d2u(A#attribute.name), A#attribute.id]),
     io:format(Map, "~w.~n", [A]),
     emit(T, Hrl, Map);
-
-emit([V|T], Hrl, Map) when is_record(V, vendor) ->
-    io:format(Hrl, "-define( '~s' , ~w ).~n",
+emit([V|T], {HrlPid, _} = Hrl, Map) when is_record(V, vendor) ->
+    io:format(HrlPid, "-define( '~s' , ~w ).~n",
         [d2u(V#vendor.name), V#vendor.type]),
     io:format(Map, "~w.~n", [V]),
     emit(T, Hrl, Map);
 emit([V|T], Hrl, Map) when is_record(V, value) ->
     io:format(Map, "~w.~n", [V]),
+    emit(T, Hrl, Map);
+emit([header|T], {HrlPid, HrlName} = Hrl, Map) ->
+    GuardDef = string:to_upper(filename:basename(HrlName, ".hrl")) ++ "_INCLUDED",
+    io:format(HrlPid, "-ifndef( ~s ).~n", [GuardDef]),
+    io:format(HrlPid, "-define( ~s, true ).~n~n", [GuardDef]),
+    emit(T, Hrl, Map);
+emit([footer|T], {HrlPid, HrlName} = Hrl, Map) ->
+    GuardDef = string:to_upper(filename:basename(HrlName, ".hrl")) ++ "_INCLUDED",
+    io:format(HrlPid, "~n-endif. % ~s~n", [GuardDef]),
     emit(T, Hrl, Map);
 emit([_|T], Hrl, Map) ->
     emit(T, Hrl, Map);
@@ -120,7 +128,7 @@ parse_dict(File) when is_list(File) ->
             end
     end,
     {_, L} = lists:foldl(F,{undefined, []},string:tokens(b2l(B),"\n")),
-    L.
+    [header|L] ++ [footer].
 
 paa(Attr = #attribute{type = integer}, ["has_tag"]) ->
     Attr#attribute{ type = {tagged, integer24} };
