@@ -98,6 +98,13 @@ emit([V|T], {HrlPid, _} = Hrl, Map) when is_record(V, vendor) ->
 emit([V|T], Hrl, Map) when is_record(V, value) ->
     io:format(Map, "~w.~n", [V]),
     emit(T, Hrl, Map);
+emit([{include, Include}|T], {HrlPid, _} = Hrl, Map) ->
+    EscapedInclude = re:replace(Include, "\\.", "_", [global, {return, list}]),
+    io:format(HrlPid, "-include( \"~s.hrl\" ).~n", [EscapedInclude]),
+    % No need to add ".map" extension here. It will be added by eradius_dict
+    % server automatically.
+    io:format(Map, "{include, ~w}.~n", [EscapedInclude]),
+    emit(T, Hrl, Map);
 emit([header|T], {HrlPid, HrlName} = Hrl, Map) ->
     GuardDef = string:to_upper(filename:basename(HrlName, ".hrl")) ++ "_INCLUDED",
     io:format(HrlPid, "-ifndef( ~s ).~n", [GuardDef]),
@@ -117,12 +124,14 @@ parse_dict(File) when is_list(File) ->
     F = fun(Line,{undefined = Vendor, AccList}) ->
         case pd(string:tokens(Line,"\s\t\r")) of
             {ok,E} -> {Vendor, [E|AccList]};
+            {include,Hrl} -> {Vendor, [{include, Hrl}|AccList]};
             {begin_vendor, VendId} -> {{vendor, VendId}, AccList};
             _      -> {Vendor, AccList}
         end;
         (Line, {{vendor, VendId} = Vendor, AccList}) ->
             case pd(string:tokens(Line, "\s\t\r"), VendId) of
                 {end_vendor} -> {undefined, AccList};
+                {include,Hrl} -> {Vendor, [{include, Hrl}|AccList]};
                 {ok,E} -> {Vendor, [E|AccList]};
                 _ -> {Vendor, AccList}
             end
@@ -158,6 +167,9 @@ parse_attribute_attrs(Attr, [Attribute|Tail]) ->
     [Token | Rest] = string:tokens(Attribute, ","),
     NewAttr = paa(Attr, string:tokens(Token, "=")),
     parse_attribute_attrs(NewAttr, Rest ++ Tail).
+
+pd(["$INCLUDE", Name]) ->
+   {include, Name};
 
 pd(["BEGIN-VENDOR", Name]) ->
     case get({vendor, Name}) of
