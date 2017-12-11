@@ -72,7 +72,7 @@ mapfile(A) when is_atom(A) -> mapfile(atom_to_list(A));
 mapfile(A) when is_list(A) -> A ++ ".map".
 
 -spec do_load_tables(file:filename(), [table_name()]) -> ok | {error, {consult, file:filename()}}.
-do_load_tables(Dir, []) ->
+do_load_tables(_Dir, []) ->
     ok;
 do_load_tables(Dir, Tables) ->
     try
