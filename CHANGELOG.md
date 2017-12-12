@@ -3,6 +3,12 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.8.9 - 12 Dec 2017
+---------------------------
+* Reworks dicts to maps in client and node_mon 
+* Parse $INCLUDE directive in priv/dictionaries/dictionary\* files
+* Get rid of tetrapak
+
 Version 0.8.8 - 09 Nov 2017
 ---------------------------
 * Allow 0.0.0.0 as NAS IP to avoid checking source IP
