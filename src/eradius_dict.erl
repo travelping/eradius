@@ -72,17 +72,21 @@ mapfile(A) when is_atom(A) -> mapfile(atom_to_list(A));
 mapfile(A) when is_list(A) -> A ++ ".map".
 
 -spec do_load_tables(file:filename(), [table_name()]) -> ok | {error, {consult, file:filename()}}.
+do_load_tables(_Dir, []) ->
+    ok;
 do_load_tables(Dir, Tables) ->
     try
-        Defs = lists:flatmap(fun (Tab) ->
+        All = lists:flatmap(fun (Tab) ->
                                      TabFile = filename:join(Dir, mapfile(Tab)),
                                      case file:consult(TabFile) of
                                          {ok, Res}       -> Res;
                                          {error, _Error} -> throw({consult, TabFile})
                                      end
                              end, Tables),
+        {MoreIncludes, Defs} = lists:partition(fun({include, _}) -> true; (_) -> false end, All),
         ets:insert(?TABLENAME, Defs),
-        lager:info("Loaded RADIUS tables: ~p", [Tables])
+        lager:info("Loaded RADIUS tables: ~p", [Tables]),
+        do_load_tables(Dir, [T || {include, T} <- MoreIncludes])
     catch
         throw:{consult, FailedTable} ->
             lager:error("Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
