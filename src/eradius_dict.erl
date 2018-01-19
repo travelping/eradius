@@ -83,7 +83,11 @@ do_load_tables(Dir, Tables) ->
                                          {error, _Error} -> throw({consult, TabFile})
                                      end
                              end, Tables),
-        {MoreIncludes, Defs} = lists:partition(fun({include, _}) -> true; (_) -> false end, All),
+        {MoreIncludes, Defs} = 
+            lists:foldl(fun({include, Elem}, {Inc, Other}) -> {Inc ++ [{include, Elem}], Other};
+                        ({vendor, _, _}, {Inc, Other}) -> {Inc, Other};
+                        (Elem, {Inc, Other}) -> {Inc, Other ++ [Elem]}
+                        end, {[], []}, All),
         ets:insert(?TABLENAME, Defs),
         lager:info("Loaded RADIUS tables: ~p", [Tables]),
         do_load_tables(Dir, [T || {include, T} <- MoreIncludes])
