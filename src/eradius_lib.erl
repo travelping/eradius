@@ -138,9 +138,9 @@ encode_attributes(Req, Attributes) ->
                 EncAttr = encode_attribute(Req, A, Val),
                 {<<Body/binary, EncAttr/binary>>, BodySize + byte_size(EncAttr)};
             ({ID, Val}, {Body, BodySize}) ->
-                case eradius_dict:lookup(ID) of
-                    [A = #attribute{}] ->
-                        EncAttr = encode_attribute(Req, A, Val),
+                case eradius_dict:lookup(attribute, ID) of
+                    AttrRec = #attribute{} ->
+                        EncAttr = encode_attribute(Req, AttrRec, Val),
                         {<<Body/binary, EncAttr/binary>>, BodySize + byte_size(EncAttr)};
                     _ ->
                         {Body, BodySize}
@@ -330,8 +330,8 @@ decode_attributes(_Req, <<>>, _Pos, State) ->
 decode_attributes(Req, <<Type:8, ChunkLength:8, ChunkRest/binary>>, Pos, State) ->
     ValueLength = ChunkLength - 2,
     <<Value:ValueLength/binary, PacketRest/binary>> = ChunkRest,
-    NewState = case eradius_dict:lookup(Type) of
-		   [AttrRec = #attribute{}] ->
+    NewState = case eradius_dict:lookup(attribute, Type) of
+		   AttrRec = #attribute{} ->
 		       decode_attribute(Value, Req, AttrRec, Pos + 2, State);
 		   _ ->
 		       append_attr({Type, Value}, State)
@@ -430,9 +430,9 @@ decode_vendor_specific_attribute(Req, VendorID, <<Type:8, ChunkLength:8, ChunkRe
     ValueLength = ChunkLength - 2,
     <<Value:ValueLength/binary, PacketRest/binary>> = ChunkRest,
     VendorAttrKey = {VendorID, Type},
-    NewState = case eradius_dict:lookup(VendorAttrKey) of
-		   [AttrRec = #attribute{}] ->
-		       decode_attribute(Value, Req, AttrRec, Pos + 2, State);
+    NewState = case eradius_dict:lookup(attribute, VendorAttrKey) of
+		   Attr = #attribute{} ->
+		       decode_attribute(Value, Req, Attr, Pos + 2, State);
 		   _ ->
 		       append_attr({VendorAttrKey, Value}, State)
     end,
