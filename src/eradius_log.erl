@@ -171,8 +171,8 @@ print_attr(Key = #attribute{name = Attr, type = Type}, InVal) ->
                      end,
     <<"\t", (list_to_binary(Attr))/binary, " = ", FmtVal/binary, "\n">>;
 print_attr(Id, Val) ->
-    case eradius_dict:lookup(Id) of
-        [Attr = #attribute{}] ->
+    case eradius_dict:lookup(attribute, Id) of
+        Attr = #attribute{} ->
             print_attr(Attr, Val);
         _ ->
             Name = format_unknown(Id),
@@ -183,8 +183,8 @@ collect_attr(Key = #attribute{name = Attr, type = _Type}, InVal) ->
     FmtVal = collectable_attr_value(Key, InVal),
     {list_to_atom(lists:flatten(Attr)), FmtVal};
 collect_attr(Id, Val) ->
-    case eradius_dict:lookup(Id) of
-        [Attr = #attribute{}] ->
+    case eradius_dict:lookup(attribute, Id) of
+        Attr = #attribute{} ->
             collect_attr(Attr, Val);
         _ ->
             Name = format_unknown(Id),
@@ -205,9 +205,9 @@ printable_attr_value(#attribute{type = string}, Value) when is_list(Value) ->
 printable_attr_value(#attribute{type = ipaddr}, {A, B, C, D}) ->
     <<(i2b(A))/binary, ".", (i2b(B))/binary, ".", (i2b(C))/binary, ".", (i2b(D))/binary>>;
 printable_attr_value(#attribute{id = ID, type = integer}, Val) when is_integer(Val) ->
-    case eradius_dict:lookup({ID, Val}) of
-        [#value{name = VName}] -> list_to_binary(VName);
-        _                      -> i2b(Val)
+    case eradius_dict:lookup(value, {ID, Val}) of
+        #value{name = VName} -> list_to_binary(VName);
+        _                    -> i2b(Val)
     end;
 printable_attr_value(#attribute{type = date}, {{Y,Mo,D},{H,Min,S}}) ->
     list_to_binary(io_lib:fwrite("~4..0B-~2..0B-~2..0BT~2..0B:~2..0B:~2..0B", [Y, Mo, D, H, Min, S]));
@@ -230,8 +230,8 @@ collectable_attr_value(#attribute{type = string}, Value) when is_list(Value) ->
 collectable_attr_value(#attribute{type = ipaddr}, IP) ->
     inet_parse:ntoa(IP);
 collectable_attr_value(#attribute{id = ID, type = integer}, Val) when is_integer(Val) ->
-    case eradius_dict:lookup({ID, Val}) of
-        [#value{name = VName}] -> VName;
+    case eradius_dict:lookup(value, {ID, Val}) of
+        #value{name = VName} -> VName;
         _                      -> Val
     end;
 collectable_attr_value(#attribute{type = date}, {{Y,Mo,D},{H,Min,S}}) ->
@@ -248,8 +248,8 @@ radius_date({{YYYY,MM,DD},{Hour,Min,Sec}}) ->
             [day(DayNumber), month(MM), DD, Hour, Min, Sec, YYYY])).
 
 format_unknown({VendId, Id}) ->
-    case eradius_dict:lookup(VendId) of
-        [#vendor{name = Name}] ->
+    case eradius_dict:lookup(vendor, VendId) of
+        #vendor{name = Name} ->
             ["Unkown-", Name, $-, integer_to_list(Id)];
         _ ->
             ["Unkown-", integer_to_list(VendId), $-, integer_to_list(Id)]

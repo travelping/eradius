@@ -1,7 +1,7 @@
 %% @private
 %% @doc Dictionary server
 -module(eradius_dict).
--export([start_link/0, lookup/1, load_tables/1, load_tables/2]).
+-export([start_link/0, lookup/1, lookup/2, load_tables/1, load_tables/2]).
 -export_type([attribute/0, attr_value/0, table_name/0, attribute_id/0, attribute_type/0,
               attribute_prim_type/0, attribute_encryption/0, vendor_id/0, value_id/0]).
 
@@ -38,6 +38,21 @@ start_link() ->
 lookup(Id) ->
     ets:lookup(?TABLENAME, Id).
 
+-spec lookup(attribute | vendor | value, attribute_id() | value_id() | vendor_id()) -> false | #attribute{} | #value{} | #vendor{}.
+lookup(Type, Id) ->
+    case {Type, eradius_dict:lookup(Id)} of
+        {attribute, [Attr = #attribute{}]} ->
+            Attr;
+        {vendor, [Attr = #vendor{}]} ->
+            Attr;
+        {value, [Attr = #value{}]} ->
+            Attr;
+        {_, [_H | _T] = L} ->
+            lists:keyfind(Type, 1, L);
+        {_, _} ->
+            false
+    end.
+
 -spec load_tables(list(table_name())) -> ok | {error, {consult, table_name()}}.
 load_tables(Tables) when is_list(Tables) ->
     load_tables(code:priv_dir(eradius), Tables).
@@ -55,7 +70,7 @@ init([]) ->
     {ok, #state{}}.
 
 create_table() ->
-    ets:new(?TABLENAME, [named_table, {keypos, 2}, protected]).
+    ets:new(?TABLENAME, [bag, named_table, {keypos, 2}, protected]).
 
 handle_call({load_tables, Dir, Tables}, _From, State) ->
     {reply, do_load_tables(Dir, Tables), State}.

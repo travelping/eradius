@@ -24,6 +24,16 @@
 -include("eradius_test.hrl").
 -compile(export_all).
 
+-define(SALT, <<171,213>>).
+-define(REQUEST_AUTHENTICATOR, << 1, 2, 3, 4, 5, 6, 7, 8 >>).
+-define(USER, "test").
+-define(SECRET, <<"secret">>).
+-define(PLAIN_TEXT, "secret").
+-define(PLAIN_TEXT_PADDED, <<"secret",0,0,0,0,0,0,0,0,0,0>>).
+-define(CIPHER_TEXT, <<171,213,166,95,152,126,124,120,86,10,78,216,190,216,26,87,55,15>>).
+-define(ENC_PASSWORD, 186,128,194,207,68,25,190,19,23,226,48,206,244,143,56,238).
+-define(PDU, #radius_request{ reqid = 1, secret = ?SECRET, authenticator = ?REQUEST_AUTHENTICATOR }).
+
 
 %% test callbacks
 all() -> [ipv6prefix,
@@ -41,31 +51,22 @@ all() -> [ipv6prefix,
           dec_simple_ipv4_test,
           dec_vendor_integer_t,
           dec_vendor_string_t,
-          dec_vendor_ipv4_t
+          dec_vendor_ipv4_t,
+          vendor_attribute_id_conflict_test
          ].
 
-init_per_suite(Config) ->
-    Config.
+init_per_suite(Config) -> Config.
+end_per_suite(_Config) -> ok.
 
-init_per_testcase(dec_vendor_integer_t, Config) ->
+init_per_testcase(Test, Config) when   Test == dec_vendor_integer_t
+                                orelse Test == dec_vendor_string_t
+                                orelse Test == dec_vendor_ipv4_t
+                                orelse Test == vendor_attribute_id_conflict_test ->
     application:set_env(eradius, tables, [dictionary]),
     eradius_dict:start_link(),
     Config;
-init_per_testcase(dec_vendor_string_t, Config) ->
-    application:set_env(eradius, tables, [dictionary]),
-    eradius_dict:start_link(),
-    Config;
-init_per_testcase(dec_vendor_ipv4_t, Config) ->
-    application:set_env(eradius, tables, [dictionary]),
-    eradius_dict:start_link(),
-    Config;
-init_per_testcase(_, Config) ->
-    Config.
+init_per_testcase(_, Config) -> Config.
 
-end_per_suite(_Config) ->
-    ok.
-
-%% tests
 
 ipv6prefix(_Config) ->
     IPv6Prefix0 = {{8193, 0, 0, 0, 0, 0, 0, 0}, 128},
@@ -76,23 +77,11 @@ ipv6prefix(_Config) ->
 
     IPv6Prefix2 = {{8193, 0, 0, 0, 0, 0, 0, 0}, 64},
     ?equal(IPv6Prefix2, ipv6prefix_enc_dec(IPv6Prefix2)),
-
     ok.
 
 ipv6prefix_enc_dec(Prefix) ->
     Bin = eradius_lib:encode_value(ipv6prefix, Prefix),
     eradius_lib:decode_value(Bin, ipv6prefix).
-
-
--define(SALT, <<171,213>>).
--define(REQUEST_AUTHENTICATOR, << 1, 2, 3, 4, 5, 6, 7, 8 >>).
--define(USER, "test").
--define(SECRET, <<"secret">>).
--define(PLAIN_TEXT, "secret").
--define(PLAIN_TEXT_PADDED, <<"secret",0,0,0,0,0,0,0,0,0,0>>).
--define(CIPHER_TEXT, <<171,213,166,95,152,126,124,120,86,10,78,216,190,216,26,87,55,15>>).
--define(ENC_PASSWORD, 186,128,194,207,68,25,190,19,23,226,48,206,244,143,56,238).
--define(PDU, #radius_request{ reqid = 1, secret = ?SECRET, authenticator = ?REQUEST_AUTHENTICATOR }).
 
 selt_encrypt_test(_) ->
     ?equal(?CIPHER_TEXT, eradius_lib:salt_encrypt(?SALT, ?SECRET, ?REQUEST_AUTHENTICATOR, << ?PLAIN_TEXT >>)).
@@ -144,7 +133,6 @@ dec_simple_ipv4_test(_) ->
     State = decode_attribute(<<10,33,0,1>>, ?PDU, #attribute{id = 4, type = ipaddr, enc = no}),
     [{_, {10,33,0,1}}] = State#decoder_state.attrs.
 
-
 dec_vendor_integer_t(_) ->
     State = decode_attribute(<<0,0,40,175,3,6,0,0,0,0>>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}),
     [{_, <<0, 0, 0, 0>>}] = State#decoder_state.attrs.
@@ -157,4 +145,7 @@ dec_vendor_ipv4_t(_) ->
     State = decode_attribute(<<0,0,40,175,6,6,212,183,144,246>>, ?PDU, #attribute{id = ?RVendor_Specific, type = octets, enc = no}),
     [{_, <<212,183,144,246>>}] = State#decoder_state.attrs.
 
-%% TODO: add more tests
+vendor_attribute_id_conflict_test(_) ->
+    #attribute{} = eradius_dict:lookup(attribute, 52),
+    #vendor{} = eradius_dict:lookup(vendor, 52),
+    #value{} = eradius_dict:lookup(value, {6,1}).
