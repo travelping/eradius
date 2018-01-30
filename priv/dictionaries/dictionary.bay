@@ -6,7 +6,7 @@
 #	Modified for libradius by Alan DeKok <aland@ox.org>
 #
 
-VENDOR		Bay-Networks	1584		# now Nortel
+VENDOR		Bay-Networks	1584
 
 BEGIN-VENDOR Bay-Networks
 #	Bay Networks Extensions
