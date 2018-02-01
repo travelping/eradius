@@ -21,7 +21,10 @@
 -module(eradius_client_SUITE).
 -compile(export_all).
 
+-include("test/eradius_test.hrl").
+
 all() -> [
+    send_request,
     wanna_send,
     reconf_address,
     wanna_send,
@@ -41,6 +44,19 @@ end_per_suite(_Config) ->
     stopSocketCounter(),
     application:stop(eradius),
     ok.
+
+init_per_testcase(send_request, Config) ->
+    application:stop(eradius),
+    eradius_test_handler:start(),
+    Config;
+init_per_testcase(_Test, Config) ->
+    Config.
+
+end_per_testcase(send_request, Config) ->
+    eradius_test_handler:stop(),
+    Config;
+end_per_testcase(_Test, Config) ->
+    Config.
 
 %% STUFF
 
@@ -146,6 +162,13 @@ check(#state{sockets = OS, no_ports = _OP, idcounters = _OC, socket_ip = OA},
     end.
 
 %% TESTS
+
+send_request(_Config) ->
+    ?equal(accept, eradius_test_handler:send_request({127, 0, 0, 1})),
+    ?equal(accept, eradius_test_handler:send_request("127.0.0.1")),
+    ?equal(accept, eradius_test_handler:send_request("localhost")),
+    ?equal(accept, eradius_test_handler:send_request(<<"localhost">>)),
+    ok.
 
 send(FUN, Ports, Address) ->
     meckStart(),

@@ -30,13 +30,17 @@
                         Req#radius_request.cmd == 'coareq' orelse
                         Req#radius_request.cmd == 'discreq')).
 
--type nas_address() :: {inet:ip_address(), eradius_server:port_number(), eradius_lib:secret()}.
+-type nas_address() :: {string() | binary() | inet:ip_address(), 
+                        eradius_server:port_number(), 
+                        eradius_lib:secret()}.
 -type options() :: [{retries, pos_integer()} |
                     {timeout, timeout()} |
                     {server_name, atom()} |
                     {metrics_info, {atom(), atom(), atom()}}].
 
 -export_type([nas_address/0, options/0]).
+
+-include_lib("kernel/include/inet.hrl").
 
 %% ------------------------------------------------------------------------------------------
 %% -- API
@@ -53,6 +57,20 @@ send_request(NAS, Request) ->
 %   If no answer is received within the specified timeout, the request will be sent again.
 -spec send_request(nas_address(), #radius_request{}, options()) ->
     {ok, binary(), eradius_lib:authenticator()} | {error, 'timeout' | 'socket_down'}.
+send_request({Host, Port, Secret}, Request, Options) 
+  when ?GOOD_CMD(Request) andalso is_binary(Host) ->
+    send_request({erlang:binary_to_list(Host), Port, Secret}, Request, Options);
+send_request({Host, Port, Secret}, Request, Options) 
+  when ?GOOD_CMD(Request) andalso is_list(Host) ->
+    case inet:gethostbyname(Host) of
+        {ok, #hostent{h_addrtype = inet, h_addr_list = [IP]}} -> 
+            send_request({IP, Port, Secret}, Request, Options);
+        {ok, #hostent{h_addrtype = inet, h_addr_list = [_ | _] = IPs}} -> 
+            Index = rand:uniform(length(IPs)),
+            IP = lists:nth(Index, IPs),
+            send_request({IP, Port, Secret}, Request, Options);
+        _ -> error(badarg)
+    end;
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
     TS1 = eradius_metrics:timestamp(milli_seconds),
     ServerName = proplists:get_value(server_name, Options, undefined),
