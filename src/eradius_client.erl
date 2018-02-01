@@ -25,10 +25,10 @@
 -define(DEFAULT_RETRIES, 3).
 -define(DEFAULT_TIMEOUT, 5000).
 -define(RECONFIGURE_TIMEOUT, 15000).
--define(GOOD_CMD(Req), Req#radius_request.cmd == 'request' orelse
-                       Req#radius_request.cmd == 'accreq' orelse
-                       Req#radius_request.cmd == 'coareq' orelse
-                       Req#radius_request.cmd == 'discreq').
+-define(GOOD_CMD(Req), (Req#radius_request.cmd == 'request' orelse
+                        Req#radius_request.cmd == 'accreq' orelse
+                        Req#radius_request.cmd == 'coareq' orelse
+                        Req#radius_request.cmd == 'discreq')).
 
 -type nas_address() :: {inet:ip_address(), eradius_server:port_number(), eradius_lib:secret()}.
 -type options() :: [{retries, pos_integer()} |
