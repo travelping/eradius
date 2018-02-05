@@ -261,8 +261,7 @@ run_handler(NodesAvailable, NasProp, Handler, EncRequest) ->
     end.
 
 run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, EncRequest) ->
-    NasPropTuple = nas_prop_record_to_tuple(NasProp),
-    RemoteArgs = [self(), HandlerMod, HandlerArgs, NasPropTuple, EncRequest],
+    RemoteArgs = [self(), HandlerMod, HandlerArgs, NasProp, EncRequest],
     HandlerPid = spawn_link(Node, ?MODULE, handle_remote_request, RemoteArgs),
     receive
         {HandlerPid, ReturnValue} ->
@@ -293,20 +292,9 @@ handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, na
 %% @doc this function is spawned on a remote node to handle a radius request.
 %%   remote handlers need to be upgraded if the signature of this function changes.
 %%   error reports go to the logger of the node that executes the request.
-handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasPropTuple, EncRequest) ->
-    NasProp = nas_prop_tuple_to_record(NasPropTuple),
+handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasProp, EncRequest) ->
     Result = handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest),
     ReplyPid ! {self(), Result}.
-
-nas_prop_record_to_tuple(R = #nas_prop{}) ->
-    {nas_prop_v1, R#nas_prop.server_ip, R#nas_prop.server_port,
-                  R#nas_prop.nas_ip, R#nas_prop.nas_port,
-                  R#nas_prop.secret, R#nas_prop.handler_nodes}.
-
-nas_prop_tuple_to_record({nas_prop_v1, ServerIP, ServerPort, NasIP, NasPort, Secret, _Trace, Nodes}) ->
-    #nas_prop{server_ip = ServerIP, server_port = ServerPort,
-              nas_ip = NasIP, nas_port = NasPort,
-              secret = Secret, handler_nodes = Nodes}.
 
 -spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {exit, term()} | {reply, binary()}.
 apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
