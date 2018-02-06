@@ -110,18 +110,17 @@ decode_request(Result, ReqID, Secret, Auth) ->
     end.
 
 % @private
--spec validate_route({Ip :: list() | inet:ip_address(), Port :: eradius_server:port_number(), Secret :: eradius_lib:secret()}) ->
+-spec validate_route({Host :: list() | binary() | inet:ip_address(), Port :: eradius_server:port_number(), Secret :: eradius_lib:secret()}) ->
     boolean().
-validate_route({_Ip, Port, _Secret}) when not is_integer(Port); Port =< 0; Port > 65535 -> false;
-validate_route({_Ip, _Port, Secret}) when not is_list(Secret), not is_binary(Secret) -> false;
-validate_route({Ip, _Port, _Secret}) when is_list(Ip) ->
-    {Res, _} = inet_parse:address(Ip),
-    Res =:= ok;
-validate_route({Ip, Port, Secret}) when is_tuple(Ip) ->
-    case inet_parse:ntoa(Ip) of
+validate_route({Host, Port, _Secret}) when not is_integer(Port); Port =< 0; Port > 65535 -> false;
+validate_route({Host, _Port, Secret}) when not is_list(Secret), not is_binary(Secret) -> false;
+validate_route({Host, _Port, _Secret}) when is_list(Host) -> true;
+validate_route({Host, Port, Secret}) when is_tuple(Host) ->
+    case inet_parse:ntoa(Host) of
         {error, _} -> false;
         Address -> validate_route({Address, Port, Secret})
     end;
+validate_route({Host, _Port, _Secret}) when is_binary(Host) -> true;
 validate_route(_) -> false.
 
 % @private
