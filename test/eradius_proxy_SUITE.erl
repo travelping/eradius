@@ -68,7 +68,8 @@ resolve_routes_test(_) ->
 validate_arguments_test(_) ->
     GoodConfig = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-                  {routes, [{"test", {{127, 0, 0, 1}, 1815, <<"secret1">>}}
+                  {routes, [{"test_1", {{127, 0, 0, 1}, 1815, <<"secret1">>}},
+                            {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
                            ]}
                  ],
     BadConfig = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
@@ -78,18 +79,25 @@ validate_arguments_test(_) ->
     BadConfig2 = [{default_route, {abc, 123, <<"secret">>}}],
     BadConfig3 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}}]}],
+                  {routes,  [{"test_1", {wrong_ip, 1815, <<"secret1">>}},
+                             {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
+                            ]}],
     BadConfig4 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}, {timeout, "wrong"}]},
-                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}}]}],
+                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}},
+                             {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
+                            ]}],
     BadConfig5 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}, {retries, "wrong"}]},
-                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}}]}],
+                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}},
+                             {"test_2", {"localhost", 1816, <<"secret2">>}}
+                            ]}],
     {Result, ConfigData} = eradius_proxy:validate_arguments(GoodConfig),
     ?equal(true, Result),
     {routes, Routes} = lists:keyfind(routes, 1, ConfigData),
-    [{{CompiledRegexp, _, _, _, _}, _}] = Routes,
-    ?equal(re_pattern, CompiledRegexp),
+    [{{CompiledRegexp_1, _, _, _, _}, _}, {{CompiledRegexp_2, _, _, _, _}, _}] = Routes,
+    ?equal(re_pattern, CompiledRegexp_1),
+    ?equal(re_pattern, CompiledRegexp_2),
     ?equal(default_route, eradius_proxy:validate_arguments([])),
     ?equal(options, eradius_proxy:validate_arguments(BadConfig)),
     ?equal(default_route, eradius_proxy:validate_arguments(BadConfig1)),
