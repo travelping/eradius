@@ -3,6 +3,14 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.9.0 - 07 Feb 2017
+---------------------------
+
+* Remove nas_prop explicit transformations in remote handler
+* Resolve domain name during send request on client, it includes the fix for pass proxy handler validation
+* Fix GOOD_CMD guard to have ability to combine it with others guards
+* Fix dictionary collisions
+
 Version 0.8.9 - 12 Dec 2017
 ---------------------------
 * Reworks dicts to maps in client and node_mon 
