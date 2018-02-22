@@ -3,7 +3,12 @@ eradius
 
 A generic RADIUS client and server.
 
-Version 0.9.0 - 07 Feb 2017
+Version 0.9.1 - 22 Feb 2018
+---------------------------
+
+* [METRICS] Set min_heap_size to default value(233) for exometer histograms
+
+Version 0.9.0 - 07 Feb 2018
 ---------------------------
 
 * Remove nas_prop explicit transformations in remote handler
