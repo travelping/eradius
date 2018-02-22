@@ -26,7 +26,8 @@
                          []}).
 
 -define(HISTOGRAM_60000, {histogram,
-                         [{slot_period, 100},
+                         [{min_heap_size, 233},
+                          {slot_period, 100},
                           {time_span, 60000}]}).
 
 -define(FUNCTION_UPTIME,{{function, eradius_metrics,
