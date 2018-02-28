@@ -9,7 +9,12 @@
 %%
 %%   == Callback Description ==
 %%
-%%   There is only one callback at the moment.
+%%   There are two callbacks at the moment.
+%%
+%%   === validate_arguments(Args :: list()) -> boolean() | {true, NewArgs :: list()} | Error :: term(). ===
+%%
+%%   This is optional callback and can be absent. During application configuration processing `eradius_config`
+%%   calls this for the handler to validate and transform handler arguments.
 %%
 %%   === radius_request(#radius_request{}, #nas_prop{}, HandlerData :: term()) -> {reply, #radius_request{}} | noreply ===
 %%
@@ -44,7 +49,7 @@
 %%   }).
 %%   '''
 -module(eradius_server).
--export([start_link/3, behaviour_info/1]).
+-export([start_link/3]).
 -export_type([port_number/0, req_id/0]).
 
 %% internal
@@ -76,8 +81,13 @@
     name           :: atom()             % server name
 }).
 
--spec behaviour_info('callbacks') -> [{module(), non_neg_integer()}].
-behaviour_info(callbacks) -> [{radius_request,3}].
+-optional_callbacks([validate_arguments/1]).
+
+-callback validate_arguments(Args :: list()) -> 
+    boolean() | {true, NewArgs :: list()}.
+
+-callback radius_request(#radius_request{}, #nas_prop{}, HandlerData :: term()) -> 
+    {reply, #radius_request{}} | noreply | {error, timeout}.
 
 %% @private
 -spec start_link(atom(), inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
