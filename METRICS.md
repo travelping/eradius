@@ -117,7 +117,6 @@ _All metrics start with `[eradius, radius]` prefix and the prefix is not include
 | [request, bad_authenticator, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter] `*` | counter   |
 | [request, malformed, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter] `*`         | counter   |
 | [request, unknown_type, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter] `*`      | counter   | 
-| [request, dropped, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]               | counter   |
 | [request, total, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]                   | histogram | 
 | [request, total, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]                 | counter   |
 | [request, access, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]                  | histogram |
@@ -134,6 +133,7 @@ _All metrics start with `[eradius, radius]` prefix and the prefix is not include
 | [response, access_accept, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]        | counter   |
 | [response, access_reject, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]        | counter   |
 | [response, access_challenge, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]     | counter   |
+| [response, dropped, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]              | counter   |
 | [response, disconnect_ack, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]       | counter   |
 | [response, disconnect_nak, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]       | counter   |
 | [response, coa_ack, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]              | counter   |
