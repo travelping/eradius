@@ -3,6 +3,13 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.9.2 - 12 Mar 2018
+---------------------------
+
+* Rework eradius sample server
+* Rework eradius_server behaviour with -callback (to using with Elixir 1.6)
+* Some fixes and cleanup in metrics docs and rebar.config.script
+
 Version 0.9.1 - 22 Feb 2018
 ---------------------------
 
