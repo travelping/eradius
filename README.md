@@ -16,6 +16,26 @@ $ rebar3 compile
 Eradius requires a certain degree of configuration which is described in the
 app.src file. Minimal examples of server callbacks can be found in the tests.
 
+## Run sample server
+
+```
+$ cd sample
+$ rebar3 shell --config example.config --apps eradius_server_sample
+```
+
+Then run a simple benchmark:
+
+```
+1> eradius_server_sample:test().
+...
+13:40:43.979 [info] 127.0.0.1:59254 [8]: Access-Accept
+13:40:43.979 [info] 127.0.0.1:59254 [6]: Access-Accept
+13:40:43.980 [info] 127.0.0.1:59254 [3]: Access-Accept
+13:40:43.980 [info] 127.0.0.1:59254 [0]: Access-Accept
+4333.788381 req/sec.
+ok
+```
+
 ## Metrics
 
 Eradius exposes following metrics via exometer:

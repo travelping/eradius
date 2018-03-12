@@ -1,0 +1,10 @@
+%% vim: ft=erlang
+{application, eradius_server_sample, [
+   {description, "Erlang RADIUS sample server"},
+   {vsn, "0.0.1"},
+   {registered, []},
+   {applications, [kernel, stdlib, eradius]},
+   {mod, {eradius_server_sample, []}},
+   {env, []},
+   {modules, []}
+]}.
