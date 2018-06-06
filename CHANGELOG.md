@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 0.9.3 - xx XXX 2018
+---------------------------
+
+* Update 3GPP dictionary
+
 Version 0.9.2 - 12 Mar 2018
 ---------------------------
 

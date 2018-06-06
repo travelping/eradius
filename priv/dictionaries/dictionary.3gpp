@@ -50,10 +50,33 @@ ATTRIBUTE	X_3GPP-Camel-Charging			24	octets
 #
 ATTRIBUTE	X_3GPP-Packet-Filter			25	octets
 ATTRIBUTE	X_3GPP-Negotiated-DSCP			26	octets
-ATTRIBUTE	X_3GPP-PDN-Type				27	integer
+ATTRIBUTE	X_3GPP-Allocate-IP-Type			27	octets
+ATTRIBUTE	X_3GPP-External-Identifier		28	string
+ATTRIBUTE	X_3GPP-TWAN-Identifier			29	octets
+ATTRIBUTE	X_3GPP-User-Location-Info-Time		30	integer
 
-VALUE	X_3GPP-PDN-Type			IPv4			0
-VALUE	X_3GPP-PDN-Type			IPv6			1
-VALUE	X_3GPP-PDN-Type			IPv4v6			2
+
+VALUE	X_3GPP-PDP-Type			IPv4			0
+VALUE	X_3GPP-PDP-Type			PPP			1
+VALUE	X_3GPP-PDP-Type			IPv6			2
+VALUE	X_3GPP-PDP-Type			IPv4v6			3
+VALUE	X_3GPP-PDP-Type			Non-IP			4
+
+VALUE	X_3GPP-RAT-Type			UTRAN			1
+VALUE	X_3GPP-RAT-Type			GERAN			2
+VALUE	X_3GPP-RAT-Type			WLAN			3
+VALUE	X_3GPP-RAT-Type			GAN			4
+VALUE	X_3GPP-RAT-Type			HSPA-Evolution		5
+VALUE	X_3GPP-RAT-Type			EUTRAN			6
+VALUE	X_3GPP-RAT-Type			Virtual			7
+VALUE	X_3GPP-RAT-Type			IEEE-802.16e		101
+VALUE	X_3GPP-RAT-Type			3GPP2-eHRPD		102
+VALUE	X_3GPP-RAT-Type			3GPP2-HRPD		103
+VALUE	X_3GPP-RAT-Type			3GPP2-1xRTT		104
+
+VALUE	X_3GPP-Allocate-IP-Type		Do-Not-Allocate		0
+VALUE	X_3GPP-Allocate-IP-Type		Allocate-IPv4-Address	1
+VALUE	X_3GPP-Allocate-IP-Type		Allocate-IPv6-Prefix	2
+VALUE	X_3GPP-Allocate-IP-Type		Allocate-IPv4-and-IPv6	3
 
 END-VENDOR	X_3GPP
