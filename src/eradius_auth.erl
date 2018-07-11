@@ -21,7 +21,8 @@
 
 %% @doc check the request password using all available authentication mechanisms.
 %%    Tries CHAP, then MS-CHAP, then MS-CHAPv2, finally PAP.
--spec check_password(binary(), #radius_request{}) -> {boolean(), eradius_lib:attribute_list()}.
+-spec check_password(binary(), #radius_request{}) -> 
+    false | {boolean(), eradius_lib:attribute_list()}.
 check_password(Password, Req = #radius_request{authenticator = Authenticator, attrs = AVPs}) ->
     case lookup_auth_attrs(AVPs) of
         {false, Chap_pass, false, false, false, false} ->
