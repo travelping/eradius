@@ -3,10 +3,9 @@ before_install:
     - chmod u+x ./rebar3
 language: erlang
 otp_release:
-    - 18.0
-    - 18.3
-    - 19.0
-    - 20.0
+    - 19.3.6
+    - 20.3.8
+    - 21.0.4
 install: "true"
 script:
     - ./rebar3 do compile && ./rebar3 do ct && ./rebar3  coveralls send

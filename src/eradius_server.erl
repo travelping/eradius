@@ -67,6 +67,12 @@
 -define(RESEND_RETRIES, 3).             % how often a reply may be resent
 -define(HANDLER_REPLY_TIMEOUT, 15000).  % how long to wait before a remote handler is considered dead
 
+-ifdef(fun_stacktrace).
+-define(WITH_STACKTRACE(T, R, S), T:R -> S = erlang:get_stacktrace(),).
+-else.
+-define(WITH_STACKTRACE(T, R, S), T:R:S ->).
+-endif.
+
 -type port_number() :: 1..65535.
 -type req_id()      :: byte().
 -type udp_socket()  :: port().
@@ -338,9 +344,9 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
                         [printable_peer(ServerIP, Port), Request, HandlerArg, OtherReturn]),
             {discard, {bad_return, OtherReturn}}
     catch
-        Class:Reason ->
+        ?WITH_STACKTRACE(Class, Reason, Stacktrace)
             lager:error("~s INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
-                        [printable_peer(ServerIP, Port), Request, Class, Reason, erlang:get_stacktrace()]),
+                        [printable_peer(ServerIP, Port), Request, Class, Reason, Stacktrace]),
             {exit, {Class, Reason}}
     end.
 

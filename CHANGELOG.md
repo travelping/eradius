@@ -7,6 +7,7 @@ Version 0.9.3 - xx XXX 2018
 ---------------------------
 
 * Update 3GPP dictionary
+* Disable warnings for erlang:get_stacktrace/0 in OTP-21+
 
 Version 0.9.2 - 12 Mar 2018
 ---------------------------
