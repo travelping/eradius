@@ -38,7 +38,7 @@
 
 %% test callbacks
 all() -> [ipv6prefix,
-          selt_encrypt_test,
+          salt_encrypt_test,
           salt_decrypt_test,
           scramble_enc_test,
           scramble_dec_test,
@@ -86,7 +86,7 @@ ipv6prefix_enc_dec(Prefix) ->
     Bin = eradius_lib:encode_value(ipv6prefix, Prefix),
     eradius_lib:decode_value(Bin, ipv6prefix).
 
-selt_encrypt_test(_) ->
+salt_encrypt_test(_) ->
     ?equal(?CIPHER_TEXT, eradius_lib:salt_encrypt(?SALT, ?SECRET, ?REQUEST_AUTHENTICATOR, << ?PLAIN_TEXT >>)).
 
 salt_decrypt_test(_) ->
