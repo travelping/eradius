@@ -88,22 +88,22 @@ clean_each([{_Dictionary, {Headerfile, Mapfile}}|Rest]) ->
 emit([A|T], {HrlPid, _} = Hrl, Map) when is_record(A, attribute) ->
     io:format(HrlPid, "-define( '~s' , ~w ).~n",
         [d2u(A#attribute.name), A#attribute.id]),
-    io:format(Map, "~w.~n", [A]),
+    io:format(Map, "~110p.~n", [A]),
     emit(T, Hrl, Map);
 emit([V|T], {HrlPid, _} = Hrl, Map) when is_record(V, vendor) ->
     io:format(HrlPid, "-define( '~s' , ~w ).~n",
         [d2u(V#vendor.name), V#vendor.type]),
-    io:format(Map, "~w.~n", [V]),
+    io:format(Map, "~p.~n", [V]),
     emit(T, Hrl, Map);
 emit([V|T], Hrl, Map) when is_record(V, value) ->
-    io:format(Map, "~w.~n", [V]),
+    io:format(Map, "~100p.~n", [V]),
     emit(T, Hrl, Map);
 emit([{include, Include}|T], {HrlPid, _} = Hrl, Map) ->
     EscapedInclude = re:replace(Include, "\\.", "_", [global, {return, list}]),
     io:format(HrlPid, "-include( \"~s.hrl\" ).~n", [EscapedInclude]),
     % No need to add ".map" extension here. It will be added by eradius_dict
     % server automatically.
-    io:format(Map, "{include, ~w}.~n", [EscapedInclude]),
+    io:format(Map, "{include, ~p}.~n", [EscapedInclude]),
     emit(T, Hrl, Map);
 emit([header|T], {HrlPid, HrlName} = Hrl, Map) ->
     GuardDef = string:to_upper(filename:basename(HrlName, ".hrl")) ++ "_INCLUDED",
