@@ -47,6 +47,7 @@ all() -> [ipv6prefix,
           enc_simple_test,
           enc_scramble_test,
           enc_salt_test,
+          enc_ascend_test,
           enc_vendor_test,
           enc_vendor_octet_test,
           dec_simple_integer_test,
@@ -117,6 +118,10 @@ enc_salt_test(_) ->
     << ?RUser_Passwd, L:8, Enc/binary >> = eradius_lib:encode_attribute(?PDU, #attribute{id = ?RUser_Passwd, type = string, enc = salt_crypt}, << ?PLAIN_TEXT >>),
     %% need to decrypt to verfiy due to salt
     ?equal(<< ?PLAIN_TEXT >>, eradius_lib:salt_decrypt(?SECRET, ?REQUEST_AUTHENTICATOR, Enc)).
+
+enc_ascend_test(_) ->
+    L = 16 + 2,
+    ?equal(<< ?RUser_Passwd, L:8, ?ENC_PASSWORD_ASCEND >>, eradius_lib:encode_attribute(?PDU, #attribute{id = ?RUser_Passwd, type = string, enc = ascend}, << ?PLAIN_TEXT >>)).
 
 enc_vendor_test(_) ->
     L = length(?USER),
