@@ -7,7 +7,7 @@
 % -compile(bin_opt_info).
 
 -ifdef(TEST).
--export([encode_value/2, decode_value/2, scramble/3]).
+-export([encode_value/2, decode_value/2, scramble/3, ascend/3]).
 -export([salt_encrypt/4, salt_decrypt/3, encode_attribute/3, decode_attribute/5]).
 -endif.
 -include("eradius_lib.hrl").
@@ -184,6 +184,7 @@ encode_attribute(Req, #attribute{type = Type, id = ID, enc = Enc}, Value)->
 -spec encrypt_value(#radius_request{}, binary(), eradius_dict:attribute_encryption()) -> binary().
 encrypt_value(Req, Val, scramble)   -> scramble(Req#radius_request.secret, Req#radius_request.authenticator, Val);
 encrypt_value(Req, Val, salt_crypt) -> salt_encrypt(generate_salt(), Req#radius_request.secret, Req#radius_request.authenticator, Val);
+encrypt_value(Req, Val, ascend)     -> ascend(Req#radius_request.secret, Req#radius_request.authenticator, Val);
 encrypt_value(_Req, Val, no)        -> Val.
 
 -spec encode_value(eradius_dict:attribute_prim_type(), term()) -> binary().
@@ -420,6 +421,9 @@ decrypt_value(#radius_request{secret = Secret},
 	      <<Val/binary>>, salt_crypt)
 when is_binary(RequestAuthenticator) ->
     salt_decrypt(Secret, RequestAuthenticator, Val);
+decrypt_value(#radius_request{secret = Secret, authenticator = Authenticator},
+	      _, <<Val/binary>>, ascend) ->
+    ascend(Secret, Authenticator, Val);
 decrypt_value(_Req, _State, <<Val/binary>>, _Type) ->
     Val.
 
@@ -487,6 +491,11 @@ salt_crypt(Op, SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, Ciphe
 
 salt_crypt(_Op, _SharedSecret, _B, << >>, CipherText) ->
     CipherText.
+
+-spec ascend(secret(), authenticator(), binary()) -> binary().
+ascend(SharedSecret, RequestAuthenticator, <<PlainText/binary>>) ->
+    Digest = crypto:hash(md5, [RequestAuthenticator, SharedSecret]),
+    crypto:exor(Digest, pad_to(16, PlainText)).
 
 %% @doc pad binary to specific length
 %%   See <a href="http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html">

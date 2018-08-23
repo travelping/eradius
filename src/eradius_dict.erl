@@ -15,7 +15,7 @@
 
 -type table_name() :: atom() | string().
 -type attribute_id() :: pos_integer() | {vendor_id(), pos_integer()}.
--type attribute_encryption() :: 'no' | 'scramble' | 'salt_crypt'.
+-type attribute_encryption() :: 'no' | 'scramble' | 'salt_crypt' | 'ascend'.
 -type attribute_type() :: attribute_prim_type() | {tagged, attribute_prim_type()}.
 -type attribute_prim_type() :: 'string' | 'integer' | 'integer64' | 'ipaddr' | 'ipv6addr'
                              | 'ipv6prefix' | 'date' | 'abinary' | 'binary' | 'octets'.
