@@ -148,6 +148,7 @@ paa(Attr, ["encrypt", Enc]) ->
     case l2i(Enc) of
         1 -> Attr#attribute{ enc = scramble };
         2 -> Attr#attribute{ enc = salt_crypt };
+        3 -> Attr#attribute{ enc = ascend };
         _ -> Attr
     end;
 

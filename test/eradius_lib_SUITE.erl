@@ -32,6 +32,7 @@
 -define(PLAIN_TEXT_PADDED, <<"secret",0,0,0,0,0,0,0,0,0,0>>).
 -define(CIPHER_TEXT, <<171,213,166,95,152,126,124,120,86,10,78,216,190,216,26,87,55,15>>).
 -define(ENC_PASSWORD, 186,128,194,207,68,25,190,19,23,226,48,206,244,143,56,238).
+-define(ENC_PASSWORD_ASCEND, 222,170,194,83,115,231,228,55,75,17,20,6,198,33,112,197).
 -define(PDU, #radius_request{ reqid = 1, secret = ?SECRET, authenticator = ?REQUEST_AUTHENTICATOR }).
 
 
@@ -41,6 +42,8 @@ all() -> [ipv6prefix,
           salt_decrypt_test,
           scramble_enc_test,
           scramble_dec_test,
+          ascend_enc_test,
+          ascend_dec_test,
           enc_simple_test,
           enc_scramble_test,
           enc_salt_test,
@@ -94,6 +97,12 @@ scramble_enc_test(_) ->
 
 scramble_dec_test(_) ->
     ?equal(?PLAIN_TEXT_PADDED, eradius_lib:scramble(?SECRET, ?REQUEST_AUTHENTICATOR, << ?ENC_PASSWORD >>)).
+
+ascend_enc_test(_) ->
+    ?equal(<< ?ENC_PASSWORD_ASCEND >>, eradius_lib:ascend(?SECRET, ?REQUEST_AUTHENTICATOR, << ?PLAIN_TEXT >>)).
+
+ascend_dec_test(_) ->
+    ?equal(?PLAIN_TEXT_PADDED, eradius_lib:ascend(?SECRET, ?REQUEST_AUTHENTICATOR, << ?ENC_PASSWORD_ASCEND >>)).
 
 enc_simple_test(_) ->
     L = length(?USER) + 2,
