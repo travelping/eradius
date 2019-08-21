@@ -3,7 +3,7 @@
 -module(eradius_dict).
 -export([start_link/0, lookup/1, lookup/2, load_tables/1, load_tables/2]).
 -export_type([attribute/0, attr_value/0, table_name/0, attribute_id/0, attribute_type/0,
-              attribute_prim_type/0, attribute_encryption/0, vendor_id/0, value_id/0]).
+	      attribute_prim_type/0, attribute_encryption/0, vendor_id/0, value_id/0]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -18,7 +18,7 @@
 -type attribute_encryption() :: 'no' | 'scramble' | 'salt_crypt' | 'ascend'.
 -type attribute_type() :: attribute_prim_type() | {tagged, attribute_prim_type()}.
 -type attribute_prim_type() :: 'string' | 'integer' | 'integer64' | 'ipaddr' | 'ipv6addr'
-                             | 'ipv6prefix' | 'date' | 'abinary' | 'binary' | 'octets'.
+			     | 'ipv6prefix' | 'date' | 'abinary' | 'binary' | 'octets'.
 
 -type value_id() :: {attribute_id(), pos_integer()}.
 -type vendor_id() :: pos_integer().
@@ -41,16 +41,16 @@ lookup(Id) ->
 -spec lookup(attribute | vendor | value, attribute_id() | value_id() | vendor_id()) -> false | #attribute{} | #value{} | #vendor{}.
 lookup(Type, Id) ->
     case {Type, eradius_dict:lookup(Id)} of
-        {attribute, [Attr = #attribute{}]} ->
-            Attr;
-        {vendor, [Attr = #vendor{}]} ->
-            Attr;
-        {value, [Attr = #value{}]} ->
-            Attr;
-        {_, [_H | _T] = L} ->
-            lists:keyfind(Type, 1, L);
-        {_, _} ->
-            false
+	{attribute, [Attr = #attribute{}]} ->
+	    Attr;
+	{vendor, [Attr = #vendor{}]} ->
+	    Attr;
+	{value, [Attr = #value{}]} ->
+	    Attr;
+	{_, [_H | _T] = L} ->
+	    lists:keyfind(Type, 1, L);
+	{_, _} ->
+	    false
     end.
 
 -spec load_tables(list(table_name())) -> ok | {error, {consult, table_name()}}.
@@ -91,19 +91,19 @@ do_load_tables(_Dir, []) ->
     ok;
 do_load_tables(Dir, Tables) ->
     try
-        All = lists:flatmap(fun (Tab) ->
-                                     TabFile = filename:join(Dir, mapfile(Tab)),
-                                     case file:consult(TabFile) of
-                                         {ok, Res}       -> Res;
-                                         {error, _Error} -> throw({consult, TabFile})
-                                     end
-                             end, Tables),
-        {MoreIncludes, Defs} = lists:partition(fun({include, _}) -> true; (_) -> false end, All),
-        ets:insert(?TABLENAME, Defs),
-        lager:info("Loaded RADIUS tables: ~p", [Tables]),
-        do_load_tables(Dir, [T || {include, T} <- MoreIncludes])
+	All = lists:flatmap(fun (Tab) ->
+				    TabFile = filename:join(Dir, mapfile(Tab)),
+				    case file:consult(TabFile) of
+					{ok, Res}       -> Res;
+					{error, _Error} -> throw({consult, TabFile})
+				    end
+			    end, Tables),
+	{MoreIncludes, Defs} = lists:partition(fun({include, _}) -> true; (_) -> false end, All),
+	ets:insert(?TABLENAME, Defs),
+	lager:info("Loaded RADIUS tables: ~p", [Tables]),
+	do_load_tables(Dir, [T || {include, T} <- MoreIncludes])
     catch
-        throw:{consult, FailedTable} ->
-            lager:error("Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
-            {error, {consult, FailedTable}}
+	throw:{consult, FailedTable} ->
+	    lager:error("Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
+	    {error, {consult, FailedTable}}
     end.
