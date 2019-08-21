@@ -1,7 +1,18 @@
 %% -*- erlang -*-
+ExistingErlOpts = proplists:get_value(erl_opts, CONFIG, []),
+CONFIG1 =
+  try
+      persistent_term:info(),
+      io:format("CONFIG: enabling persistent_term support~n"),
+      lists:keyreplace(erl_opts, 1, CONFIG,
+		       {erl_opts, [{d, 'HAVE_PERSISTENT_TERM'}|ExistingErlOpts]})
+  catch
+      _:_ ->
+	  CONFIG
+  end,
 case os:getenv("TRAVIS") of
     "true" ->
-        JobId = os:getenv("TRAVIS_JOB_ID"),
-        lists:keystore(coveralls_service_job_id, 1, CONFIG, {coveralls_service_job_id, JobId});
-    _ -> CONFIG
+	JobId = os:getenv("TRAVIS_JOB_ID"),
+	lists:keystore(coveralls_service_job_id, 1, CONFIG, {coveralls_service_job_id, JobId});
+    _ -> CONFIG1
 end.

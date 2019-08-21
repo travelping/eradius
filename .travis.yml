@@ -1,12 +1,23 @@
+dist: xenial
+
 before_install:
     - wget https://s3.amazonaws.com/rebar3/rebar3
     - chmod u+x ./rebar3
+
 language: erlang
+
 otp_release:
-    - 18.0
-    - 18.3
     - 19.0
     - 20.0
+    - 20.3.8.22
+    - 21.1
+    - 21.2.7
+    - 21.3.8.1
+    - 22.0.7
+
 install: "true"
+
 script:
-    - ./rebar3 do compile && ./rebar3 do ct && ./rebar3  coveralls send
+    - ./rebar3 compile
+    - ./rebar3 do xref, ct
+    - (./rebar3 as test do coveralls send || /bin/true)
