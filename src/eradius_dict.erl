@@ -1,7 +1,7 @@
 %% @private
 %% @doc Dictionary server
 -module(eradius_dict).
--export([start_link/0, lookup/1, lookup/2, load_tables/1, load_tables/2]).
+-export([start_link/0, lookup/2, load_tables/1, load_tables/2]).
 -export_type([attribute/0, attr_value/0, table_name/0, attribute_id/0, attribute_type/0,
 	      attribute_prim_type/0, attribute_encryption/0, vendor_id/0, value_id/0]).
 
@@ -34,24 +34,9 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec lookup(attribute_id() | value_id()) -> [#attribute{} | #value{} | #vendor{}].
-lookup(Id) ->
-    ets:lookup(?TABLENAME, Id).
-
 -spec lookup(attribute | vendor | value, attribute_id() | value_id() | vendor_id()) -> false | #attribute{} | #value{} | #vendor{}.
 lookup(Type, Id) ->
-    case {Type, eradius_dict:lookup(Id)} of
-	{attribute, [Attr = #attribute{}]} ->
-	    Attr;
-	{vendor, [Attr = #vendor{}]} ->
-	    Attr;
-	{value, [Attr = #value{}]} ->
-	    Attr;
-	{_, [_H | _T] = L} ->
-	    lists:keyfind(Type, 1, L);
-	{_, _} ->
-	    false
-    end.
+    dict_lookup(Type, Id).
 
 -spec load_tables(list(table_name())) -> ok | {error, {consult, table_name()}}.
 load_tables(Tables) when is_list(Tables) ->
@@ -64,13 +49,10 @@ load_tables(Dir, Tables) when is_list(Tables) ->
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
 init([]) ->
-    create_table(),
+    dict_init(),
     {ok, InitialLoadTables} = application:get_env(eradius, tables),
     do_load_tables(code:priv_dir(eradius), InitialLoadTables),
     {ok, #state{}}.
-
-create_table() ->
-    ets:new(?TABLENAME, [bag, named_table, {keypos, 2}, protected]).
 
 handle_call({load_tables, Dir, Tables}, _From, State) ->
     {reply, do_load_tables(Dir, Tables), State}.
@@ -99,7 +81,7 @@ do_load_tables(Dir, Tables) ->
 				    end
 			    end, Tables),
 	{MoreIncludes, Defs} = lists:partition(fun({include, _}) -> true; (_) -> false end, All),
-	ets:insert(?TABLENAME, Defs),
+	dict_insert(Defs),
 	lager:info("Loaded RADIUS tables: ~p", [Tables]),
 	do_load_tables(Dir, [T || {include, T} <- MoreIncludes])
     catch
@@ -107,3 +89,47 @@ do_load_tables(Dir, Tables) ->
 	    lager:error("Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
 	    {error, {consult, FailedTable}}
     end.
+
+%% check if we can use persistent_term for config
+%% persistent term was added in OTP 21.2 but we can't
+%% check minor versions with macros so we're stuck waiting
+%% for OTP 22
+-ifdef(HAVE_PERSISTENT_TERM).
+
+dict_init() ->
+    ok.
+
+dict_insert(Value) when is_list(Value) ->
+    [dict_insert(V) || V <- Value];
+dict_insert(Value) when is_tuple(Value) ->
+    Key = {?TABLENAME, element(1, Value), element(2, Value)},
+    persistent_term:put(Key, Value).
+
+dict_lookup(Type, Id) ->
+    try
+	persistent_term:get({?TABLENAME, Type, Id})
+    catch
+	error:badarg ->
+	    false
+    end.
+
+-else.
+
+dict_init() ->
+    ets:new(?TABLENAME, [set, named_table, {keypos, 1}, protected]).
+
+dict_insert(Value) when is_list(Value) ->
+    [dict_insert(V) || V <- Value];
+dict_insert(Value) when is_tuple(Value) ->
+    Key = {element(1, Value), element(2, Value)},
+    ets:insert(?TABLENAME, {Key, Value}).
+
+dict_lookup(Type, Id) ->
+    try
+	ets:lookup_element(?TABLENAME, {Type, Id}, 2)
+    catch
+	error:badarg ->
+	    false
+    end.
+
+-endif.
