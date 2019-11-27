@@ -1,9 +1,21 @@
-# eradius [![Build Status](https://travis-ci.org/travelping/eradius.svg)](https://travis-ci.org/travelping/eradius) [![Coverage Status](https://coveralls.io/repos/travelping/eradius/badge.svg?branch=master&service=github)](https://coveralls.io/github/travelping/eradius?branch=master)
+# eradius
+
+[![Build Status][travis badge]][travis]
+[![Coverage Status][coveralls badge]][coveralls]
+[![Erlang Versions][erlang version badge]][travis]
 
 This fork of eradius is a radical deviation from the original
 Jungerl code. It contains a generic RADIUS client, support for
 several authentication mechanisms and dynamic configuration
 (it implements the `config_change/3` application callback).
+
+## Erlang Version Support
+
+All minor version of the current major release and the highest minor version of the
+previous major release will be supported.
+At the moment this means OTP 21.3 and OTP 22.x are supported. OTP versions before 21.0
+do not work due the use of logger. When in doubt check the `otp_release` section in
+[.travis.yml](.travis.yml) for tested versions.
 
 ## Building eradius
 
@@ -54,3 +66,10 @@ The handle time metrics are generated internally using histograms. These histogr
 all have a time span of 60s. The precise metrics are defined in `include/eradius_metrics`.
 
 See more in [METRICS.md](METRICS.md).
+
+<!-- Badges -->
+[travis]: https://travis-ci.com/travelping/eradius
+[travis badge]: https://img.shields.io/travis/com/travelping/eradius/master.svg?style=flat-square
+[coveralls]: https://coveralls.io/github/travelping/eradius
+[coveralls badge]: https://img.shields.io/coveralls/travelping/eradius/master.svg?style=flat-square
+[erlang version badge]: https://img.shields.io/badge/erlang-R21.0%20to%2022.1-blue.svg?style=flat-square
