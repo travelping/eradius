@@ -102,16 +102,7 @@ make_addr_info({Name, {IP, Port}}) ->
 
 -spec timestamp(erlang:time_unit()) -> integer().
 timestamp(Unit) ->
-    try
-        erlang:system_time(Unit)
-    catch %% fallback for erlang 17 and older
-        error:undef ->
-            {MegaSecs, Secs, MicroSecs} = os:timestamp(),
-                case Unit of
-                    seconds         ->         Secs + (MegaSecs * 1000000) + (MicroSecs / 10000000);
-                    milli_seconds   -> 1000 * (Secs + (MegaSecs * 1000000) + (MicroSecs / 10000000))
-                end
-    end.
+    erlang:system_time(Unit).
 
 %% -----------------------------------------------------------------
 %% Internal
