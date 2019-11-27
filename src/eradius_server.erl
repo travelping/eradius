@@ -339,9 +339,9 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
                         [printable_peer(ServerIP, Port), Request, HandlerArg, OtherReturn]),
             {discard, {bad_return, OtherReturn}}
     catch
-        Class:Reason ->
+        Class:Reason:S ->
             ?LOG(error, "~s INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
-                        [printable_peer(ServerIP, Port), Request, Class, Reason, erlang:get_stacktrace()]),
+                        [printable_peer(ServerIP, Port), Request, Class, Reason, S]),
             {exit, {Class, Reason}}
     end.
 
