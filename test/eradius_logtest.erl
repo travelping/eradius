@@ -71,7 +71,7 @@ start() ->
     ok.
 
 test() ->
-    application:set_env(lager, handlers, [{lager_journald_backend, []}]),
+    %% application:set_env(lager, handlers, [{lager_journald_backend, []}]),
     eradius_logtest:start(),
     eradius_logtest:test_client(),
     eradius_logtest:test_proxy(),

@@ -8,6 +8,7 @@
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-include_lib("kernel/include/logger.hrl").
 -include("eradius_dict.hrl").
 
 -define(SERVER, ?MODULE).
@@ -82,11 +83,11 @@ do_load_tables(Dir, Tables) ->
 			    end, Tables),
 	{MoreIncludes, Defs} = lists:partition(fun({include, _}) -> true; (_) -> false end, All),
 	dict_insert(Defs),
-	lager:info("Loaded RADIUS tables: ~p", [Tables]),
+	?LOG(info, "Loaded RADIUS tables: ~p", [Tables]),
 	do_load_tables(Dir, [T || {include, T} <- MoreIncludes])
     catch
 	throw:{consult, FailedTable} ->
-	    lager:error("Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
+	    ?LOG(error, "Failed to load RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
 	    {error, {consult, FailedTable}}
     end.
 
