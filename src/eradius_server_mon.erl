@@ -12,6 +12,7 @@
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-include_lib("kernel/include/logger.hrl").
 -include("eradius_lib.hrl").
 
 -define(SERVER, ?MODULE).
@@ -107,7 +108,7 @@ configure(#state{running = Running}) ->
     {ok, ConfServList} = application:get_env(servers),
     case eradius_config:validate_config(ConfServList) of
         {invalid, Message} ->
-            lager:error("Invalid server config, ~s", [Message]),
+            ?LOG(error, "Invalid server config, ~s", [Message]),
             {error, invalid_config};
         ServList -> %% list of {ServerName, ServerAddr, NasHandler} tuples
             NasList = lists:flatmap(fun(Server) -> server_naslist(Server) end, ServList),
@@ -148,7 +149,7 @@ update_server(Running, ToStop, ToStart) ->
                                    {ok, Pid} ->
                                        {ServerName, Addr, Pid};
                                    {error, Error} ->
-                                       lager:error("Could not start listener on host: ~s, occuring error: ~p",
+                                       ?LOG(error, "Could not start listener on host: ~s, occuring error: ~p",
                                        [printable_peer(IP, Port), Error])
                                end
                            end, ToStart),

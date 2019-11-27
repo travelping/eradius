@@ -60,6 +60,7 @@
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-include_lib("kernel/include/logger.hrl").
 -include("eradius_lib.hrl").
 -include("dictionary.hrl").
 
@@ -134,7 +135,7 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet},
                     eradius_metrics:update_nas_request(pending, NasProp#nas_prop.metrics_info, 1);
                 [{_ReqKey, {handling, HandlerPid}}] ->
                     %% handler process is still working on the request
-                    lager:debug("~s From: ~s INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p",
+                    ?LOG(debug, "~s From: ~s INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
                     TS2 = eradius_metrics:timestamp(milli_seconds),
                     eradius_metrics:update_nas_request(duplicate, NasProp#nas_prop.metrics_info, TS2 - TS1),
@@ -142,7 +143,7 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet},
                 [{_ReqKey, {replied, HandlerPid}}] ->
                     %% handler process waiting for resend message
                     HandlerPid ! {self(), resend, Socket},
-                    lager:debug("~s From: ~s INF: Handler ~p waiting for resent message. duplicate request (resent) ~p",
+                    ?LOG(debug, "~s From: ~s INF: Handler ~p waiting for resent message. duplicate request (resent) ~p",
                          [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
                     TS2 = eradius_metrics:timestamp(milli_seconds),
                     eradius_metrics:update_nas_request(retransmission, NasProp#nas_prop.metrics_info, TS2 - TS1),
@@ -206,7 +207,7 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
     Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
     case run_handler(Nodes, NasProp, Handler, EncRequest) of
         {reply, EncReply, Cmds} ->
-            lager:debug("~s From: ~s INF: Sending response for request ~p",
+            ?LOG(debug, "~s From: ~s INF: Sending response for request ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), ReqKey]),
             TS2 = eradius_metrics:timestamp(milli_seconds),
             inc_counter(Cmds, NasProp, TS2 - TS1),
@@ -218,12 +219,12 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
                 _ -> ok
             end;
         {discard, Reason} ->
-            lager:debug("~s From: ~s INF: Handler discarded the request ~p for reason ~1000.p",
+            ?LOG(debug, "~s From: ~s INF: Handler discarded the request ~p for reason ~1000.p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
             TS2 = eradius_metrics:timestamp(milli_seconds),
             inc_discard_counter(Reason, NasProp, TS2 - TS1);
         {exit, Reason} ->
-            lager:debug("~s From: ~s INF: Handler exited for reason ~p, discarding request ~p",
+            ?LOG(debug, "~s From: ~s INF: Handler exited for reason ~p, discarding request ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
             TS2 = eradius_metrics:timestamp(milli_seconds),
             inc_discard_counter(Reason, NasProp, TS2 - TS1)
@@ -289,12 +290,12 @@ handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, na
     case eradius_lib:decode_request(EncRequest, Secret) of
         Request = #radius_request{} ->
             Sender = {ServerIP, Port, Request#radius_request.reqid},
-            lager:info(eradius_log:collect_meta(Sender, Request),"~s",
+            ?LOG(info, eradius_log:collect_meta(Sender, Request),"~s",
                        [eradius_log:collect_message(Sender, Request)]),
             eradius_log:write_request(Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
         {bad_pdu, Reason} ->
-            lager:error("~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
+            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
             {discard, malformed}
     end.
 
@@ -315,12 +316,12 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             EncReply = eradius_lib:encode_reply(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
                                                                        msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
                                                                        eap_msg = EAPmsg}),
-            lager:info(eradius_log:collect_meta(Sender, Reply),"~s",
+            ?LOG(info, eradius_log:collect_meta(Sender, Reply),"~s",
                        [eradius_log:collect_message(Sender, Reply)]),
             eradius_log:write_request(Sender, Reply),
             {reply, EncReply,{Request#radius_request.cmd, ReplyCmd}};
         noreply ->
-            lager:error("~s INF: Noreply for request ~p from handler ~p: returned value: ~p",
+            ?LOG(error, "~s INF: Noreply for request ~p from handler ~p: returned value: ~p",
                         [printable_peer(ServerIP, Port), Request, HandlerArg, noreply]),
             {discard, handler_returned_noreply};
         {error, timeout} ->
@@ -329,17 +330,17 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             S = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             NAS = eradius_lib:get_attr(Request, ?NAS_Identifier),
             NAS_IP = inet_parse:ntoa(NasProp#nas_prop.nas_ip),
-            lager:error(eradius_log:collect_meta(S, Request),
+            ?LOG(error, eradius_log:collect_meta(S, Request),
                         "~s INF: Timeout after waiting for response to ~s(~s) from RADIUS NAS: ~s NAS_IP:~s",
                         [printable_peer(ServerIP, Port), ReqType, ReqId, NAS, NAS_IP]),
             {discard, {bad_return, {error, timeout}}};
         OtherReturn ->
-            lager:error("~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",
+            ?LOG(error, "~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",
                         [printable_peer(ServerIP, Port), Request, HandlerArg, OtherReturn]),
             {discard, {bad_return, OtherReturn}}
     catch
         Class:Reason ->
-            lager:error("~s INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
+            ?LOG(error, "~s INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
                         [printable_peer(ServerIP, Port), Request, Class, Reason, erlang:get_stacktrace()]),
             {exit, {Class, Reason}}
     end.

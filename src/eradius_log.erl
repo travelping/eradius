@@ -30,6 +30,7 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-include_lib("kernel/include/logger.hrl").
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
 -include("dictionary.hrl").
@@ -97,7 +98,7 @@ handle_cast({write_request, Time, Sender, Request}, State) ->
         {noreply, State}
     catch
         _:Error ->
-            lager:error("Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p, "
+            ?LOG(error, "Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p, "
                         "logging will be disabled", [Error, Request, Sender]),
             {noreply, logger_disabled}
     end.
@@ -128,7 +129,7 @@ init_logfile() ->
     case file:open(LogFile, [append]) of
         {ok, Fd} -> Fd;
         Error ->
-            lager:error("Failed to open file ~p (~p)", [LogFile, Error]),
+            ?LOG(error, "Failed to open file ~p (~p)", [LogFile, Error]),
             logger_disabled
     end.
 

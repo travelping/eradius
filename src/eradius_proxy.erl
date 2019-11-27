@@ -23,6 +23,7 @@
          get_key/4, strip/4]).
 -endif.
 
+-include_lib("kernel/include/logger.hrl").
 -include("eradius_lib.hrl").
 -include("dictionary.hrl").
 
@@ -95,7 +96,7 @@ send_to_server(#radius_request{reqid = ReqID} = Request, {Server, Port, Secret},
     case eradius_client:send_request({Server, Port, Secret}, Request, Options) of
         {ok, Result, Auth} -> decode_request(Result, ReqID, Secret, Auth);
         Error ->
-            lager:error("~p: error during send_request (~p)", [?MODULE, Error]),
+            ?LOG(error, "~p: error during send_request (~p)", [?MODULE, Error]),
             Error
     end.
 
@@ -105,7 +106,7 @@ decode_request(Result, ReqID, Secret, Auth) ->
         Reply = #radius_request{} ->
             {reply, Reply#radius_request{reqid = ReqID}};
         Error ->
-            lager:error("~p: request is incorrect (~p)", [?MODULE, Error]),
+            ?LOG(error, "~p: request is incorrect (~p)", [?MODULE, Error]),
             Error
     end.
 

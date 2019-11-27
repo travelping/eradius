@@ -4,6 +4,8 @@ This directory is devoted for tests against the infrastructure of Eradius.
 
 ## Using the Logtest
 
+NOTE: This is outdated. Lager and it the lager journald backend was removed.
+
 To use this test to its full extend you'll need a system journal from systemd.
 Eradius logs its informations via lager and forwards it to journal.
 You can then - via journalctl - survey the data.

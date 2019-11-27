@@ -10,6 +10,8 @@
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-include_lib("kernel/include/logger.hrl").
+
 -define(NODE_TAB, eradius_node_mon).
 -define(NODE_INFO_TAB, eradius_node_info).
 -define(PING_INTERVAL, 3000). % 3 sec
@@ -172,10 +174,10 @@ check_eradius_version(Node) ->
                     ets:insert(?NODE_INFO_TAB, {Node, Version})
             catch
                 _:_ ->
-                    lager:warning("unknown eradius version format ~p on node ~p", [Vsn, Node])
+                    ?LOG(warning, "unknown eradius version format ~p on node ~p", [Vsn, Node])
             end;
         _ ->
-            lager:warning("eradius version do not known on node ~p", [Node])
+            ?LOG(warning, "eradius version do not known on node ~p", [Node])
     end.
 
 interpret_vsn(Vsn) ->
