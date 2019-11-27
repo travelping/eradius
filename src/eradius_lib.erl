@@ -510,14 +510,7 @@ pad_to(Width, Binary) ->
 
 -spec timestamp() -> erlang:timestamp().
 timestamp() ->
-    try
-        erlang:timestamp()
-    catch
-        error:undef ->
-            % call erlang:now() via erlang:apply/3
-            % for getting rid annoying compile warning on OTP >= 18
-            erlang:apply(erlang, now, [])
-    end.
+    erlang:timestamp().
 
 -spec printable_peer(inet:ip4_address(),eradius_server:port_number()) -> io_lib:chars().
 printable_peer({IA,IB,IC,ID}, Port) ->
