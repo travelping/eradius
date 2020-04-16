@@ -34,10 +34,10 @@ all() -> [
     ].
 
 resolve_routes_test(_) ->
-    DefaultRoute = {{127, 0, 0, 1}, 1813, <<"secret">>},
-    Prod = {{127, 0, 0, 1}, 1812, <<"prod">>},
-    Test = {{127, 0, 0, 1}, 11813, <<"test">>},
-    Dev = {{127, 0, 0, 1}, 11814, <<"dev">>},
+    DefaultRoute = {eradius_test_handler:localhost(tuple), 1813, <<"secret">>},
+    Prod = {eradius_test_handler:localhost(tuple), 1812, <<"prod">>},
+    Test = {eradius_test_handler:localhost(tuple), 11813, <<"test">>},
+    Dev = {eradius_test_handler:localhost(tuple), 11814, <<"dev">>},
     {ok, R1} = re:compile("prod"),
     {ok, R2} = re:compile("test"),
     {ok, R3} = re:compile("^dev_.*"),
@@ -66,28 +66,28 @@ resolve_routes_test(_) ->
     ok.
 
 validate_arguments_test(_) ->
-    GoodConfig = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+    GoodConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-                  {routes, [{"test_1", {{127, 0, 0, 1}, 1815, <<"secret1">>}},
+                  {routes, [{"test_1", {eradius_test_handler:localhost(tuple), 1815, <<"secret1">>}},
                             {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
                            ]}
                  ],
-    BadConfig = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+    BadConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
                  {options, [{type, abc}]}
                  ],
-    BadConfig1 = [{default_route, {{127, 0, 0, 1}, 0, <<"secret">>}}],
+    BadConfig1 = [{default_route, {eradius_test_handler:localhost(tuple), 0, <<"secret">>}}],
     BadConfig2 = [{default_route, {abc, 123, <<"secret">>}}],
-    BadConfig3 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+    BadConfig3 = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}]},
                   {routes,  [{"test_1", {wrong_ip, 1815, <<"secret1">>}},
                              {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
                             ]}],
-    BadConfig4 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+    BadConfig4 = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}, {timeout, "wrong"}]},
                   {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}},
                              {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
                             ]}],
-    BadConfig5 = [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+    BadConfig5 = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}, {retries, "wrong"}]},
                   {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}},
                              {"test_2", {"localhost", 1816, <<"secret2">>}}
