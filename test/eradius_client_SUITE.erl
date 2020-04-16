@@ -164,10 +164,10 @@ check(#state{sockets = OS, no_ports = _OP, idcounters = _OC, socket_ip = OA},
 %% TESTS
 
 send_request(_Config) ->
-    ?equal(accept, eradius_test_handler:send_request({127, 0, 0, 1})),
-    ?equal(accept, eradius_test_handler:send_request("127.0.0.1")),
-    ?equal(accept, eradius_test_handler:send_request("localhost")),
-    ?equal(accept, eradius_test_handler:send_request(<<"localhost">>)),
+    ?equal(accept, eradius_test_handler:send_request(eradius_test_handler:localhost(tuple))),
+    ?equal(accept, eradius_test_handler:send_request(eradius_test_handler:localhost(ip))),
+    ?equal(accept, eradius_test_handler:send_request(eradius_test_handler:localhost(string))),
+    ?equal(accept, eradius_test_handler:send_request(eradius_test_handler:localhost(binary))),
     ok.
 
 send(FUN, Ports, Address) ->
