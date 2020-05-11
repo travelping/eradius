@@ -290,8 +290,8 @@ handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, na
     case eradius_lib:decode_request(EncRequest, Secret) of
         Request = #radius_request{} ->
             Sender = {ServerIP, Port, Request#radius_request.reqid},
-            ?LOG(info, eradius_log:collect_meta(Sender, Request),"~s",
-                       [eradius_log:collect_message(Sender, Request)]),
+            ?LOG(info, "~s", [eradius_log:collect_message(Sender, Request)],
+                 maps:from_list(eradius_log:collect_meta(Sender, Request))),
             eradius_log:write_request(Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
         {bad_pdu, Reason} ->
@@ -316,8 +316,8 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             EncReply = eradius_lib:encode_reply(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
                                                                        msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
                                                                        eap_msg = EAPmsg}),
-            ?LOG(info, eradius_log:collect_meta(Sender, Reply),"~s",
-                       [eradius_log:collect_message(Sender, Reply)]),
+            ?LOG(info, "~s", [eradius_log:collect_message(Sender, Reply)],
+                 maps:from_list(eradius_log:collect_meta(Sender, Reply))),
             eradius_log:write_request(Sender, Reply),
             {reply, EncReply,{Request#radius_request.cmd, ReplyCmd}};
         noreply ->
@@ -330,9 +330,9 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             S = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             NAS = eradius_lib:get_attr(Request, ?NAS_Identifier),
             NAS_IP = inet_parse:ntoa(NasProp#nas_prop.nas_ip),
-            ?LOG(error, eradius_log:collect_meta(S, Request),
-                        "~s INF: Timeout after waiting for response to ~s(~s) from RADIUS NAS: ~s NAS_IP:~s",
-                        [printable_peer(ServerIP, Port), ReqType, ReqId, NAS, NAS_IP]),
+            ?LOG(error, "~s INF: Timeout after waiting for response to ~s(~s) from RADIUS NAS: ~s NAS_IP:~s",
+                 [printable_peer(ServerIP, Port), ReqType, ReqId, NAS, NAS_IP],
+                 maps:from_list(eradius_log:collect_meta(S, Request))),
             {discard, {bad_return, {error, timeout}}};
         OtherReturn ->
             ?LOG(error, "~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",
