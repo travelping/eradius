@@ -37,7 +37,6 @@ all() -> [
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(eradius),
     startSocketCounter(),
-    %% application:set_env(lager, handlers, [{lager_journald_backend, []}]),
     Config.
 
 end_per_suite(_Config) ->
