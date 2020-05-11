@@ -3,13 +3,15 @@ eradius
 
 A generic RADIUS client and server.
 
-Version 1.0.0 - xx Nov 2019
+Version 1.0.0 - 11 May 2020
 ---------------------------
 
-* bump minimum OTP Version to 21.0
+* bump minimum OTP Version to 21.0 + Erlang/OTP 23 compatibility
 * use Erlang OTP logger for logging, drop lager
 * use persistent_term module for dictionary
 * Update 3GPP dictionary
+* RFC 6911 dictionary added
+* eradius_auth:check_password/2 specification fixed
 
 Version 0.9.2 - 12 Mar 2018
 ---------------------------
