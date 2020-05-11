@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 1.0.1 - 11 May 2020
+---------------------------
+
+* Fix order of arguments of ?LOG macro which contains meta information
+
 Version 1.0.0 - 11 May 2020
 ---------------------------
 
