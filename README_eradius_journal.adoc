@@ -1,6 +1,6 @@
 = Structured RADIUS Logging
 
-NOTE: This is outdated. Lager and it the lager journald backend was removed.
+NOTE: This is outdated. Lager and the lager journald backend was removed.
 
 New RADIUS logging based on lager, ejournal and journald.
 
