@@ -48,4 +48,4 @@ localhost(tuple) ->
 localhost(ip) ->
     inet:ntoa(localhost(tuple));
 localhost(atom) ->
-    list_to_atom(localhost(ip)).
+    string:join(string:replace(localhost(ip), ".", "_", all), "").

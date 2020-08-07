@@ -161,13 +161,13 @@ update_nases(ToDelete, ToInsert) ->
                       NasProp = Nas#nas.prop,
                       MetricsInfo = {ServerAddr, _} = NasProp#nas_prop.metrics_info,
                       eradius_metrics:delete_nas(MetricsInfo),
-                      eradius_metrics:update_server_time(config_reset, ServerAddr)
+                      eradius_metrics:update_server_time("last_config_reset", ServerAddr)
                   end, ToDelete),
     lists:foreach(fun(Nas) ->
                       ets:insert(?NAS_TAB, Nas),
                       NasProp = Nas#nas.prop,
                       MetricsInfo = {ServerAddr, _} = NasProp#nas_prop.metrics_info,
                       eradius_metrics:create_nas(MetricsInfo),
-                      eradius_metrics:update_server_time(config_reset, ServerAddr)
+                      eradius_metrics:update_server_time("last_config_reset", ServerAddr)
                   end, ToInsert).
 

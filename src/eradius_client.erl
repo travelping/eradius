@@ -177,41 +177,41 @@ send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authent
 
 % @private
 update_client_request(request, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(access, MetricsInfo, Ms);
+    eradius_metrics:update_client_request("access", MetricsInfo, Ms);
 update_client_request(accreq, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(accounting, MetricsInfo, Ms);
+    eradius_metrics:update_client_request("accounting", MetricsInfo, Ms);
 update_client_request(coareq, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(coa, MetricsInfo, Ms);
+    eradius_metrics:update_client_request("coa", MetricsInfo, Ms);
 update_client_request(discreq, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(disconnect, MetricsInfo, Ms);
+    eradius_metrics:update_client_request("disconnect", MetricsInfo, Ms);
 update_client_request(retransmission, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(retransmission, MetricsInfo, Ms);
+    eradius_metrics:update_client_request("retransmission", MetricsInfo, Ms);
 update_client_request(pending, MetricsInfo, Pending) ->
-    eradius_metrics:update_client_request(pending, MetricsInfo, Pending);
+    eradius_metrics:update_client_request("pending", MetricsInfo, Pending);
 update_client_request(timeout, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(timeout, MetricsInfo, Ms);
+    eradius_metrics:update_client_request("timeout", MetricsInfo, Ms);
 update_client_request(_, _, _) ->
     ok.
 
 %% @private
 update_client_response(accept, MetricsInfo) ->
-    eradius_metrics:update_client_response(access_accept, MetricsInfo);
+    eradius_metrics:update_client_response("access_accept", MetricsInfo);
 update_client_response(reject, MetricsInfo) ->
-    eradius_metrics:update_client_response(access_reject, MetricsInfo);
+    eradius_metrics:update_client_response("access_reject", MetricsInfo);
 update_client_response(challenge, MetricsInfo) ->
-    eradius_metrics:update_client_response(access_challenge, MetricsInfo);
+    eradius_metrics:update_client_response("access_challenge", MetricsInfo);
 update_client_response(accresp, MetricsInfo) ->
-    eradius_metrics:update_client_response(accounting, MetricsInfo);
+    eradius_metrics:update_client_response("accounting", MetricsInfo);
 update_client_response(coanak, MetricsInfo) ->
-    eradius_metrics:update_client_response(coa_nak, MetricsInfo);
+    eradius_metrics:update_client_response("coa_nak", MetricsInfo);
 update_client_response(coaack, MetricsInfo) ->
-    eradius_metrics:update_client_response(coa_ack, MetricsInfo);
+    eradius_metrics:update_client_response("coa_ack", MetricsInfo);
 update_client_response(discnak, MetricsInfo) ->
-    eradius_metrics:update_client_response(disconnect_nak, MetricsInfo);
+    eradius_metrics:update_client_response("disconnect_nak", MetricsInfo);
 update_client_response(discack, MetricsInfo) ->
-    eradius_metrics:update_client_response(disconnect_ack, MetricsInfo);
+    eradius_metrics:update_client_response("disconnect_ack", MetricsInfo);
 update_client_response(dropped, MetricsInfo) ->
-    eradius_metrics:update_client_response(dropped, MetricsInfo);
+    eradius_metrics:update_client_response("dropped", MetricsInfo);
 update_client_response(_, _) ->
     ok.
 

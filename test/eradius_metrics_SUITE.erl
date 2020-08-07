@@ -30,14 +30,15 @@
 -define(ATTRS_BAD, [{?NAS_Identifier, "bad"}]).
 -define(ATTRS_ERROR, [{?NAS_Identifier, "error"}]).
 -define(LOCALHOST, eradius_test_handler:localhost(atom)).
--define(CLIENT_ID_FORMAT_GOOD(Name, Type, Unit), [eradius, radius, Name, Type, client, test, '127.0.0.2', undefined, good, eradius_test_handler:localhost(atom), '1812', Unit]).
--define(CLIENT_ID_FORMAT_BAD(Name, Type, Unit), [eradius, radius, Name, Type, client, test, '127.0.0.2', undefined, bad, eradius_test_handler:localhost(atom), '1813', Unit]).
--define(CLIENT_ID_FORMAT_ERROR(Name, Type, Unit), [eradius, radius, Name, Type, client, test, '127.0.0.2', undefined, error, eradius_test_handler:localhost(atom), '1814', Unit]).
--define(SERVER_ID_FORMAT_GOOD(Name, Type, Unit), [eradius, radius, Name, Type, server, good, eradius_test_handler:localhost(atom), '1812', good_nas, '127.0.0.2', undefined, Unit]).
--define(SERVER_ID_FORMAT_GOOD_TOTAL(Name, Type, Unit), [eradius, radius, Name, Type, server, good, eradius_test_handler:localhost(atom), '1812', total, undefined, undefined, Unit]).
--define(SERVER_ID_FORMAT_BAD(Name, Type, Unit), [eradius, radius, Name, Type, server, bad, eradius_test_handler:localhost(atom), '1813', bad_nas, '127.0.0.2', undefined, Unit]).
--define(SERVER_ID_FORMAT_BAD_TOTAL(Name, Type, Unit), [eradius, radius, Name, Type, server, bad, eradius_test_handler:localhost(atom), '1813', total, undefined, undefined, Unit]).
--define(SERVER_ID_FORMAT_ERROR(Name, Type, Unit), [eradius, radius, Name, Type, server, error, eradius_test_handler:localhost(atom), '1814', error_nas, '127.0.0.2', undefined, Unit]).
+
+-define(CLIENT_ID_FORMAT_GOOD(Name, Type, Unit), list_to_binary(["eradius_radius_", Name, "_", Type, "_client_undefined_", Unit])).
+-define(CLIENT_ID_FORMAT_BAD(Name, Type, Unit), list_to_binary(["eradius_radius_", Name, "_", Type, "_client_undefined_", Unit])).
+-define(CLIENT_ID_FORMAT_ERROR(Name, Type, Unit), list_to_binary(["eradius_radius_", Name, "_", Type, "_client_undefined_", Unit])).
+-define(SERVER_ID_FORMAT_GOOD(Name, Type, Unit), list_to_binary(["eradius_radius_", Name, "_", Type, "_server_undefined_", Unit])).
+-define(SERVER_ID_FORMAT_GOOD_TOTAL(Name, Type, Unit), list_to_binary(["eradius_radius_", Name, "_", Type, "_server_total_undefined_undefined_", Unit])).
+-define(SERVER_ID_FORMAT_BAD(Name, Type, Unit), list_to_binary(["eradius_radius_", Name,  "_", Type, "_server_undefined_", Unit])).
+-define(SERVER_ID_FORMAT_BAD_TOTAL(Name, Type, Unit), list_to_binary(["eradius_radius_", Name, "_", Type, "_server_total_undefined_undefined_", Unit])).
+-define(SERVER_ID_FORMAT_ERROR(Name, Type, Unit), list_to_binary(["eradius_radius_", Name, "_", Type, "_server_undefined_", Unit])).
 
 
 %% test callbacks
@@ -100,50 +101,95 @@ bad_requests(_Config) ->
 error_requests(_Config) ->
     check_single_request(error, request, access, access_accept).
 
-
 %% helpers
 check_single_request(good, EradiusRequestType, RequestType, ResponseType) ->
     ok = send_request(EradiusRequestType, eradius_test_handler:localhost(tuple), 1812, ?ATTRS_GOOD, [{server_name, good}, {client_name, test}]),
-    ok = check_metric(?CLIENT_ID_FORMAT_GOOD(request, RequestType, counter), 1),
-    ok = check_metric(?CLIENT_ID_FORMAT_GOOD(response, ResponseType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_GOOD(request, RequestType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_GOOD(response, ResponseType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_GOOD_TOTAL(request, RequestType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_GOOD_TOTAL(response, ResponseType, counter), 1);
+    ok = check_metric(?CLIENT_ID_FORMAT_GOOD("request", atom_to_list(RequestType), "counter"),
+                      ["test", "127_0_0_2", "good", eradius_test_handler:localhost(atom), "1812"],
+                      1),
+    ok = check_metric(?CLIENT_ID_FORMAT_GOOD("response", atom_to_list(ResponseType), "counter"),
+                      ["test", "127_0_0_2", "good", eradius_test_handler:localhost(atom), "1812"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_GOOD("request", atom_to_list(RequestType), "counter"),
+                      ["good", eradius_test_handler:localhost(atom), "1812", "good_nas", "127_0_0_2"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_GOOD("response", atom_to_list(ResponseType), "counter"),
+                      ["good", eradius_test_handler:localhost(atom), "1812", "good_nas", "127_0_0_2"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_GOOD_TOTAL("request", atom_to_list(RequestType), "counter"),
+                      ["good", eradius_test_handler:localhost(atom), "1812"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_GOOD_TOTAL("response", atom_to_list(ResponseType), "counter"),
+                      ["good", eradius_test_handler:localhost(atom), "1812"],
+                      1);
 check_single_request(bad, EradiusRequestType, RequestType, ResponseType) ->
     ok = send_request(EradiusRequestType, eradius_test_handler:localhost(tuple), 1813, ?ATTRS_BAD, [{server_name, bad}, {client_name, test}]),
-    ok = check_metric(?CLIENT_ID_FORMAT_BAD(request, RequestType, counter), 1),
-    ok = check_metric(?CLIENT_ID_FORMAT_BAD(response, ResponseType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_BAD(request, RequestType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_BAD(response, ResponseType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_BAD_TOTAL(request, RequestType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_BAD_TOTAL(response, ResponseType, counter), 1);
+    ok = check_metric(?CLIENT_ID_FORMAT_BAD("request", atom_to_list(RequestType), "counter"),
+                      ["test", "127_0_0_2", "bad", eradius_test_handler:localhost(atom), "1813"],
+                      1),
+    ok = check_metric(?CLIENT_ID_FORMAT_BAD("response", atom_to_list(ResponseType), "counter"),
+                      ["test", "127_0_0_2", "bad", eradius_test_handler:localhost(atom), "1813"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_BAD("request", atom_to_list(RequestType), "counter"),
+                      ["bad", eradius_test_handler:localhost(atom), "1813", "bad_nas", "127_0_0_2"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_BAD("response", atom_to_list(ResponseType), "counter"),
+                      ["bad", eradius_test_handler:localhost(atom), "1813", "bad_nas", "127_0_0_2"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_BAD_TOTAL("request", atom_to_list(RequestType), "counter"),
+                      ["bad", eradius_test_handler:localhost(atom), "1813"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_BAD_TOTAL("response", atom_to_list(ResponseType), "counter"),
+                      ["bad", eradius_test_handler:localhost(atom), "1813"],
+                      1);
 check_single_request(error, EradiusRequestType, RequestType, ResponseType) ->
-    ok = send_request(EradiusRequestType, eradius_test_handler:localhost(tuple), 1814, ?ATTRS_ERROR, [{server_name, error}, {client_name, test}, {timeout, 1000}]),
-    ok = check_metric(?CLIENT_ID_FORMAT_ERROR(request, RequestType, counter), 1),
-    ok = check_metric(?CLIENT_ID_FORMAT_ERROR(request, retransmission, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_ERROR(request, RequestType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_ERROR(response, ResponseType, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_ERROR(request, duplicate, counter), 1),
+    ok = send_request(EradiusRequestType, eradius_test_handler:localhost(tuple), 1814, ?ATTRS_ERROR,
+                      [{server_name, error}, {client_name, test}, {timeout, 1000}]),
+    ok = check_metric(?CLIENT_ID_FORMAT_ERROR("request", atom_to_list(RequestType), "counter"),
+                      ["test", "127_0_0_2", "error", eradius_test_handler:localhost(atom), "1814"],
+                      1),
+    ok = check_metric(?CLIENT_ID_FORMAT_ERROR("request", "retransmission", "counter"),
+                      ["test", "127_0_0_2", "error", eradius_test_handler:localhost(atom), "1814"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_ERROR("request", atom_to_list(RequestType), "counter"),
+                      ["error", eradius_test_handler:localhost(atom), "1814", "error_nas", "127_0_0_2"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_ERROR("response", atom_to_list(ResponseType), "counter"),
+                      ["error", eradius_test_handler:localhost(atom), "1814", "error_nas", "127_0_0_2"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_ERROR("request", "duplicate", "counter"),
+                      ["error", eradius_test_handler:localhost(atom), "1814", "error_nas", "127_0_0_2"],
+                      1),
     %% retransmissions don't count into client statistics
-    ok = check_metric(?CLIENT_ID_FORMAT_ERROR(request, total, counter), 1),
-    ok = check_metric(?SERVER_ID_FORMAT_ERROR(request, total, counter), 2).
+    ok = check_metric(?CLIENT_ID_FORMAT_ERROR("request", "total", "counter"),
+                      ["test", "127_0_0_2", "error", eradius_test_handler:localhost(atom), "1814"],
+                      1),
+    ok = check_metric(?SERVER_ID_FORMAT_ERROR("request", "total", "counter"),
+                      ["error", eradius_test_handler:localhost(atom), "1814", "error_nas", "127_0_0_2"],
+                      2).
 
 check_total_requests(good, N) ->
-    ok = check_metric(?SERVER_ID_FORMAT_GOOD_TOTAL(request, total, counter), N),
-    ok = check_metric(?SERVER_ID_FORMAT_GOOD_TOTAL(response, total, counter), N);
+    ok = check_metric(?SERVER_ID_FORMAT_GOOD_TOTAL("request", "total", "counter"),
+                      ["good", eradius_test_handler:localhost(atom), "1812"],
+                      N),
+    ok = check_metric(?SERVER_ID_FORMAT_GOOD_TOTAL("response", "total", "counter"),
+                      ["good", eradius_test_handler:localhost(atom), "1812"],
+                      N);
 check_total_requests(bad, N) ->
-    ok = check_metric(?SERVER_ID_FORMAT_BAD_TOTAL(request, total, counter), N),
-    ok = check_metric(?SERVER_ID_FORMAT_BAD_TOTAL(response, total, counter), N).
+    ok = check_metric(?SERVER_ID_FORMAT_BAD_TOTAL("request", "total", "counter"),
+                      ["bad", eradius_test_handler:localhost(atom), "1813"],
+                      N),
+    ok = check_metric(?SERVER_ID_FORMAT_BAD_TOTAL("response", "total", "counter"),
+                      ["bad", eradius_test_handler:localhost(atom), "1813"],
+                      N).
 
-check_metric(Id, Count) ->
-    case exometer:get_value(Id) of
-        {ok, [{value, Count} | _]} ->
-            ok;
-        Else ->
+check_metric(Id, Labels, Count) ->
+    case prometheus_counter:value(Id, Labels) of
+	Count ->
+	    ok;
+	Else ->
             {error, {Count, Else}}
     end.
-
 
 send_request(Command, IP, Port, Attrs, Opts) ->
     ok = eradius_dict:load_tables([dictionary]),

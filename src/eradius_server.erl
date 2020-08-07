@@ -108,7 +108,7 @@ init({ServerName, IP, Port}) ->
     case gen_udp:open(Port, [{active, once}, {ip, IP}, binary, {recbuf, RecBuf}]) of
         {ok, Socket} ->
             MetricsAddress = eradius_metrics:make_addr_info({ServerName, {IP, Port}}),
-            eradius_metrics:update_server_time(reset, MetricsAddress),
+            eradius_metrics:update_server_time("last_reset", MetricsAddress),
             {ok, #state{socket = Socket,
                         ip = IP, port = Port, name = ServerName,
                         transacts = ets:new(transacts, []),
@@ -132,13 +132,13 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet},
                     HandlerPid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ReqKey, Handler, NNasProp, ReqUDP, TS1]),
                     ets:insert(Transacts, {ReqKey, {handling, HandlerPid}}),
                     ets:insert(Transacts, {HandlerPid, ReqKey}),
-                    eradius_metrics:update_nas_request(pending, NasProp#nas_prop.metrics_info, 1);
+                    eradius_metrics:update_nas_request("pending", NasProp#nas_prop.metrics_info, 1);
                 [{_ReqKey, {handling, HandlerPid}}] ->
                     %% handler process is still working on the request
                     ?LOG(debug, "~s From: ~s INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
                     TS2 = eradius_metrics:timestamp(milli_seconds),
-                    eradius_metrics:update_nas_request(duplicate, NasProp#nas_prop.metrics_info, TS2 - TS1),
+                    eradius_metrics:update_nas_request("duplicate", NasProp#nas_prop.metrics_info, TS2 - TS1),
                     eradius_counter:inc_counter(dupRequests, NasProp);
                 [{_ReqKey, {replied, HandlerPid}}] ->
                     %% handler process waiting for resend message
@@ -146,8 +146,8 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet},
                     ?LOG(debug, "~s From: ~s INF: Handler ~p waiting for resent message. duplicate request (resent) ~p",
                          [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
                     TS2 = eradius_metrics:timestamp(milli_seconds),
-                    eradius_metrics:update_nas_request(retransmission, NasProp#nas_prop.metrics_info, TS2 - TS1),
-                    eradius_metrics:update_nas_response(retransmission, NasProp#nas_prop.metrics_info),
+                    eradius_metrics:update_nas_request("retransmission", NasProp#nas_prop.metrics_info, TS2 - TS1),
+                    eradius_metrics:update_nas_response("retransmission", NasProp#nas_prop.metrics_info),
                     eradius_counter:inc_counter(dupRequests, NasProp)
             end,
             NewState = State;
@@ -229,7 +229,7 @@ do_radius(ServerPid, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, F
             TS2 = eradius_metrics:timestamp(milli_seconds),
             inc_discard_counter(Reason, NasProp, TS2 - TS1)
     end,
-    eradius_metrics:update_nas_request(pending, NasProp#nas_prop.metrics_info, -1).
+    eradius_metrics:update_nas_request("pending", NasProp#nas_prop.metrics_info, -1).
 
 wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, Retries) ->
     erlang:send_after(ResendTimeout, self(), timeout),
@@ -350,51 +350,51 @@ inc_counter({ReqCmd, RespCmd}, NasProp, Ms) ->
     inc_reply_counter(RespCmd, NasProp).
 
 inc_request_counter(request, NasProp, Ms) ->
-    eradius_metrics:update_nas_request(access, NasProp#nas_prop.metrics_info, Ms),
+    eradius_metrics:update_nas_request("access", NasProp#nas_prop.metrics_info, Ms),
     eradius_counter:inc_request_counter(accessRequests, NasProp);
 inc_request_counter(accreq, NasProp, Ms) ->
-    eradius_metrics:update_nas_request(accounting, NasProp#nas_prop.metrics_info, Ms),
+    eradius_metrics:update_nas_request("accounting", NasProp#nas_prop.metrics_info, Ms),
     eradius_counter:inc_request_counter(accountRequests, NasProp);
 inc_request_counter(coareq, NasProp, Ms) ->
-    eradius_metrics:update_nas_request(coa, NasProp#nas_prop.metrics_info, Ms),
+    eradius_metrics:update_nas_request("coa", NasProp#nas_prop.metrics_info, Ms),
     eradius_counter:inc_request_counter(coaRequests, NasProp);
 inc_request_counter(discreq, NasProp, Ms) ->
-    eradius_metrics:update_nas_request(disconnect, NasProp#nas_prop.metrics_info, Ms),
+    eradius_metrics:update_nas_request("disconnect", NasProp#nas_prop.metrics_info, Ms),
     eradius_counter:inc_request_counter(discRequests, NasProp);
 inc_request_counter(_Cmd, _NasProp, _Ms) ->
     ok.
 
 inc_reply_counter(accept, NasProp) ->
-    eradius_metrics:update_nas_response(access_accept, NasProp#nas_prop.metrics_info),
+    eradius_metrics:update_nas_response("access_accept", NasProp#nas_prop.metrics_info),
     eradius_counter:inc_reply_counter(accessAccepts, NasProp);
 inc_reply_counter(reject, NasProp) ->
-    eradius_metrics:update_nas_response(access_reject, NasProp#nas_prop.metrics_info),
+    eradius_metrics:update_nas_response("access_reject", NasProp#nas_prop.metrics_info),
     eradius_counter:inc_reply_counter(accessRejects, NasProp);
 inc_reply_counter(challenge, NasProp) ->
-    eradius_metrics:update_nas_response(access_challenge, NasProp#nas_prop.metrics_info),
+    eradius_metrics:update_nas_response("access_challenge", NasProp#nas_prop.metrics_info),
     eradius_counter:inc_reply_counter(accessChallenges, NasProp);
 inc_reply_counter(accresp, NasProp) ->
-    eradius_metrics:update_nas_response(accounting, NasProp#nas_prop.metrics_info),
+    eradius_metrics:update_nas_response("accounting", NasProp#nas_prop.metrics_info),
     eradius_counter:inc_reply_counter(accountResponses, NasProp);
 inc_reply_counter(coaack, NasProp) ->
-    eradius_metrics:update_nas_response(coa_ack, NasProp#nas_prop.metrics_info),
+    eradius_metrics:update_nas_response("coa_ack", NasProp#nas_prop.metrics_info),
     eradius_counter:inc_reply_counter(coaAcks, NasProp);
 inc_reply_counter(coanak, NasProp) ->
-    eradius_metrics:update_nas_response(coa_nak, NasProp#nas_prop.metrics_info),
+    eradius_metrics:update_nas_response("coa_nak", NasProp#nas_prop.metrics_info),
     eradius_counter:inc_reply_counter(coaNaks, NasProp);
 inc_reply_counter(discack, NasProp) ->
-    eradius_metrics:update_nas_response(disconnect_ack, NasProp#nas_prop.metrics_info),
+    eradius_metrics:update_nas_response("disconnect_ack", NasProp#nas_prop.metrics_info),
     eradius_counter:inc_reply_counter(discAcks, NasProp);
 inc_reply_counter(discnak, NasProp) ->
-    eradius_metrics:update_nas_response(disconnect_nak, NasProp#nas_prop.metrics_info),
+    eradius_metrics:update_nas_response("disconnect_nak", NasProp#nas_prop.metrics_info),
     eradius_counter:inc_reply_counter(discNaks, NasProp);
 inc_reply_counter(_Cmd, _NasProp) ->
     ok.
 
 %% @TODO: extend for other failures
 inc_discard_counter(malformed, NasProp, Ms) ->
-    eradius_metrics:update_nas_request(malformed, NasProp#nas_prop.metrics_info, Ms),
+    eradius_metrics:update_nas_request("malformed", NasProp#nas_prop.metrics_info, Ms),
     eradius_counter:inc_counter(malformedRequests, NasProp);
 inc_discard_counter(_Reason, NasProp, Ms) ->
-    eradius_metrics:update_nas_request(dropped, NasProp#nas_prop.metrics_info, Ms),
+    eradius_metrics:update_nas_request("dropped", NasProp#nas_prop.metrics_info, Ms),
     eradius_counter:inc_counter(packetsDropped, NasProp).

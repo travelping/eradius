@@ -221,4 +221,3 @@ strip(Username, prefix, true, Separator) ->
 %	    MetricName = eradius_metrics:get_metric_name(IP, Port, routes_resolved, proxy),
 %	    exometer:update_or_create(MetricName, 1, spiral, [{time_span, 1000}])
 %    end.
-
