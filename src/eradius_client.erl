@@ -20,6 +20,7 @@
 
 -import(eradius_lib, [printable_peer/2]).
 
+-include_lib("kernel/include/logger.hrl").
 -include("eradius_lib.hrl").
 -define(SERVER, ?MODULE).
 -define(DEFAULT_RETRIES, 3).
@@ -132,7 +133,7 @@ proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_Serve
     case eradius_lib:decode_request(Response, Secret, Authenticator) of
         {bad_pdu, Reason} ->
             update_client_response(dropped, MetricsInfo),
-            lager:error("~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         Decoded ->
             update_client_response(Decoded#radius_request.cmd, MetricsInfo),
@@ -291,7 +292,7 @@ configure(State) ->
         {ok, Address} ->
             configure_address(State, ClientPortCount, Address);
         {error, _} ->
-            lager:error("Invalid RADIUS client IP (parsing failed): ~p", [ClientIP]),
+            ?LOG(error, "Invalid RADIUS client IP (parsing failed): ~p", [ClientIP]),
             {error, {bad_client_ip, ClientIP}}
     end.
 
@@ -302,7 +303,7 @@ configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NA
         NAdd    ->
             configure_ports(State, NPorts);
         _       ->
-            lager:info("Reopening RADIUS client sockets (client_ip changed to ~s)", [inet:ntoa(NAdd)]),
+            ?LOG(info, "Reopening RADIUS client sockets (client_ip changed to ~s)", [inet:ntoa(NAdd)]),
             array:map(  fun(_PortIdx, Pid) ->
                                 case Pid of
                                     undefined   -> done;

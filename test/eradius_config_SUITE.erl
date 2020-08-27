@@ -38,7 +38,7 @@ config_1(_Config) ->
     Conf = [{session_nodes, ['node1@host1', 'node2@host2']},
             {radius_callback, ?MODULE},
             {servers, [
-                          {root, {"127.0.0.1", [1812, 1813]}}
+                          {root, {eradius_test_handler:localhost(ip), [1812, 1813]}}
                       ]},
             {root, [
                       { {"NAS1", [arg1, arg2]},
@@ -47,30 +47,31 @@ config_1(_Config) ->
                           [{{10, 18, 14, 3}, <<"secret2">>, [{nas_id, <<"name">>}]}]}
                    ]}],
     apply_conf(Conf),
+    LocalHost = eradius_test_handler:localhost(tuple),
     ?match({ok, {?MODULE,[arg1,arg2]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1813,
                           nas_id = <<"name">>,
                           nas_ip = {10,18,14,3},
                           handler_nodes = ['node1@host1', 'node2@host2']
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,3})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1813, {10,18,14,3})),
     ?match({ok, {?MODULE,[arg1,arg2]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1812,
                           nas_id = <<"name">>,
                           nas_ip = {10,18,14,3},
                           handler_nodes = ['node1@host1', 'node2@host2']
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1812, {10,18,14,3})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1812, {10,18,14,3})),
     ?match({ok, {?MODULE,[arg1,arg2]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1813,
                           nas_id = <<"NAS1_10.18.14.2">>,
                           nas_ip = {10,18,14,2},
                           handler_nodes = ['node1@host1', 'node2@host2']
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,2})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1813, {10,18,14,2})),
     ok.
 
 config_2(_Config) ->
@@ -80,7 +81,7 @@ config_2(_Config) ->
                             ]
             },
             {servers, [
-                          {root, {"127.0.0.1", [1812, 1813]}}
+                          {root, {eradius_test_handler:localhost(ip), [1812, 1813]}}
                       ]},
             {root, [
                       { {handler1, "NAS1", [arg1, arg2]},
@@ -90,34 +91,35 @@ config_2(_Config) ->
                           [ {"10.18.14.2", <<"secret2">>, [{group, "NodeGroup2"}]} ] }
                  ]}],
     apply_conf(Conf),
+    LocalHost = eradius_test_handler:localhost(tuple),
     ?match({ok, {handler1,[arg1,arg2]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1813,
                           nas_id = <<"NAS1_10.18.14.3">>,
                           nas_ip = {10,18,14,3},
                           handler_nodes = ['node1@host1', 'node2@host2']
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,3})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1813, {10,18,14,3})),
     ?match({ok, {handler1,[arg1,arg2]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1813,
                           nas_id = <<"NAS1_10.18.14.4">>,
                           nas_ip = {10,18,14,4},
                           handler_nodes = ['node1@host1', 'node2@host2']
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,4})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1813, {10,18,14,4})),
     ?match({ok, {handler2,[arg3,arg4]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1813,
                           nas_id = <<"NAS2_10.18.14.2">>,
                           nas_ip = {10,18,14,2},
                           handler_nodes = ['node3@host3', 'node4@host4']
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,2})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1813, {10,18,14,2})),
     ok.
 
 config_nas_removing(_Config) ->
-    Conf = [{servers, [ {root, {"127.0.0.1", [1812, 1813]}} ]},
+    Conf = [{servers, [ {root, {eradius_test_handler:localhost(ip), [1812, 1813]}} ]},
             {root, [ ]}],
     apply_conf(Conf),
     ?match([], ets:tab2list(eradius_nas_tab)),
@@ -130,45 +132,46 @@ config_with_ranges(_Config) ->
                             ]
             },
             {servers, [
-                          {root, {"127.0.0.1", [1812, 1813]}}
+                          {root, {eradius_test_handler:localhost(ip), [1812, 1813]}}
                       ]},
             {root, [
                       { {handler, "NAS", []},
                           [ {"10.18.14.2/30", <<"secret2">>, [{group, "NodeGroup"}]} ] }
                  ]}],
     apply_conf(Conf),
+    LocalHost = eradius_test_handler:localhost(tuple),
     ?match({ok, {handler,[]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1812,
                           nas_id = <<"NAS_10.18.14.2">>,
                           nas_ip = {10,18,14,2},
                           handler_nodes = Nodes
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1812, {10,18,14,2})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1812, {10,18,14,2})),
     ?match({ok, {handler,[]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1812,
                           nas_id = <<"NAS_10.18.14.3">>,
                           nas_ip = {10,18,14,3},
                           handler_nodes = Nodes
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1812, {10,18,14,3})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1812, {10,18,14,3})),
     ?match({ok, {handler,[]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1813,
                           nas_id = <<"NAS_10.18.14.1">>,
                           nas_ip = {10,18,14,1},
                           handler_nodes = Nodes
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,1})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1813, {10,18,14,1})),
     ?match({ok, {handler,[]},
                 #nas_prop{
-                          server_ip = {127,0,0,1},
+                          server_ip = LocalHost,
                           server_port = 1813,
                           nas_id = <<"NAS_10.18.14.2">>,
                           nas_ip = {10,18,14,2},
                           handler_nodes = Nodes
-                         }}, eradius_server_mon:lookup_handler({127,0,0,1}, 1813, {10,18,14,2})),
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1813, {10,18,14,2})),
     ok.
 
 log_test(_Config) ->

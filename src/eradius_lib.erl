@@ -109,7 +109,7 @@ encode_message_authenticator(_Req = #radius_request{msg_hmac = false}, Request) 
 encode_message_authenticator(Req = #radius_request{reqid = ReqID, cmd = Command, authenticator = Authenticator, msg_hmac = true}, {Body, BodySize}) ->
     Head = <<(encode_command(Command)):8, ReqID:8, (BodySize + 20 + 2 +16):16>>,
     ReqAuth = <<Authenticator:16/binary>>,
-    HMAC = crypto:hmac(md5, Req#radius_request.secret, [Head, ReqAuth, Body, <<?RMessage_Authenticator,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>]),
+    HMAC = message_authenticator(Req#radius_request.secret, [Head, ReqAuth, Body, <<?RMessage_Authenticator,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>]),
     {<<Body/binary, ?RMessage_Authenticator, 18, HMAC/binary>>, BodySize + 2 + 16}.
 
 chunk(Bin, Length) ->
@@ -271,7 +271,7 @@ validate_packet_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, _PacketAuthent
 validate_packet_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
     case Body of
         <<Before:Pos/bytes, Value:16/bytes, After/binary>> ->
-            case crypto:hmac(md5, Secret, [<<Cmd:8, ReqId:8, Len:16>>, Auth, Before, zero_authenticator(), After]) of
+            case message_authenticator(Secret, [<<Cmd:8, ReqId:8, Len:16>>, Auth, Before, zero_authenticator(), After]) of
             Value ->
                 ok;
             _     ->
@@ -510,15 +510,19 @@ pad_to(Width, Binary) ->
 
 -spec timestamp() -> erlang:timestamp().
 timestamp() ->
-    try
-        erlang:timestamp()
-    catch
-        error:undef ->
-            % call erlang:now() via erlang:apply/3
-            % for getting rid annoying compile warning on OTP >= 18
-            erlang:apply(erlang, now, [])
-    end.
+    erlang:timestamp().
 
 -spec printable_peer(inet:ip4_address(),eradius_server:port_number()) -> io_lib:chars().
 printable_peer({IA,IB,IC,ID}, Port) ->
     io_lib:format("~b.~b.~b.~b:~b",[IA,IB,IC,ID,Port]).
+
+%% @doc calculate the MD5 message authenticator
+-if(?OTP_RELEASE >= 23).
+%% crypto API changes in OTP >= 23
+message_authenticator(Secret, Msg) ->
+    crypto:mac(hmac, md5, Secret, Msg).
+-else.
+message_authenticator(Secret, Msg) ->
+    crypto:hmac(md5, Secret, Msg).
+
+-endif.
