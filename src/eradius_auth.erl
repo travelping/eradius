@@ -129,6 +129,19 @@ v2_generate_nt_response(AuthenticatorChallenge, PeerChallenge, UserName, PasswdH
 v2_challenge_hash(PeerChallenge, AuthenticatorChallenge, UserName) ->
     binary:part(crypto:hash(sha, [PeerChallenge, AuthenticatorChallenge, UserName]), 0, 8).
 
+%% crypto API changes in OTP >= 23
+-if(?OTP_RELEASE >= 23).
+%% @doc calculate MS-CHAP challenge response
+challenge_response(Challenge, PasswdHash) ->
+    Hash = eradius_lib:pad_to(21, PasswdHash),
+    <<Key1:8/binary, Key2:8/binary, Key3:8/binary>> = des_key_from_hash(Hash),
+
+    Resp1 = crypto:crypto_one_time(des_ecb, Key1, Challenge, true),
+    Resp2 = crypto:crypto_one_time(des_ecb, Key2, Challenge, true),
+    Resp3 = crypto:crypto_one_time(des_ecb, Key3, Challenge, true),
+
+    <<Resp1/binary, Resp2/binary, Resp3/binary>>.
+-else.
 %% @doc calculate MS-CHAP challenge response
 challenge_response(Challenge, PasswdHash) ->
     Hash = eradius_lib:pad_to(21, PasswdHash),
@@ -139,6 +152,7 @@ challenge_response(Challenge, PasswdHash) ->
     Resp3 = crypto:block_encrypt(des_ecb, Key3, Challenge),
 
     <<Resp1/binary, Resp2/binary, Resp3/binary>>.
+-endif.
 
 v2_generate_authenticator_response(PasswdHash, NTResponse, PeerChallenge, AuthenticatorChallenge, UserName) ->
     PasswdHashHash = nt_hash(PasswdHash),
@@ -150,8 +164,14 @@ v2_generate_authenticator_response(PasswdHash, NTResponse, PeerChallenge, Authen
     %% trailing space needed for some implementations...
     <<"S=", (eradius_log:bin_to_hexstr(FinalDigest))/binary, " ">>.
 
+%% crypto API changes in OTP >= 23
+-if(?OTP_RELEASE >= 23).
+des_hash(<< Key:7/binary >>) ->
+    crypto:crypto_one_time(des_ecb, des_key_from_hash(Key), <<"KGS!@#$%">>, true).
+-else.
 des_hash(<< Key:7/binary >>) ->
     crypto:block_encrypt(des_ecb, des_key_from_hash(Key), <<"KGS!@#$%">>).
+-endif.
 
 lm_password(Password) ->
     binary:part(eradius_lib:pad_to(14, list_to_binary(string:to_upper(binary_to_list(Password)))), 0, 14).
