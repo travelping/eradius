@@ -128,8 +128,8 @@ configure(#state{running = Running}) ->
 
 server_naslist({ServerName, {IP, Port}, HandlerList}) ->
     lists:map(fun({NasId, NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs}) ->
-                ServerInfo = eradius_metrics:make_addr_info({ServerName, {IP, Port}}),
-                NasInfo = eradius_metrics:make_addr_info({NasId, {NasIP, undefined}}),
+                ServerInfo = eradius_lib:make_addr_info({ServerName, {IP, Port}}),
+                NasInfo = eradius_lib:make_addr_info({NasId, {NasIP, undefined}}),
                 #nas{key = {{IP, Port}, NasIP}, server_name = ServerName, handler = {HandlerMod, HandlerArgs},
                 prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret,
                                  metrics_info = {ServerInfo, NasInfo}}}
@@ -156,18 +156,6 @@ update_server(Running, ToStop, ToStart) ->
     (Running -- Stopped) ++ NewStarted.
 
 update_nases(ToDelete, ToInsert) ->
-    lists:foreach(fun(Nas) ->
-                      ets:delete_object(?NAS_TAB, Nas),
-                      NasProp = Nas#nas.prop,
-                      MetricsInfo = {ServerAddr, _} = NasProp#nas_prop.metrics_info,
-                      eradius_metrics:delete_nas(MetricsInfo),
-                      eradius_metrics:update_server_time(config_reset, ServerAddr)
-                  end, ToDelete),
-    lists:foreach(fun(Nas) ->
-                      ets:insert(?NAS_TAB, Nas),
-                      NasProp = Nas#nas.prop,
-                      MetricsInfo = {ServerAddr, _} = NasProp#nas_prop.metrics_info,
-                      eradius_metrics:create_nas(MetricsInfo),
-                      eradius_metrics:update_server_time(config_reset, ServerAddr)
-                  end, ToInsert).
+    lists:foreach(fun(Nas) -> ets:delete_object(?NAS_TAB, Nas) end, ToDelete),
+    lists:foreach(fun(Nas) -> ets:insert(?NAS_TAB, Nas) end, ToInsert).
 

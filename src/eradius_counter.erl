@@ -2,7 +2,8 @@
 %%  This module implements the statitics counter for RADIUS servers and clients
 
 -module(eradius_counter).
--export([init_counter/1, inc_counter/2, reset_counter/1, inc_request_counter/2, inc_reply_counter/2]).
+-export([init_counter/1, inc_counter/2, dec_counter/2, reset_counter/1, inc_request_counter/2, inc_reply_counter/2,
+        observe/4, observe/5]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -21,15 +22,19 @@
 
 %% ------------------------------------------------------------------------------------------
 %% API
-
 %% @doc initialize a counter structure
-init_counter(Key = {_ServerIP, ServerPort}) when is_integer(ServerPort) ->
-	#server_counter{key = Key, startTime = eradius_lib:timestamp(), resetTime = eradius_lib:timestamp()};
-init_counter(#nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP}) ->
-    #nas_counter{key = {{ServerIP, ServerPort}, NasIP}};
+init_counter({ServerIP, ServerPort, ServerName}) when is_integer(ServerPort) ->
+    #server_counter{key = {ServerIP, ServerPort},
+                    startTime = eradius_lib:timestamp(),
+                    resetTime = eradius_lib:timestamp(),
+                    server_name = ServerName};
+init_counter(#nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId}) ->
+    #nas_counter{key = {{ServerIP, ServerPort}, NasIP, NasId}};
 init_counter({{ServerIP, ServerPort}, NasIP})
   when is_tuple(ServerIP), is_integer(ServerPort), is_tuple(NasIP) ->
-    #nas_counter{key = {{ServerIP, ServerPort}, NasIP}}.
+    #nas_counter{key = {{ServerIP, ServerPort}, NasIP}};
+init_counter({{ClientName, ClientIP, ClientPort}, {ServerName, ServerIp, ServerPort}}) ->
+    #client_counter{key = {{ClientName, ClientIP, ClientPort}, {ServerName, ServerIp, ServerPort}}, server_name = ServerName}.
 
 %% @doc reset counters
 reset_counter(#server_counter{startTime = Up}) -> #server_counter{startTime = Up, resetTime = eradius_lib:timestamp()};
@@ -38,12 +43,10 @@ reset_counter(Nas = #nas_prop{}) ->
 
 %% @doc increment requests counters
 inc_request_counter(Counter, Nas) ->
-    inc_counter(requests, Nas),
     inc_counter(Counter, Nas).
 
 %% @doc increment reply counters
 inc_reply_counter(Counter, Nas) ->
-    inc_counter(replies, Nas),
     inc_counter(Counter, Nas).
 
 %% @doc increment a specific counter value
@@ -52,15 +55,24 @@ inc_counter(invalidRequests,  Counters = #server_counter{invalidRequests  = Valu
 inc_counter(discardNoHandler, Counters = #server_counter{discardNoHandler = Value}) ->
     Counters#server_counter{discardNoHandler = Value + 1};
 inc_counter(Counter, Nas = #nas_prop{}) ->
-    gen_server:cast(?MODULE, {inc_counter, Counter, Nas}).
+    gen_server:cast(?MODULE, {inc_counter, Counter, Nas});
+inc_counter(Counter, {{ClientName, ClientIP, ClientPort}, {ServerName, ServerIp, ServerPort}}) ->
+    gen_server:cast(?MODULE, {inc_counter, Counter, {{ClientName, ClientIP, ClientPort}, {ServerName, ServerIp, ServerPort}}}).
+
+dec_counter(Counter, Nas = #nas_prop{}) ->
+    gen_server:cast(?MODULE, {dec_counter, Counter, Nas});
+dec_counter(Counter, {{ClientName, ClientIP, ClientPort}, {ServerName, ServerIp, ServerPort}}) ->
+    gen_server:cast(?MODULE, {dec_counter, Counter, {{ClientName, ClientIP, ClientPort}, {ServerName, ServerIp, ServerPort}}}).
 
 %% @doc reset all counters to zero
 reset() ->
     gen_server:call(?MODULE, reset).
+
 %% @doc read counters and reset to zero
 -spec pull() -> stats().
 pull() ->
     gen_server:call(?MODULE, pull).
+
 %% @doc read counters
 -spec read() -> stats().
 read() ->
@@ -75,6 +87,33 @@ aggregate({Servers, {ResetTS, Nass}}) ->
                         orddict:new(), Nass),
     NSum1 = [Value || {_Key, Value} <- orddict:to_list(NSums)],
     {Servers, {ResetTS, NSum1}}.
+
+%% @doc Update the given histogram metric value
+%% NOTE: We use prometheus_histogram collector here instead of eradius_counter ets table because
+%% it is much easy to use histograms in this way. As we don't need to manage buckets and do
+%% the other histogram things in eradius, but prometheus.erl will do it for us
+observe(Name, {{ClientName, ClientIP, _}, {ServerName, ServerIP, ServerPort}} = MetricsInfo, Value, Help) ->
+    try
+        prometheus_histogram:observe(Name, [ServerIP, ServerPort, ServerName, ClientName, ClientIP], Value)
+    catch _:_ ->
+            Buckets = application:get_env(eradius, histogram_buckets, [10, 30, 50, 75, 100, 1000, 2000]),
+            prometheus_histogram:new([{name, Name},
+                                      {labels, [server_ip, server_port, server_name, client_name, client_ip]},
+                                      {buckets, Buckets},
+                                      {help, Help}]),
+            observe(Name, MetricsInfo, Value, Help)
+    end.
+observe(Name, #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId} = Nas, Value, ServerName, Help) ->
+    try
+        prometheus_histogram:observe(Name, [ServerIP, ServerPort, ServerName, NasIP, NasId], Value)
+    catch _:_ ->
+            Buckets = application:get_env(eradius, histogram_buckets, [10, 30, 50, 75, 100, 1000, 2000]),
+            prometheus_histogram:new([{name, Name},
+                                      {labels, [server_ip, server_port, server_name, nas_ip, nas_id]},
+                                      {buckets, Buckets},
+                                      {help, Help}]),
+            observe(Name, Nas, Value, ServerName, Help)
+    end.
 
 %% helper to be called from the aggregator to fetch this nodes values
 %% @private
@@ -97,32 +136,63 @@ init([]) ->
 
 %% @private
 handle_call(pull, _From, State) ->
-    Nass = read_stats(State),
+    NassAndClients = read_stats(State),
     Servers = server_stats(pull),
     ets:delete_all_objects(?MODULE),
-    {reply, {Servers, Nass}, State#state{reset = eradius_lib:timestamp()}};
+    {reply, {Servers, NassAndClients}, State#state{reset = eradius_lib:timestamp()}};
 handle_call(read, _From, State) ->
-    Nass = read_stats(State),
+    NassAndClients = read_stats(State),
     Servers = server_stats(read),
-    {reply, {Servers, Nass}, State};
+    {reply, {Servers, NassAndClients}, State};
 handle_call(reset, _From, State) ->
     server_stats(reset),
     ets:delete_all_objects(?MODULE),
     {reply, ok, State#state{reset = eradius_lib:timestamp()}}.
 
 %% @private
-handle_cast({inc_counter, Counter, Nas = #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP}}, State) ->
-    Key = {{ServerIP, ServerPort}, NasIP},
+handle_cast({inc_counter, Counter, Key = {{_ClientName, _ClientIP, _ClientPort}, {_ServerName, _ServerIp, _ServerPort}}}, State) ->
     Cnt0 = case ets:lookup(?MODULE, Key) of
-               [] -> init_counter(Nas);
+               [] -> init_counter(Key);
                [Cnt] -> Cnt
     end,
     ets:insert(?MODULE, do_inc_counter(Counter, Cnt0)),
     {noreply, State};
+
+handle_cast({inc_counter, Counter, Nas = #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId}}, State) ->
+    Key = {{ServerIP, ServerPort}, NasIP, NasId},
+    Cnt0 = case ets:lookup(?MODULE, Key) of
+               [] -> init_counter(Nas);
+               [Cnt] -> Cnt
+    end,
+    {{ServerName, _, _}, _} = Nas#nas_prop.metrics_info,
+    Cnt1 = Cnt0#nas_counter{server_name = ServerName},
+    ets:insert(?MODULE, do_inc_counter(Counter, Cnt1)),
+    {noreply, State};
+
+handle_cast({dec_counter, Counter, Key = {{_ClientName, _ClientIP, _ClientPort}, {_ServerName, _ServerIp, _ServerPort}}}, State) ->
+    Cnt0 = case ets:lookup(?MODULE, Key) of
+               [] -> init_counter(Key);
+               [Cnt] -> Cnt
+    end,
+    ets:insert(?MODULE, do_dec_counter(Counter, Cnt0)),
+    {noreply, State};
+
+handle_cast({dec_counter, Counter, Nas = #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId}}, State) ->
+    Key = {{ServerIP, ServerPort}, NasIP, NasId},
+    Cnt0 = case ets:lookup(?MODULE, Key) of
+               [] -> init_counter(Nas);
+               [Cnt] -> Cnt
+    end,
+    {{ServerName, _, _}, _} = Nas#nas_prop.metrics_info,
+    Cnt1 = Cnt0#nas_counter{server_name = ServerName},
+    ets:insert(?MODULE, do_dec_counter(Counter, Cnt1)),
+    {noreply, State};
+
 handle_cast({collect, Ref, Process}, State) ->
     Process ! {collect, Ref, ets:tab2list(?MODULE)},
     ets:delete_all_objects(?MODULE),
     {noreply, State#state{reset = eradius_lib:timestamp()}};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -165,8 +235,31 @@ do_inc_counter(coaAcks,                 Counters = #nas_counter{coaAcks = Value}
 do_inc_counter(coaNaks,                 Counters = #nas_counter{coaNaks = Value})                 -> Counters#nas_counter{coaNaks = Value + 1};
 do_inc_counter(discRequests,            Counters = #nas_counter{discRequests = Value})            -> Counters#nas_counter{discRequests = Value + 1};
 do_inc_counter(discAcks,                Counters = #nas_counter{discAcks = Value})                -> Counters#nas_counter{discAcks = Value + 1};
-do_inc_counter(discNaks,                Counters = #nas_counter{discNaks = Value})                -> Counters#nas_counter{discNaks = Value + 1}.
+do_inc_counter(discNaks,                Counters = #nas_counter{discNaks = Value})                -> Counters#nas_counter{discNaks = Value + 1};
+do_inc_counter(retransmissions,         Counters = #nas_counter{retransmissions = Value})         -> Counters#nas_counter{retransmissions = Value + 1};
+do_inc_counter(pending,                 Counters = #nas_counter{pending = Value})                 -> Counters#nas_counter{pending = Value + 1};
 
+do_inc_counter(requests,         Counters = #client_counter{requests = Value})         -> Counters#client_counter{requests = Value + 1};
+do_inc_counter(accessRequests,   Counters = #client_counter{accessRequests = Value})   -> Counters#client_counter{accessRequests = Value + 1};
+do_inc_counter(accountRequests,  Counters = #client_counter{accountRequests = Value})  -> Counters#client_counter{accountRequests = Value + 1};
+do_inc_counter(coaRequests,      Counters = #client_counter{coaRequests = Value})      -> Counters#client_counter{coaRequests = Value + 1};
+do_inc_counter(discRequests,     Counters = #client_counter{discRequests = Value})     -> Counters#client_counter{discRequests = Value + 1};
+do_inc_counter(retransmissions,  Counters = #client_counter{retransmissions = Value})  -> Counters#client_counter{retransmissions = Value + 1};
+do_inc_counter(timeouts,         Counters = #client_counter{timeouts = Value})         -> Counters#client_counter{timeouts = Value + 1};
+do_inc_counter(accessAccepts,    Counters = #client_counter{accessAccepts = Value})    -> Counters#client_counter{accessAccepts = Value + 1};
+do_inc_counter(accessRejects,    Counters = #client_counter{accessRejects = Value})    -> Counters#client_counter{accessRejects = Value + 1};
+do_inc_counter(accessChallenges, Counters = #client_counter{accessChallenges = Value}) -> Counters#client_counter{accessChallenges = Value + 1};
+do_inc_counter(accountResponses, Counters = #client_counter{accountResponses = Value}) -> Counters#client_counter{accountResponses = Value + 1};
+do_inc_counter(coaNaks,          Counters = #client_counter{coaNaks = Value})          -> Counters#client_counter{coaNaks = Value + 1};
+do_inc_counter(coaAcks,          Counters = #client_counter{coaAcks = Value})          -> Counters#client_counter{coaAcks = Value + 1};
+do_inc_counter(discNaks,         Counters = #client_counter{discNaks = Value})         -> Counters#client_counter{discNaks = Value + 1};
+do_inc_counter(discAcks,         Counters = #client_counter{discAcks = Value})         -> Counters#client_counter{discAcks = Value + 1};
+do_inc_counter(packetsDropped,   Counters = #client_counter{packetsDropped = Value})   -> Counters#client_counter{packetsDropped = Value + 1};
+do_inc_counter(pending,          Counters = #client_counter{pending = Value})          -> Counters#client_counter{pending = Value + 1}. 
+
+%% @private
+do_dec_counter(pending, Counters = #nas_counter{pending = Value}) -> Counters#nas_counter{pending = Value - 1};
+do_dec_counter(pending, Counters = #client_counter{pending = Value}) -> Counters#client_counter{pending = Value - 1}.
 
 add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
     #nas_counter{
@@ -191,5 +284,7 @@ add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
              coaNaks                  = Cnt1#nas_counter.coaNaks                   + Cnt2#nas_counter.coaNaks,
              discRequests             = Cnt1#nas_counter.discRequests              + Cnt2#nas_counter.discRequests,
              discAcks                 = Cnt1#nas_counter.discAcks                  + Cnt2#nas_counter.discAcks,
-             discNaks                 = Cnt1#nas_counter.discNaks                  + Cnt2#nas_counter.discNaks
-            }.
+             discNaks                 = Cnt1#nas_counter.discNaks                  + Cnt2#nas_counter.discNaks,
+             retransmissions          = Cnt1#nas_counter.retransmissions           + Cnt2#nas_counter.retransmissions,
+             pending                  = Cnt1#nas_counter.pending                   + Cnt2#nas_counter.pending
+      }.

@@ -37,7 +37,7 @@ start_link() ->
 init([]) ->
     ets:new(?MODULE, [ordered_set, protected, named_table, {keypos, #nas_counter.key}, {write_concurrency,true}]),
     eradius:modules_ready([?MODULE]),
-    erlang:send_after(?INIT_HB, self(), heartbeat),
+    %erlang:send_after(?INIT_HB, self(), heartbeat),
     {ok, #state{me = make_ref(), reset = eradius_lib:timestamp()}}.
 
 %% @private

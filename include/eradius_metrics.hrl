@@ -1,6 +1,6 @@
-%% This file contains the definitions for all metrics used by exometer.
+%% This file contains the definitions for all metrics used by prometheus.erl
 %%
-%% First the used entries and probes for exometer will be described and
+%% First the used entries and probes for prometheus will be described and
 %% then the actual metrics. These definitions contain the way metrics are
 %% exposed, e.g. for requests:
 %%
@@ -10,7 +10,7 @@
 %% In a similar way this holds for other metrics.
 
 %% this will be prepended to all eradius metrics
--define(DEFAULT_ENTRIES, [eradius, radius]).
+-define(DEFAULT_ENTRIES, <<"eradius", "_", "radius">>).
 
 %% contains all metric definitions defined below sorted by service
 -define(METRICS, [{server,  ?SERVER_METRICS},       %% metrics from all NAS together for one server socket
@@ -18,8 +18,8 @@
                   {client,  ?CLIENT_METRICS}]).     %% metrics from single client
 
 
-%% exometer basic configuration used for metrics
--define(COUNTER,        {counter,   %% exometer type
+%% prometheus basic configuration used for metrics
+-define(COUNTER,        {counter,   %% metric type
                          []}).      %% type options
 
 -define(GAUGE,          {gauge,
@@ -42,107 +42,106 @@
                          []}).
 
 -define(BASIC_TIME_METRICS, [
-     {time, last_reset, [
-       {ticks, ?GAUGE}]},
-     {time, last_config_reset, [
-       {ticks, ?GAUGE}]},
-     {time, up, [
-       {ticks, ?FUNCTION_UPTIME}]}
+     {"time", "last_reset", [
+       {"ticks", ?GAUGE}]},
+     {"time", "last_config_reset", [
+       {"ticks", ?GAUGE}]},
+     {"time", "up", [
+       {"ticks", ?FUNCTION_UPTIME}]}
      ]).
 
 -define(BASIC_REQUEST_METRICS, [
-     {request, total, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, access, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, accounting, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, coa, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, disconnect, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
+     {"request", "total", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "access", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "accounting", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "coa", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "disconnect", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
 
      %% RESPONSES
-     {response, total, [
-       {counter, ?COUNTER}]},
-     {response, access, [
-       {counter, ?COUNTER}]},
-     {response, accounting, [
-       {counter, ?COUNTER}]},
-     {response, access_accept, [
-       {counter, ?COUNTER}]},
-     {response, access_reject, [
-       {counter, ?COUNTER}]},
-     {response, access_challenge, [
-       {counter, ?COUNTER}]},
-     {response, disconnect_ack, [
-       {counter, ?COUNTER}]},
-     {response, disconnect_nak, [
-       {counter, ?COUNTER}]},
-     {response, coa_ack, [
-       {counter, ?COUNTER}]},
-     {response, coa_nak, [
-       {counter, ?COUNTER}]},
+     {"response", "total", [
+       {"counter", ?COUNTER}]},
+     {"response", "access", [
+       {"counter", ?COUNTER}]},
+     {"response", "accounting", [
+       {"counter", ?COUNTER}]},
+     {"response", "access_accept", [
+       {"counter", ?COUNTER}]},
+     {"response", "access_reject", [
+       {"counter", ?COUNTER}]},
+     {"response", "access_challenge", [
+       {"counter", ?COUNTER}]},
+     {"response", "disconnect_ack", [
+       {"counter", ?COUNTER}]},
+     {"response", "disconnect_nak", [
+       {"counter", ?COUNTER}]},
+     {"response", "coa_ack", [
+       {"counter", ?COUNTER}]},
+     {"response", "coa_nak", [
+       {"counter", ?COUNTER}]},
+     {"request", "pending", [
+       {"counter", ?COUNTER}]},
 
-     {request, pending, [
-       {gauge, ?COUNTER}]},
-
-     {time, last_request, [
-       {ticks, ?GAUGE}]},
-     {time, since_last_request, [
-       {ticks, ?FUNCTION_SINCE_LAST_REQUEST}]}
+     {"time", "last_request", [
+       {"ticks", ?GAUGE}]},
+     {"time", "since_last_request", [
+       {"ticks", ?FUNCTION_SINCE_LAST_REQUEST}]}
      ]).
 
 
 -define(SERVER_METRICS, [
-     {request, invalid, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, malformed, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]}
+     {"request", "invalid", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "malformed", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]}
      ] ++ ?NAS_METRICS
        ++ ?BASIC_TIME_METRICS).
 
 -define(NAS_METRICS, [
-     {request, dropped, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, retransmission, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {response, retransmission, [
-       {counter, ?COUNTER}]},
-     {request, duplicate, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, bad_authenticator, [     %TODO: this metric is just initialized and not updated within eradius
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, unknown_type, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]}
+     {"request", "dropped", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "retransmission", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"response", "retransmission", [
+       {"counter", ?COUNTER}]},
+     {"request", "duplicate", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "bad_authenticator", [     %TODO: this metric is just initialized and not updated within eradius
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "unknown_type", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]}
      ] ++ ?BASIC_REQUEST_METRICS).
 
 
 -define(CLIENT_METRICS, [
-     {request, retransmission, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {request, timeout, [
-       {gauge, ?HISTOGRAM_60000},
-       {counter, ?COUNTER}]},
-     {response, bad_authenticator, [    %TODO: this metric is just initialized and not updated within eradius
-       {counter, ?COUNTER}]},
-     {response, malformed, [            %TODO: this metric is just initialized and not updated within eradius
-       {counter, ?COUNTER}]},
-     {response, unknown_type, [         %TODO: this metric is just initialized and not updated within eradius
-       {counter, ?COUNTER}]},
-     {response, dropped, [
-       {counter, ?COUNTER}]}
+     {"request", "retransmission", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"request", "timeout", [
+       {"gauge", ?HISTOGRAM_60000},
+       {"counter", ?COUNTER}]},
+     {"response", "bad_authenticator", [    %TODO: this metric is just initialized and not updated within eradius
+       {"counter", ?COUNTER}]},
+     {"response", "malformed", [            %TODO: this metric is just initialized and not updated within eradius
+       {"counter", ?COUNTER}]},
+     {"response", "unknown_type", [         %TODO: this metric is just initialized and not updated within eradius
+       {"counter", ?COUNTER}]},
+     {"response", "dropped", [
+       {"counter", ?COUNTER}]}
      ] ++ ?BASIC_REQUEST_METRICS).

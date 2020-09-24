@@ -1,0 +1,8 @@
+{"1.1.0",
+[{<<"prometheus">>,{pkg,<<"prometheus">>,<<"4.6.0">>},0},
+ {<<"stacktrace_compat">>,{pkg,<<"stacktrace_compat">>,<<"1.0.2">>},0}]}.
+[
+{pkg_hash,[
+ {<<"prometheus">>, <<"20510F381DB1CCAB818B4CF2FAC5FA6AB5CC91BC364A154399901C001465F46F">>},
+ {<<"stacktrace_compat">>, <<"8AD31C32C9A0EADB1EB298F04DC8B0C8D79BCC6233A638B02791FFCA4F331275">>}]}
+].

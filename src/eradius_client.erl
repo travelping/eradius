@@ -73,9 +73,10 @@ send_request({Host, Port, Secret}, Request, Options)
         _ -> error(badarg)
     end;
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
-    TS1 = eradius_metrics:timestamp(milli_seconds),
+    TS1 = eradius_lib:timestamp(milli_seconds),
     ServerName = proplists:get_value(server_name, Options, undefined),
     MetricsInfo = make_metrics_info(Options, {IP, Port}),
+    update_client_requests(MetricsInfo),
     Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
     Peer = {ServerName, {IP, Port}},
@@ -95,9 +96,10 @@ send_remote_request(Node, NAS, Request) ->
 %   The request will not be sent again if the remote node is unreachable.
 -spec send_remote_request(node(), nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'node_down' | 'socket_down'}.
 send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
-    TS1 = eradius_metrics:timestamp(milli_seconds),
+    TS1 = eradius_lib:timestamp(milli_seconds),
     ServerName = proplists:get_value(server_name, Options, undefined),
     MetricsInfo = make_metrics_info(Options, {IP, Port}),
+    update_client_requests(MetricsInfo),
     Peer = {ServerName, {IP, Port}},
     try gen_server:call({?SERVER, Node}, {wanna_send, Peer, MetricsInfo}) of
         {Socket, ReqId} ->
@@ -129,7 +131,7 @@ send_remote_request(_Node, {_IP, _Port, _Secret}, _Request, _Options) ->
     error(badarg).
 
 proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_ServerName, {ServerIP, Port}}, TS1, MetricsInfo) ->
-    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_metrics:timestamp(milli_seconds) - TS1),
+    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_lib:timestamp(milli_seconds) - TS1),
     case eradius_lib:decode_request(Response, Secret, Authenticator) of
         {bad_pdu, Reason} ->
             update_client_response(dropped, MetricsInfo),
@@ -140,7 +142,7 @@ proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_Serve
             {ok, Response, Authenticator}
     end;
 proceed_response(Request, Response, _Peer, TS1, MetricsInfo) ->
-    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_metrics:timestamp(milli_seconds) - TS1),
+    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_lib:timestamp(milli_seconds) - TS1),
     Response.
 
 % @private
@@ -148,7 +150,7 @@ send_remote_request_loop(ReplyPid, Socket, ReqId, Peer, EncRequest, Retries, Tim
     ReplyPid ! {self(), send_request_loop(Socket, ReqId, Peer, EncRequest, Retries, Timeout, MetricsInfo)}.
 
 send_request_loop(Socket, ReqId, Peer, Request = #radius_request{}, Retries, Timeout, undefined) ->
-    send_request_loop(Socket, ReqId, Peer, Request, Retries, Timeout, eradius_metrics:make_addr_info(Peer));
+    send_request_loop(Socket, ReqId, Peer, Request, Retries, Timeout, eradius_lib:make_addr_info(Peer));
 send_request_loop(Socket, ReqId, Peer, Request, Retries, Timeout, MetricsInfo) ->
     {Authenticator, EncRequest} = eradius_lib:encode_request(Request),
     SMon = erlang:monitor(process, Socket),
@@ -175,43 +177,59 @@ send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authent
             send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, RetryN - 1, MetricsInfo, Secret)
     end.
 
+ % @private
+update_client_requests(MetricsInfo) ->
+    eradius_counter:inc_counter(requests, MetricsInfo).
+
 % @private
 update_client_request(request, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(access, MetricsInfo, Ms);
+    eradius_counter:observe(eradius_client_access_request_duration_milliseconds,
+                            MetricsInfo, Ms, "Access-Request execution time"),
+    eradius_counter:inc_counter(accessRequests, MetricsInfo);
 update_client_request(accreq, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(accounting, MetricsInfo, Ms);
+    eradius_counter:observe(eradius_client_accounting_request_duration_milliseconds,
+                            MetricsInfo, Ms, "Accounting-Request execution time"),
+    eradius_counter:inc_counter(accountRequests, MetricsInfo);
 update_client_request(coareq, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(coa, MetricsInfo, Ms);
+    eradius_counter:observe(eradius_client_coa_request_duration_milliseconds,
+                            MetricsInfo, Ms, "Coa request execution time"),
+    eradius_counter:inc_counter(coaRequests, MetricsInfo);
 update_client_request(discreq, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(disconnect, MetricsInfo, Ms);
-update_client_request(retransmission, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(retransmission, MetricsInfo, Ms);
+    eradius_counter:observe(eradius_client_disconnect_request_duration_milliseconds,
+                            MetricsInfo, Ms, "Disconnect execution time"),
+    eradius_counter:inc_counter(discRequests, MetricsInfo);
+update_client_request(retransmission, MetricsInfo, _Ms) ->
+    eradius_counter:inc_counter(retransmissions, MetricsInfo);
+update_client_request(timeout, MetricsInfo, _Ms) ->
+    eradius_counter:inc_counter(timeouts, MetricsInfo);
 update_client_request(pending, MetricsInfo, Pending) ->
-    eradius_metrics:update_client_request(pending, MetricsInfo, Pending);
-update_client_request(timeout, MetricsInfo, Ms) ->
-    eradius_metrics:update_client_request(timeout, MetricsInfo, Ms);
+    if Pending =< 0 ->
+            eradius_counter:dec_counter(pending, MetricsInfo);
+       true ->
+            eradius_counter:inc_counter(pending, MetricsInfo)
+    end;            
 update_client_request(_, _, _) ->
     ok.
 
 %% @private
 update_client_response(accept, MetricsInfo) ->
-    eradius_metrics:update_client_response(access_accept, MetricsInfo);
+    eradius_counter:inc_counter(accessAccepts, MetricsInfo);
 update_client_response(reject, MetricsInfo) ->
-    eradius_metrics:update_client_response(access_reject, MetricsInfo);
+    eradius_counter:inc_counter(accessRejects, MetricsInfo);
 update_client_response(challenge, MetricsInfo) ->
-    eradius_metrics:update_client_response(access_challenge, MetricsInfo);
+    eradius_counter:inc_counter(accessChallenges, MetricsInfo);
 update_client_response(accresp, MetricsInfo) ->
-    eradius_metrics:update_client_response(accounting, MetricsInfo);
+    eradius_counter:inc_counter(accountResponses, MetricsInfo);
 update_client_response(coanak, MetricsInfo) ->
-    eradius_metrics:update_client_response(coa_nak, MetricsInfo);
+    eradius_counter:inc_counter(coaNaks, MetricsInfo);
 update_client_response(coaack, MetricsInfo) ->
-    eradius_metrics:update_client_response(coa_ack, MetricsInfo);
+    eradius_counter:inc_counter(coaAcks, MetricsInfo);
 update_client_response(discnak, MetricsInfo) ->
-    eradius_metrics:update_client_response(disconnect_nak, MetricsInfo);
+    eradius_counter:inc_counter(discNaks, MetricsInfo);
 update_client_response(discack, MetricsInfo) ->
-    eradius_metrics:update_client_response(disconnect_ack, MetricsInfo);
+    eradius_counter:inc_counter(discAcks, MetricsInfo);
 update_client_response(dropped, MetricsInfo) ->
-    eradius_metrics:update_client_response(dropped, MetricsInfo);
+    eradius_counter:inc_counter(packetsDropped, MetricsInfo);
 update_client_response(_, _) ->
     ok.
 
@@ -239,13 +257,12 @@ init([]) ->
     end.
 
 %% @private
-handle_call({wanna_send, Peer = {_PeerName, PeerSocket}, MetricsInfo}, _From, State) ->
+handle_call({wanna_send, Peer = {_PeerName, PeerSocket}, _MetricsInfo}, _From, State) ->
     {PortIdx, ReqId, NewIdCounters} = next_port_and_req_id(PeerSocket, State#state.no_ports, State#state.idcounters),
     {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip, State#state.sup),
     IsCreated = lists:member(Peer, State#state.clients),
     NewState = case IsCreated of
                    false ->
-                       eradius_metrics:create_client(MetricsInfo),
                        State#state{idcounters = NewIdCounters, sockets = NewSockets, clients = [Peer | State#state.clients]};
                    true  ->
                        State#state{idcounters = NewIdCounters, sockets = NewSockets}
@@ -392,7 +409,7 @@ make_metrics_info(Options, {ServerIP, ServerPort}) ->
     ClientName = proplists:get_value(client_name, Options, undefined),
     ClientIP = application:get_env(eradius, client_ip, undefined),
     {ok, ParsedClientIP} = parse_ip(ClientIP),
-    ClientAddrInfo = eradius_metrics:make_addr_info({ClientName, {ParsedClientIP, undefined}}),
-    ServerAddrInfo = eradius_metrics:make_addr_info({ServerName, {ServerIP, ServerPort}}),
+    ClientAddrInfo = eradius_lib:make_addr_info({ClientName, {ParsedClientIP, undefined}}),
+    ServerAddrInfo = eradius_lib:make_addr_info({ServerName, {ServerIP, ServerPort}}),
     {ClientAddrInfo, ServerAddrInfo}.
 
