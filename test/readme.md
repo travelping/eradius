@@ -31,7 +31,3 @@ or
 You now should find something simmilar to the following message in your journal:
 
     `Feb 13 17:09:52 tpiadmin-HP-EliteBook-8470p beam.smp[11790]: 127.0.0.1:39534 [27]: Access-Request`
-
-Don't forget to add reporter before `exometer_core` will be started:
-
-	`application:set_env(exometer, report, [{reporters, [{exometer_report_tty, []}]}]).`

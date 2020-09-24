@@ -16,16 +16,12 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_instance(ServerAddr = {ServerName, {IP, Port}}) ->
+start_instance(_ServerAddr = {ServerName, {IP, Port}}) ->
     ?LOG(info, "Starting RADIUS Listener at ~s", [printable_peer(IP, Port)]),
-    MetricsAddress = eradius_metrics:make_addr_info(ServerAddr),
-    eradius_metrics:create_server(MetricsAddress),
     supervisor:start_child(?SERVER, [ServerName, IP, Port]).
 
-stop_instance(ServerAddr = {_ServerName, {IP, Port}}, Pid) ->
+stop_instance(_ServerAddr = {_ServerName, {IP, Port}}, Pid) ->
     ?LOG(info, "Stopping RADIUS Listener at ~s", [printable_peer(IP, Port)]),
-    MetricsAddress = eradius_metrics:make_addr_info(ServerAddr),
-    eradius_metrics:delete_server(MetricsAddress),
     supervisor:terminate_child(?SERVER, Pid).
 
 all() ->
