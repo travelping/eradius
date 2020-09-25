@@ -20,13 +20,13 @@ _All metrics start with `eradius_` prefix and the prefix is not included into ta
 | requests_total                                | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
 | replies_total                                 | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
 | access_requests_total                         | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
-| accounting_requests_total                     | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| accounting_requests_total                     | [$NAME, $IP, $PORT, $NASID, $NASIP, $TYPE] | counter   |
 | coa_requests_total                            | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
 | disconnect_requests                           | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
 | accept_responses_total                        | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
 | reject_responses_total                        | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
 | access_challenge_responses_total              | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
-| accounting_responses_total                    | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| accounting_responses_total                    | [$NAME, $IP, $PORT, $NASID, $NASIP, $TYPE] | counter   |
 | coa_acks_total                                | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
 | coa_nacks_total                               | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
 | disconnect_acks_total                         | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
@@ -53,7 +53,7 @@ _All metrics start with `eradius` prefix and the prefix is not included into tab
 |  client_requests_total                             | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_replies_total                              | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_access_requests_total                      | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
-|  client_accounting_requests_total                  | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_accounting_requests_total                  | [$NAME, $IP, $PORT, $CNAME, $CIP, $TYPE]     | counter   |
 |  client_coa_requests_total                         | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_disconnect_requests_total                  | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_retransmissions_total                      | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
@@ -61,7 +61,7 @@ _All metrics start with `eradius` prefix and the prefix is not included into tab
 |  client_accept_responses_total                     | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_access_challenge_responses_total           | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_reject_responses_total                     | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
-|  client_accounting_responses                       | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_accounting_responses_total                 | [$NAME, $IP, $PORT, $CNAME, $CIP, $TYPE]     | counter   |
 |  client_coa_nacks_total                            | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_coa_acks_total                             | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_disconnect_acks_total                      | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
@@ -111,5 +111,7 @@ For "NAS2" `nas_id` will be used for `$NASID`(`name`)  `$NASIP` = "10.18.14.2".
 `$CNAME` - name from `client_name` option fduring call `eradius_client:send_request/3` or `undefined` by default.
 
 `$CIP` - `client_ip` from `eradius` enviroment.
+
+`$TYPE` - accounting type, can be `start` | `stop` | `update`
 
 All timing values in the histograms are in milliseconds.

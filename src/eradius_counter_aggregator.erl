@@ -108,8 +108,6 @@ add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
              accessAccepts            = Cnt1#nas_counter.accessAccepts             + Cnt2#nas_counter.accessAccepts,
              accessRejects            = Cnt1#nas_counter.accessRejects             + Cnt2#nas_counter.accessRejects,
              accessChallenges         = Cnt1#nas_counter.accessChallenges          + Cnt2#nas_counter.accessChallenges,
-             accountRequests          = Cnt1#nas_counter.accountRequests           + Cnt2#nas_counter.accountRequests,
-             accountResponses         = Cnt1#nas_counter.accountResponses          + Cnt2#nas_counter.accountResponses,
              noRecords                = Cnt1#nas_counter.noRecords                 + Cnt2#nas_counter.noRecords,
              badAuthenticators        = Cnt1#nas_counter.badAuthenticators         + Cnt2#nas_counter.badAuthenticators,
              packetsDropped           = Cnt1#nas_counter.packetsDropped            + Cnt2#nas_counter.packetsDropped,
