@@ -20,8 +20,11 @@
 
 -import(eradius_lib, [printable_peer/2]).
 
+-include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include("eradius_dict.hrl").
 -include("eradius_lib.hrl").
+
 -define(SERVER, ?MODULE).
 -define(DEFAULT_RETRIES, 3).
 -define(DEFAULT_TIMEOUT, 5000).
@@ -131,32 +134,32 @@ send_remote_request(_Node, {_IP, _Port, _Secret}, _Request, _Options) ->
     error(badarg).
 
 proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_ServerName, {ServerIP, Port}}, TS1, MetricsInfo) ->
-    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_lib:timestamp(milli_seconds) - TS1),
+    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_lib:timestamp(milli_seconds) - TS1, Request),
     update_client_responses(MetricsInfo),
     case eradius_lib:decode_request(Response, Secret, Authenticator) of
         {bad_pdu, "Message-Authenticator Attribute is invalid" = Reason} ->
-            update_client_response(bad_authenticator, MetricsInfo),
+            update_client_response(bad_authenticator, MetricsInfo, Request),
             ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         {bad_pdu, "Authenticator Attribute is invalid" = Reason} ->
-            update_client_response(bad_authenticator, MetricsInfo),
+            update_client_response(bad_authenticator, MetricsInfo, Request),
             ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         {bad_pdu, "unknown request type" = Reason} ->
-            update_client_response(unknown_req_type, MetricsInfo),
+            update_client_response(unknown_req_type, MetricsInfo, Request),
             ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         {bad_pdu, Reason} ->
-            update_client_response(dropped, MetricsInfo),
+            update_client_response(dropped, MetricsInfo, Request),
             ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         Decoded ->
-            update_client_response(Decoded#radius_request.cmd, MetricsInfo),
+            update_client_response(Decoded#radius_request.cmd, MetricsInfo, Request),
             {ok, Response, Authenticator}
     end;
 proceed_response(Request, Response, _Peer, TS1, MetricsInfo) ->
     update_client_responses(MetricsInfo),
-    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_lib:timestamp(milli_seconds) - TS1),
+    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_lib:timestamp(milli_seconds) - TS1, Request),
     Response.
 
 % @private
@@ -168,18 +171,18 @@ send_request_loop(Socket, ReqId, Peer, Request = #radius_request{}, Retries, Tim
 send_request_loop(Socket, ReqId, Peer, Request, Retries, Timeout, MetricsInfo) ->
     {Authenticator, EncRequest} = eradius_lib:encode_request(Request),
     SMon = erlang:monitor(process, Socket),
-    send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, Retries, MetricsInfo, Request#radius_request.secret).
+    send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, Retries, MetricsInfo, Request#radius_request.secret, Request).
 
-send_request_loop(_Socket, SMon, _Peer, _ReqId, _Authenticator, _EncRequest, Timeout, 0, MetricsInfo, _Secret) ->
-    update_client_request(timeout, MetricsInfo, Timeout),
+send_request_loop(_Socket, SMon, _Peer, _ReqId, _Authenticator, _EncRequest, Timeout, 0, MetricsInfo, _Secret, Request) ->
+    update_client_request(timeout, MetricsInfo, Timeout, Request),
     erlang:demonitor(SMon, [flush]),
     {error, timeout};
-send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authenticator, EncRequest, Timeout, RetryN, MetricsInfo, Secret) ->
+send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authenticator, EncRequest, Timeout, RetryN, MetricsInfo, Secret, Request) ->
     Socket ! {self(), send_request, {IP, Port}, ReqId, EncRequest},
-    update_client_request(pending, MetricsInfo, 1),
+    update_client_request(pending, MetricsInfo, 1, Request),
     receive
         {Socket, response, ReqId, Response} ->
-            update_client_request(pending, MetricsInfo, -1),
+            update_client_request(pending, MetricsInfo, -1, Request),
             {ok, Response, Secret, Authenticator};
         {'DOWN', SMon, process, Socket, _} ->
             {error, socket_down};
@@ -187,8 +190,8 @@ send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authent
             {error, Error}
     after
         Timeout ->
-            update_client_request(retransmission, MetricsInfo, Timeout),
-            send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, RetryN - 1, MetricsInfo, Secret)
+            update_client_request(retransmission, MetricsInfo, Timeout, Request),
+            send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, RetryN - 1, MetricsInfo, Secret, Request)
     end.
 
 % @private
@@ -196,49 +199,49 @@ update_client_requests(MetricsInfo) ->
     eradius_counter:inc_counter(requests, MetricsInfo).
 
 % @private
-update_client_request(pending, MetricsInfo, Pending) ->
+update_client_request(pending, MetricsInfo, Pending, _) ->
     if Pending =< 0 -> eradius_counter:dec_counter(pending, MetricsInfo);
        true -> eradius_counter:inc_counter(pending, MetricsInfo)
     end;
-update_client_request(Cmd, MetricsInfo, Ms) ->
+update_client_request(Cmd, MetricsInfo, Ms, Request) ->
     eradius_counter:observe(eradius_client_request_duration_milliseconds, MetricsInfo, Ms, "Execution time of a RADIUS request"),
-    update_client_request_by_type(Cmd, MetricsInfo, Ms).
+    update_client_request_by_type(Cmd, MetricsInfo, Ms, Request).
 
 % @private
-update_client_request_by_type(request, MetricsInfo, Ms) ->
+update_client_request_by_type(request, MetricsInfo, Ms, _) ->
     eradius_counter:observe(eradius_client_access_request_duration_milliseconds, MetricsInfo, Ms, "Access-Request execution time"),
     eradius_counter:inc_counter(accessRequests, MetricsInfo);
-update_client_request_by_type(accreq, MetricsInfo, Ms) ->
+update_client_request_by_type(accreq, MetricsInfo, Ms, Request) ->
     eradius_counter:observe(eradius_client_accounting_request_duration_milliseconds, MetricsInfo, Ms, "Accounting-Request execution time"),
-    eradius_counter:inc_counter(accountRequests, MetricsInfo);
-update_client_request_by_type(coareq, MetricsInfo, Ms) ->
+    inc_request_counter_accounting(MetricsInfo, Request);
+update_client_request_by_type(coareq, MetricsInfo, Ms, _) ->
     eradius_counter:observe(eradius_client_coa_request_duration_milliseconds, MetricsInfo, Ms, "Coa request execution time"),
     eradius_counter:inc_counter(coaRequests, MetricsInfo);
-update_client_request_by_type(discreq, MetricsInfo, Ms) ->
+update_client_request_by_type(discreq, MetricsInfo, Ms, _) ->
     eradius_counter:observe(eradius_client_disconnect_request_duration_milliseconds, MetricsInfo, Ms, "Disconnect execution time"),
     eradius_counter:inc_counter(discRequests, MetricsInfo);
-update_client_request_by_type(retransmission, MetricsInfo, _Ms) ->
+update_client_request_by_type(retransmission, MetricsInfo, _Ms, _) ->
     eradius_counter:inc_counter(retransmissions, MetricsInfo);
-update_client_request_by_type(timeout, MetricsInfo, _Ms) ->
+update_client_request_by_type(timeout, MetricsInfo, _Ms, _) ->
     eradius_counter:inc_counter(timeouts, MetricsInfo);
-update_client_request_by_type(_, _, _) -> ok.
+update_client_request_by_type(_, _, _, _) -> ok.
 
 %% @private
 update_client_responses(MetricsInfo) -> eradius_counter:inc_counter(replies, MetricsInfo).
 
 %% @private
-update_client_response(accept, MetricsInfo)    -> eradius_counter:inc_counter(accessAccepts, MetricsInfo);
-update_client_response(reject, MetricsInfo)    -> eradius_counter:inc_counter(accessRejects, MetricsInfo);
-update_client_response(challenge, MetricsInfo) -> eradius_counter:inc_counter(accessChallenges, MetricsInfo);
-update_client_response(accresp, MetricsInfo)   -> eradius_counter:inc_counter(accountResponses, MetricsInfo);
-update_client_response(coanak, MetricsInfo)    -> eradius_counter:inc_counter(coaNaks, MetricsInfo);
-update_client_response(coaack, MetricsInfo)    -> eradius_counter:inc_counter(coaAcks, MetricsInfo);
-update_client_response(discnak, MetricsInfo)   -> eradius_counter:inc_counter(discNaks, MetricsInfo);
-update_client_response(discack, MetricsInfo)   -> eradius_counter:inc_counter(discAcks, MetricsInfo);
-update_client_response(dropped, MetricsInfo)           -> eradius_counter:inc_counter(packetsDropped, MetricsInfo);
-update_client_response(bad_authenticator, MetricsInfo) -> eradius_counter:inc_counter(badAuthenticators, MetricsInfo);
-update_client_response(unknown_req_type, MetricsInfo)  -> eradius_counter:inc_counter(unknownTypes, MetricsInfo);
-update_client_response(_, _) -> ok.
+update_client_response(accept, MetricsInfo, _)            -> eradius_counter:inc_counter(accessAccepts, MetricsInfo);
+update_client_response(reject, MetricsInfo, _)            -> eradius_counter:inc_counter(accessRejects, MetricsInfo);
+update_client_response(challenge, MetricsInfo, _)         -> eradius_counter:inc_counter(accessChallenges, MetricsInfo);
+update_client_response(accresp, MetricsInfo, Request)     -> inc_responses_counter_accounting(MetricsInfo, Request);
+update_client_response(coanak, MetricsInfo, _)            -> eradius_counter:inc_counter(coaNaks, MetricsInfo);
+update_client_response(coaack, MetricsInfo, _)            -> eradius_counter:inc_counter(coaAcks, MetricsInfo);
+update_client_response(discnak, MetricsInfo, _)           -> eradius_counter:inc_counter(discNaks, MetricsInfo);
+update_client_response(discack, MetricsInfo, _)           -> eradius_counter:inc_counter(discAcks, MetricsInfo);
+update_client_response(dropped, MetricsInfo, _)           -> eradius_counter:inc_counter(packetsDropped, MetricsInfo);
+update_client_response(bad_authenticator, MetricsInfo, _) -> eradius_counter:inc_counter(badAuthenticators, MetricsInfo);
+update_client_response(unknown_req_type, MetricsInfo, _)  -> eradius_counter:inc_counter(unknownTypes, MetricsInfo);
+update_client_response(_, _, _)                           -> ok.
 
 %% @private
 reconfigure() ->
@@ -419,3 +422,65 @@ make_metrics_info(Options, {ServerIP, ServerPort}) ->
     ClientAddrInfo = eradius_lib:make_addr_info({ClientName, {ParsedClientIP, undefined}}),
     ServerAddrInfo = eradius_lib:make_addr_info({ServerName, {ServerIP, ServerPort}}),
     {ClientAddrInfo, ServerAddrInfo}.
+
+inc_request_counter_accounting(MetricsInfo, #radius_request{attrs = Attrs}) ->
+    Requests = ets:match_spec_run(Attrs, client_request_counter_account_match_spec_compile()),
+    [eradius_counter:inc_counter(Type, MetricsInfo) || Type <-  Requests],
+    ok;
+inc_request_counter_accounting(_, _) ->
+    ok.
+
+inc_responses_counter_accounting(MetricsInfo, #radius_request{attrs = Attrs}) ->
+    Responses = ets:match_spec_run(Attrs, client_response_counter_account_match_spec_compile()),
+    [eradius_counter:inc_counter(Type, MetricsInfo) || Type <- Responses],
+    ok;
+inc_responses_counter_accounting(_, _) ->
+    ok.
+
+%% check if we can use persistent_term for config
+%% persistent term was added in OTP 21.2 but we can't
+%% check minor versions with macros so we're stuck waiting
+%% for OTP 22
+-ifdef(HAVE_PERSISTENT_TERM).
+
+client_request_counter_account_match_spec_compile() ->
+    case persistent_term:get(?MODULE, undefined) of
+        undefined ->
+            MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
+                ({?RStatus_Type, ?RStatus_Type_Start})  -> accountRequestsStart;
+                ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountRequestsStop;
+                ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
+            persistent_term:put(?FUNCTION_NAME, MatchSpecCompile),
+            MatchSpecCompile;
+        MatchSpecCompile ->
+            MatchSpecCompile
+    end.
+
+client_response_counter_account_match_spec_compile() ->
+    case persistent_term:get(?FUNCTION_NAME, undefined) of
+        undefined ->
+            MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
+                ({?RStatus_Type, ?RStatus_Type_Start})  -> accountResponsesStart;
+                ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountResponsesStop;
+                ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
+            persistent_term:put(?FUNCTION_NAME, MatchSpecCompile),
+            MatchSpecCompile;
+        MatchSpecCompile ->
+            MatchSpecCompile
+    end.
+
+-else.
+
+client_request_counter_account_match_spec_compile() ->
+    ets:match_spec_compile(ets:fun2ms(fun
+        ({?RStatus_Type, ?RStatus_Type_Start})  -> accountRequestsStart;
+        ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountRequestsStop;
+        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate end)).
+
+client_response_counter_account_match_spec_compile() ->
+    ets:match_spec_compile(ets:fun2ms(fun
+        ({?RStatus_Type, ?RStatus_Type_Start})  -> accountResponsesStart;
+        ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountResponsesStop;
+        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate end)).
+
+-endif.

@@ -26,7 +26,7 @@
 -include_lib("eradius/include/dictionary.hrl").
 
 -define(SECRET, <<"secret">>).
--define(ATTRS_GOOD, [{?NAS_Identifier, "good"}]).
+-define(ATTRS_GOOD, [{?NAS_Identifier, "good"}, {?RStatus_Type, ?RStatus_Type_Start}]).
 -define(ATTRS_BAD, [{?NAS_Identifier, "bad"}]).
 -define(ATTRS_ERROR, [{?NAS_Identifier, "error"}]).
 -define(LOCALHOST, eradius_test_handler:localhost(atom)).
@@ -97,6 +97,11 @@ error_requests(_Config) ->
 check_single_request(good, EradiusRequestType, _RequestType, _ResponseType) ->
     ok = send_request(EradiusRequestType, eradius_test_handler:localhost(tuple), 1812, ?ATTRS_GOOD, [{server_name, good}, {client_name, test}]),
     ok = check_metric(client_access_requests_total, [{server_name, good}], 1),
+    ok = check_metric_multi(EradiusRequestType, client_accounting_requests_total, [{server_name, good}], 1),
+    ok = check_metric_multi({bad_type, EradiusRequestType}, client_accounting_requests_total, [{server_name, good}, {acct_type, bad_type}], 0),
+    ok = check_metric(EradiusRequestType, client_accounting_requests_total, [{server_name, good}, {acct_type, start}], 1),
+    ok = check_metric(EradiusRequestType, client_accounting_requests_total, [{server_name, good}, {acct_type, stop}], 0),
+    ok = check_metric(EradiusRequestType, client_accounting_requests_total, [{server_name, good}, {acct_type, update}], 0),
     ok = check_metric(client_accept_responses_total, [{server_name, good}], 1),
     ok = check_metric(accept_responses_total, [{server_name, good}], 1),
     ok = check_metric(access_requests_total, [{server_name, good}], 1);
@@ -123,6 +128,28 @@ check_total_requests(good, N) ->
 check_total_requests(bad, N) ->
     ok = check_metric(requests_total, [{server_name, bad}], N),
     ok = check_metric(replies_total, [{server_name, bad}], N).
+
+check_metric_multi({bad_type, accreq}, Id, Labels, _) ->
+    case eradius_prometheus_collector:fetch_counter(Id, Labels) of
+        [] ->
+            ok;
+        _ ->
+            {error, Id, Labels}
+    end;
+check_metric_multi(accreq, Id, Labels, Count) ->
+    case eradius_prometheus_collector:fetch_counter(Id, Labels) of
+        [{Count, _} | _] ->
+            ok;
+        _ ->
+            {error, Id, Count}
+    end;
+check_metric_multi(_, _, _, _) ->
+    ok.
+
+check_metric(accreq, Id, Labels, Count) ->
+    check_metric(Id, Labels, Count);
+check_metric(_, _, _, _) ->
+    ok.
 
 check_metric(Id, Labels, Count) ->
     case eradius_prometheus_collector:fetch_counter(Id, Labels) of

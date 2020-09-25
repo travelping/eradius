@@ -225,8 +225,6 @@ do_inc_counter(accessRequests,          Counters = #nas_counter{accessRequests =
 do_inc_counter(accessAccepts,           Counters = #nas_counter{accessAccepts = Value})           -> Counters#nas_counter{accessAccepts = Value + 1};
 do_inc_counter(accessRejects,           Counters = #nas_counter{accessRejects = Value})           -> Counters#nas_counter{accessRejects = Value + 1};
 do_inc_counter(accessChallenges,        Counters = #nas_counter{accessChallenges = Value})        -> Counters#nas_counter{accessChallenges = Value + 1};
-do_inc_counter(accountRequests,         Counters = #nas_counter{accountRequests = Value})         -> Counters#nas_counter{accountRequests = Value + 1};
-do_inc_counter(accountResponses,        Counters = #nas_counter{accountResponses = Value})        -> Counters#nas_counter{accountResponses = Value + 1};
 do_inc_counter(noRecords,               Counters = #nas_counter{noRecords = Value})               -> Counters#nas_counter{noRecords = Value + 1};
 do_inc_counter(badAuthenticators,       Counters = #nas_counter{badAuthenticators = Value})       -> Counters#nas_counter{badAuthenticators = Value + 1};
 do_inc_counter(packetsDropped,          Counters = #nas_counter{packetsDropped = Value})          -> Counters#nas_counter{packetsDropped = Value + 1};
@@ -240,11 +238,16 @@ do_inc_counter(discAcks,                Counters = #nas_counter{discAcks = Value
 do_inc_counter(discNaks,                Counters = #nas_counter{discNaks = Value})                -> Counters#nas_counter{discNaks = Value + 1};
 do_inc_counter(retransmissions,         Counters = #nas_counter{retransmissions = Value})         -> Counters#nas_counter{retransmissions = Value + 1};
 do_inc_counter(pending,                 Counters = #nas_counter{pending = Value})                 -> Counters#nas_counter{pending = Value + 1};
+do_inc_counter(accountRequestsStart,   Counters = #nas_counter{accountRequestsStart = Value})     -> Counters#nas_counter{accountRequestsStart = Value + 1};
+do_inc_counter(accountRequestsStop,    Counters = #nas_counter{accountRequestsStop = Value})      -> Counters#nas_counter{accountRequestsStop = Value + 1};
+do_inc_counter(accountRequestsUpdate,  Counters = #nas_counter{accountRequestsUpdate = Value})    -> Counters#nas_counter{accountRequestsUpdate = Value + 1};
+do_inc_counter(accountResponsesStart,  Counters = #nas_counter{accountResponsesStart = Value})    -> Counters#nas_counter{accountResponsesStart = Value + 1};
+do_inc_counter(accountResponsesStop,   Counters = #nas_counter{accountResponsesStop = Value})     -> Counters#nas_counter{accountResponsesStop = Value + 1};
+do_inc_counter(accountResponsesUpdate, Counters = #nas_counter{accountResponsesUpdate = Value})   -> Counters#nas_counter{accountResponsesUpdate = Value + 1};
 
 do_inc_counter(requests,          Counters = #client_counter{requests = Value})          -> Counters#client_counter{requests = Value + 1};
 do_inc_counter(replies,           Counters = #client_counter{replies = Value})           -> Counters#client_counter{replies = Value + 1};
 do_inc_counter(accessRequests,    Counters = #client_counter{accessRequests = Value})    -> Counters#client_counter{accessRequests = Value + 1};
-do_inc_counter(accountRequests,   Counters = #client_counter{accountRequests = Value})   -> Counters#client_counter{accountRequests = Value + 1};
 do_inc_counter(coaRequests,       Counters = #client_counter{coaRequests = Value})       -> Counters#client_counter{coaRequests = Value + 1};
 do_inc_counter(discRequests,      Counters = #client_counter{discRequests = Value})      -> Counters#client_counter{discRequests = Value + 1};
 do_inc_counter(retransmissions,   Counters = #client_counter{retransmissions = Value})   -> Counters#client_counter{retransmissions = Value + 1};
@@ -252,7 +255,6 @@ do_inc_counter(timeouts,          Counters = #client_counter{timeouts = Value}) 
 do_inc_counter(accessAccepts,     Counters = #client_counter{accessAccepts = Value})     -> Counters#client_counter{accessAccepts = Value + 1};
 do_inc_counter(accessRejects,     Counters = #client_counter{accessRejects = Value})     -> Counters#client_counter{accessRejects = Value + 1};
 do_inc_counter(accessChallenges,  Counters = #client_counter{accessChallenges = Value})  -> Counters#client_counter{accessChallenges = Value + 1};
-do_inc_counter(accountResponses,  Counters = #client_counter{accountResponses = Value})  -> Counters#client_counter{accountResponses = Value + 1};
 do_inc_counter(coaNaks,           Counters = #client_counter{coaNaks = Value})           -> Counters#client_counter{coaNaks = Value + 1};
 do_inc_counter(coaAcks,           Counters = #client_counter{coaAcks = Value})           -> Counters#client_counter{coaAcks = Value + 1};
 do_inc_counter(discNaks,          Counters = #client_counter{discNaks = Value})          -> Counters#client_counter{discNaks = Value + 1};
@@ -260,7 +262,13 @@ do_inc_counter(discAcks,          Counters = #client_counter{discAcks = Value}) 
 do_inc_counter(badAuthenticators, Counters = #client_counter{badAuthenticators = Value}) -> Counters#client_counter{badAuthenticators = Value + 1};
 do_inc_counter(packetsDropped,    Counters = #client_counter{packetsDropped = Value})    -> Counters#client_counter{packetsDropped = Value + 1};
 do_inc_counter(unknownTypes,      Counters = #client_counter{unknownTypes = Value})      -> Counters#client_counter{unknownTypes = Value + 1};
-do_inc_counter(pending,           Counters = #client_counter{pending = Value})           -> Counters#client_counter{pending = Value + 1}. 
+do_inc_counter(pending,           Counters = #client_counter{pending = Value})           -> Counters#client_counter{pending = Value + 1};
+do_inc_counter(accountRequestsStart,   Counters = #client_counter{accountRequestsStart = Value})   -> Counters#client_counter{accountRequestsStart = Value + 1};
+do_inc_counter(accountRequestsStop,    Counters = #client_counter{accountRequestsStop = Value})    -> Counters#client_counter{accountRequestsStop = Value + 1};
+do_inc_counter(accountRequestsUpdate,  Counters = #client_counter{accountRequestsUpdate = Value})  -> Counters#client_counter{accountRequestsUpdate = Value + 1}; 
+do_inc_counter(accountResponsesStart,  Counters = #client_counter{accountResponsesStart = Value})  -> Counters#client_counter{accountResponsesStart = Value + 1};
+do_inc_counter(accountResponsesStop,   Counters = #client_counter{accountResponsesStop = Value})   -> Counters#client_counter{accountResponsesStop = Value + 1};
+do_inc_counter(accountResponsesUpdate, Counters = #client_counter{accountResponsesUpdate = Value}) -> Counters#client_counter{accountResponsesUpdate = Value + 1}.
 
 %% @private
 do_dec_counter(pending, Counters = #nas_counter{pending = Value}) -> Counters#nas_counter{pending = Value - 1};
@@ -277,8 +285,12 @@ add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
              accessAccepts            = Cnt1#nas_counter.accessAccepts             + Cnt2#nas_counter.accessAccepts,
              accessRejects            = Cnt1#nas_counter.accessRejects             + Cnt2#nas_counter.accessRejects,
              accessChallenges         = Cnt1#nas_counter.accessChallenges          + Cnt2#nas_counter.accessChallenges,
-             accountRequests          = Cnt1#nas_counter.accountRequests           + Cnt2#nas_counter.accountRequests,
-             accountResponses         = Cnt1#nas_counter.accountResponses          + Cnt2#nas_counter.accountResponses,
+             accountRequestsStart     = Cnt1#nas_counter.accountRequestsStart      + Cnt2#nas_counter.accountRequestsStart,
+             accountRequestsStop      = Cnt1#nas_counter.accountRequestsStop       + Cnt2#nas_counter.accountRequestsStop,
+             accountRequestsUpdate    = Cnt1#nas_counter.accountRequestsUpdate     + Cnt2#nas_counter.accountRequestsUpdate,
+             accountResponsesStart    = Cnt1#nas_counter.accountResponsesStart     + Cnt2#nas_counter.accountResponsesStart,
+             accountResponsesStop     = Cnt1#nas_counter.accountResponsesStop      + Cnt2#nas_counter.accountResponsesStop,
+             accountResponsesUpdate   = Cnt1#nas_counter.accountResponsesUpdate    + Cnt2#nas_counter.accountResponsesUpdate,
              noRecords                = Cnt1#nas_counter.noRecords                 + Cnt2#nas_counter.noRecords,
              badAuthenticators        = Cnt1#nas_counter.badAuthenticators         + Cnt2#nas_counter.badAuthenticators,
              packetsDropped           = Cnt1#nas_counter.packetsDropped            + Cnt2#nas_counter.packetsDropped,
