@@ -5,7 +5,7 @@
 -include_lib("eradius/include/eradius_lib.hrl").
 -include_lib("prometheus/include/prometheus.hrl").
 
--export([deregister_cleanup/1, collect_mf/2, collect_metrics/2, fetch_counter/2, fetch_histogram/2]).
+-export([deregister_cleanup/1, collect_mf/2, collect_metrics/2, fetch_counter/2, fetch_counter/3, fetch_histogram/2]).
 
 -import(prometheus_model_helpers, [create_mf/5, gauge_metric/2, counter_metric/1]).
 
