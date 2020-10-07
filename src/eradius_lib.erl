@@ -1,7 +1,7 @@
 -module(eradius_lib).
 -export([del_attr/2, get_attr/2, encode_request/1, encode_reply/1, decode_request/2, decode_request/3, decode_request_id/1]).
 -export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, get_attributes/1, set_attributes/2]).
--export([timestamp/0, printable_peer/2]).
+-export([timestamp/0, timestamp/1, printable_peer/2, make_addr_info/1]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
 % -compile(bin_opt_info).
@@ -510,7 +510,36 @@ pad_to(Width, Binary) ->
 
 -spec timestamp() -> erlang:timestamp().
 timestamp() ->
-    erlang:timestamp().
+    erlang:system_time(milli_seconds).
+
+timestamp(Units) ->
+    erlang:system_time(Units).
+
+-spec make_addr_info({term(), {inet:ip_address(), integer()}}) -> atom_address().
+make_addr_info({undefined, {IP, Port}}) ->
+    {socket_to_atom(IP, Port), ip_to_atom(IP), port_to_atom(Port)};
+make_addr_info({Name, {IP, Port}}) ->
+    {to_atom(Name), ip_to_atom(IP), port_to_atom(Port)}.
+
+to_atom(Value) when is_atom(Value) -> Value;
+to_atom(Value) when is_binary(Value) -> binary_to_atom(Value, latin1);
+to_atom(Value) when is_list(Value) -> list_to_atom(Value).
+
+socket_to_atom(IP, undefined) ->
+    ip_to_atom(IP);
+socket_to_atom(IP, Port) when is_tuple(IP) ->
+    list_to_atom(inet:ntoa(IP) ++ ":" ++ integer_to_list(Port));
+socket_to_atom(IP, Port) when is_binary(IP) ->
+    binary_to_atom(erlang:iolist_to_binary([IP, <<":">>, Port]), latin1);
+socket_to_atom(IP, Port) when is_atom(IP) ->
+    binary_to_atom(erlang:iolist_to_binary([atom_to_binary(IP, latin1), <<":">>, Port]), latin1).
+
+ip_to_atom(IP) when is_atom(IP) -> IP;
+ip_to_atom(IP) -> list_to_atom(inet:ntoa(IP)).
+
+port_to_atom(undefined) -> undefined;
+port_to_atom(Port) when is_atom(Port) -> Port;
+port_to_atom(Port) -> list_to_atom(integer_to_list(Port)).
 
 -spec printable_peer(inet:ip4_address(),eradius_server:port_number()) -> io_lib:chars().
 printable_peer({IA,IB,IC,ID}, Port) ->

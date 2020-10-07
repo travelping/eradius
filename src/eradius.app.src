@@ -3,7 +3,7 @@
    {description, "Erlang RADIUS server"},
    {vsn, git},
    {registered, [eradius_dict, eradius_sup, eradius_server_top_sup, eradius_server_sup, eradius_server_mon]},
-   {applications, [kernel, stdlib, crypto, exometer_core]},
+   {applications, [kernel, stdlib, crypto]},
    {mod, {eradius, []}},
    {env, [
       {servers, []},
@@ -12,6 +12,7 @@
       {client_ports, 100},
       {resend_timeout, 30000},
       {logging, false},
+      {counter_aggregator, true},
       {logfile, "./radius.log"},
       {metrics, [{enabled, [server, nas, client]}]},
       {recbuf, 8192} % maximum socket receive buffer in bytes

@@ -37,7 +37,12 @@ start_link() ->
 init([]) ->
     ets:new(?MODULE, [ordered_set, protected, named_table, {keypos, #nas_counter.key}, {write_concurrency,true}]),
     eradius:modules_ready([?MODULE]),
-    erlang:send_after(?INIT_HB, self(), heartbeat),
+    EnableAggregator = application:get_env(eradius, counter_aggregator, true),
+    if EnableAggregator == true ->
+            erlang:send_after(?INIT_HB, self(), heartbeat);
+       true ->
+            ok
+    end,
     {ok, #state{me = make_ref(), reset = eradius_lib:timestamp()}}.
 
 %% @private
