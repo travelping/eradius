@@ -90,7 +90,7 @@ aggregate({Servers, {ResetTS, Nass}}) ->
 %% the other histogram things in eradius, but prometheus.erl will do it for us
 observe(Name, {{ClientName, ClientIP, _}, {ServerName, ServerIP, ServerPort}} = MetricsInfo, Value, Help) ->
     case code:is_loaded(prometheus) of
-        true ->
+        {file, _} ->
             try
                 prometheus_histogram:observe(Name, [ServerIP, ServerPort, ServerName, ClientName, ClientIP], Value)
             catch _:_ ->
@@ -104,7 +104,7 @@ observe(Name, {{ClientName, ClientIP, _}, {ServerName, ServerIP, ServerPort}} = 
     end.
 observe(Name, #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId} = Nas, Value, ServerName, Help) ->
     case code:is_loaded(prometheus) of
-        true ->
+        {file, _} ->
             try
                 prometheus_histogram:observe(Name, [inet:ntoa(ServerIP), ServerPort, ServerName, inet:ntoa(NasIP), NasId], Value)
             catch _:_ ->
