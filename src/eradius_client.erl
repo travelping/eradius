@@ -444,26 +444,26 @@ inc_responses_counter_accounting(_, _) ->
 -ifdef(HAVE_PERSISTENT_TERM).
 
 client_request_counter_account_match_spec_compile() ->
-    case persistent_term:get(?MODULE, undefined) of
+    case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
             MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
                 ({?RStatus_Type, ?RStatus_Type_Start})  -> accountRequestsStart;
                 ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountRequestsStop;
                 ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
-            persistent_term:put(?FUNCTION_NAME, MatchSpecCompile),
+            persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
             MatchSpecCompile
     end.
 
 client_response_counter_account_match_spec_compile() ->
-    case persistent_term:get(?FUNCTION_NAME, undefined) of
+    case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
             MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
                 ({?RStatus_Type, ?RStatus_Type_Start})  -> accountResponsesStart;
                 ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountResponsesStop;
                 ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
-            persistent_term:put(?FUNCTION_NAME, MatchSpecCompile),
+            persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
             MatchSpecCompile

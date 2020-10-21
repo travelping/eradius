@@ -435,26 +435,26 @@ inc_discard_counter(_Reason, NasProp) ->
 -ifdef(HAVE_PERSISTENT_TERM).
 
 server_request_counter_account_match_spec_compile() ->
-    case persistent_term:get(?MODULE, undefined) of
+    case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
             MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
                 ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
                 ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
                 ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
-            persistent_term:put(?FUNCTION_NAME, MatchSpecCompile),
+            persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
             MatchSpecCompile
     end.
 
 server_response_counter_account_match_spec_compile() ->
-    case persistent_term:get(?FUNCTION_NAME, undefined) of
+    case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
             MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
                 ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
                 ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
                 ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
-            persistent_term:put(?FUNCTION_NAME, MatchSpecCompile),
+            persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
             MatchSpecCompile
