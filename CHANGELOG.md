@@ -3,6 +3,13 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.0.0 - 26 October 2020
+---------------------------
+
+* Add Ituma dictionary
+* Replace exometer with prometheus
+* Divide accounting metrics
+
 Version 1.0.1 - 11 May 2020
 ---------------------------
 
