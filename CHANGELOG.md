@@ -3,6 +3,11 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.0.1 - 28 October 2020
+---------------------------
+
+* Fix collecting of metrics in eradius_counter_aggregator
+
 Version 2.0.0 - 26 October 2020
 ---------------------------
 
