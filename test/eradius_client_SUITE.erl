@@ -23,6 +23,10 @@
 
 -include("test/eradius_test.hrl").
 
+-define(BAD_SERVER_IP, {eradius_test_handler:localhost(ip), 1820, "secret"}).
+-define(BAD_SERVER_TUPLE, {{eradius_test_handler:localhost(tuple), 1820}, 3, 3}).
+-define(BAD_SERVER_IP_ETS_KEY, {eradius_test_handler:localhost(tuple), 1820}).
+
 all() -> [
     send_request,
     wanna_send,
@@ -31,8 +35,9 @@ all() -> [
     reconf_ports_30,
     wanna_send,
     reconf_ports_10,
-    wanna_send
-    ].
+    wanna_send,
+    send_request_failover
+  ].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(eradius),
@@ -48,10 +53,17 @@ init_per_testcase(send_request, Config) ->
     application:stop(eradius),
     eradius_test_handler:start(),
     Config;
+init_per_testcase(send_request_failover, Config) ->
+    application:stop(eradius),
+    eradius_test_handler:start(),
+    Config;
 init_per_testcase(_Test, Config) ->
     Config.
 
 end_per_testcase(send_request, Config) ->
+    eradius_test_handler:stop(),
+    Config;
+end_per_testcase(send_request_failover, Config) ->
     eradius_test_handler:stop(),
     Config;
 end_per_testcase(_Test, Config) ->
@@ -199,8 +211,15 @@ reconf_ports_30(_Config) ->
     application:set_env(eradius, client_ports, 30),
     send(FUN, 30, null).
 
-
 reconf_ports_10(_Config) ->
     FUN = fun() -> gen_server:call(eradius_client, reconfigure), timer:sleep(100) end,
     application:set_env(eradius, client_ports, 10),
     send(FUN, 10, null).
+
+send_request_failover(_Config) ->
+    ?equal(accept, eradius_test_handler:send_request_failover(?BAD_SERVER_IP)),
+    ?equal([], ets:lookup(eradius_client, ?BAD_SERVER_IP_ETS_KEY)),
+    {ok, Timeout} = application:get_env(eradius, unreachable_timeout),
+    timer:sleep(Timeout * 1000),
+    ?equal([?BAD_SERVER_TUPLE], ets:lookup(eradius_client, ?BAD_SERVER_IP_ETS_KEY)),
+    ok.

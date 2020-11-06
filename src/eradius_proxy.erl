@@ -4,9 +4,20 @@
 %%   It accepts following configuration:
 %%
 %%   ```
-%%   [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}},
+%%   [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}, pool_name},
 %%    {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-%%    {routes,  [{"^test-[0-9].", {{127, 0, 0, 1}, 1815, <<"secret1">>}}]}],
+%%    {routes,  [{"^test-[0-9].", {{127, 0, 0, 1}, 1815, <<"secret1">>}, pool_name}]}]
+%%   '''
+%%
+%%   Where the pool_name is optional field that contains list of
+%%   RADIUS servers pool name that will be used for fail-over.
+%%
+%%   Pools of RADIUS servers are defined in eradius configuration:
+%%
+%%   ```
+%%   {servers_pool, [{pool_name, [
+%%                     {{127, 0, 0, 1}, 1815, <<"secret">>, [{retries, 3}]},
+%%                     {{127, 0, 0, 1}, 1816, <<"secret">>}]}]}
 %%   '''
 %%
 %%   == WARNING ==
@@ -39,15 +50,17 @@
                           {timeout, ?DEFAULT_TIMEOUT},
                           {retries, ?DEFAULT_RETRIES}]).
 
--type route() :: eradius_client:nas_address().
--type routes() :: [{Name :: string(), route()}].
+-type route() :: eradius_client:nas_address() |
+                 {eradius_client:nas_address(), PoolName :: atom()}.
+-type routes() :: [{Name :: string(), eradius_client:nas_address()}] |
+                  [{Name :: string(), eradius_client:nas_address(), PoolName :: atom()}].
 -type undefined_route() :: {undefined, 0, []}.
 
 radius_request(Request, _NasProp, Args) ->
-    DefaultRoute = proplists:get_value(default_route, Args),
+    DefaultRoute = get_proxy_opt(default_route, Args, {undefined, 0, []}),
+    Routes = get_proxy_opt(routes, Args, []),
     Options = proplists:get_value(options, Args, ?DEFAULT_OPTIONS),
     Username = eradius_lib:get_attr(Request, ?User_Name),
-    Routes = proplists:get_value(routes, Args, []),
     {NewUsername, Route} = resolve_routes(Username, DefaultRoute, Routes, Options),
     Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
@@ -55,9 +68,9 @@ radius_request(Request, _NasProp, Args) ->
     send_to_server(new_request(Request, Username, NewUsername), Route, SendOpts).
 
 validate_arguments(Args) ->
-    DefaultRoute = proplists:get_value(default_route, Args, {undefined, 0, []}),
+    DefaultRoute = get_proxy_opt(default_route, Args, {undefined, 0, []}),
     Options = proplists:get_value(options, Args, ?DEFAULT_OPTIONS),
-    Routes = proplists:get_value(routes, Args, []),
+    Routes = get_proxy_opt(routes, Args, undefined),
     case {validate_route(DefaultRoute), validate_options(Options), compile_routes(Routes)} of
         {false, _, _} -> default_route;
         {_, false, _} -> options;
@@ -66,13 +79,15 @@ validate_arguments(Args) ->
             {true, [{default_route, DefaultRoute}, {options, Options}, {routes, NewRoutes}]}
     end.
 
+compile_routes(undefined) -> [];
 compile_routes(Routes) ->
-    RoutesOpts = lists:map(fun ({Name, Relay}) ->
+    RoutesOpts = lists:map(fun (Route) ->
+        {Name, Relay, Pool} = route(Route),
         case re:compile(Name) of
             {ok, R} ->
-                case validate_route(Relay) of
+                case validate_route({Relay, Pool}) of
                     false -> false;
-                    _ -> {R, Relay}
+                    _ -> {R, Relay, Pool}
                 end;
             {error, {Error, Position}} ->
                 throw("Error during regexp compilation - " ++ Error ++ " at position " ++ integer_to_list(Position))
@@ -92,6 +107,16 @@ compile_routes(Routes) ->
     {reply, Reply :: #radius_request{}} | term().
 send_to_server(_Request, {undefined, 0, []}, _) ->
     {error, no_route};
+send_to_server(#radius_request{reqid = ReqID} = Request, {{Server, Port, Secret}, Pool}, Options) ->
+    {ok, Pools} = application:get_env(eradius, servers_pool),
+    UpstreamServers = proplists:get_value(Pool, Pools, []),
+    case eradius_client:send_request({Server, Port, Secret}, Request, [{failover, UpstreamServers} | Options]) of
+        {ok, Result, Auth} ->
+            decode_request(Result, ReqID, Secret, Auth);
+        Error ->
+            ?LOG(error, "~p: error during send_request (~p)", [?MODULE, Error]),
+            Error
+    end;
 send_to_server(#radius_request{reqid = ReqID} = Request, {Server, Port, Secret}, Options) ->
     case eradius_client:send_request({Server, Port, Secret}, Request, Options) of
         {ok, Result, Auth} -> decode_request(Result, ReqID, Secret, Auth);
@@ -110,9 +135,11 @@ decode_request(Result, ReqID, Secret, Auth) ->
             Error
     end.
 
+
 % @private
--spec validate_route({Host :: list() | binary() | inet:ip_address(), Port :: eradius_server:port_number(), Secret :: eradius_lib:secret()}) ->
-    boolean().
+-spec validate_route(Route :: route()) -> boolean().
+validate_route({{Host, Port, Secret}, PoolName}) when is_atom(PoolName) ->
+    validate_route({Host, Port, Secret});
 validate_route({_Host, Port, _Secret}) when not is_integer(Port); Port =< 0; Port > 65535 -> false;
 validate_route({_Host, _Port, Secret}) when not is_list(Secret), not is_binary(Secret) -> false;
 validate_route({Host, _Port, _Secret}) when is_list(Host) -> true;
@@ -167,17 +194,19 @@ resolve_routes(Username, DefaultRoute, Routes, Options) ->
         {not_found, NewUsername} ->
             {NewUsername, DefaultRoute};
         {Key, NewUsername} ->
-            case find_suitable_relay(Key, Routes) of
-                {Key, {_IP, _Port, _Secret} = Route} -> {NewUsername, Route};
-                _ -> {NewUsername, DefaultRoute}
-            end
+            {NewUsername, find_suitable_relay(Key, Routes, DefaultRoute)}
     end.
 
-find_suitable_relay(_Key, []) -> [];
-find_suitable_relay(Key, [{Regexp, Relay} | Routes]) ->
+find_suitable_relay(_Key, [], DefaultRoute) -> DefaultRoute;
+find_suitable_relay(Key, [{Regexp, Relay} | Routes], DefaultRoute) ->
     case re:run(Key, Regexp, [{capture, none}]) of
-        nomatch -> find_suitable_relay(Key, Routes);
-        _ -> {Key, Relay}
+        nomatch -> find_suitable_relay(Key, Routes, DefaultRoute);
+        _ -> Relay
+    end;
+find_suitable_relay(Key, [{Regexp, Relay, PoolName} | Routes], DefaultRoute) ->
+    case re:run(Key, Regexp, [{capture, none}]) of
+        nomatch -> find_suitable_relay(Key, Routes, DefaultRoute);
+        _ -> {Relay, PoolName}
     end.
 
 % @private
@@ -211,14 +240,10 @@ strip(Username, prefix, true, Separator) ->
         [_ | Tail] -> string:join(Tail, Separator)
     end.
 
-% @TODO have no need in it right nowm but maybe we will use it later
-%update_proxy_metric(DefaultRouter, IP, Port) ->
-%    case DefaultRouter of
-%	undefined ->
-%	    MetricName = eradius_metrics:get_metric_name(IP, Port, routes_not_resolved, proxy),
-%	    exometer:update_or_create(MetricName, 1, spiral, [{time_span, 1000}]);
-%	_ ->
-%	    MetricName = eradius_metrics:get_metric_name(IP, Port, routes_resolved, proxy),
-%	    exometer:update_or_create(MetricName, 1, spiral, [{time_span, 1000}])
-%    end.
+route({RouteName, RouteRelay}) -> {RouteName, RouteRelay, undefined};
+route({_RouteName, _RouteRelay, _Pool} = Route) -> Route.
 
+get_proxy_opt(_, [], Default)                            -> Default;
+get_proxy_opt(OptName, [{OptName, AddrOrRoutes} | _], _) -> AddrOrRoutes;
+get_proxy_opt(OptName, [{OptName, Addr, Pool} | _], _)   -> {Addr, Pool};
+get_proxy_opt(OptName, [_ | Args], Default)              -> get_proxy_opt(OptName, Args, Default).
