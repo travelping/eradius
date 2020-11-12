@@ -3,6 +3,15 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.1.0 - 12 November 2020
+---------------------------
+
+* Add support for `failover` to `RADIUS` client
+* Add missing documentation of configuration
+* Add dictionary unloading functionality: `eradius_dict:unload_tables/1` `eradius_dict:unload_tables/2`
+* Update `meck` dependency to `0.9.0`
+* Remove `stacktrace_compat` dependency
+
 Version 2.0.1 - 28 October 2020
 ---------------------------
 
