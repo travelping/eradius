@@ -14,7 +14,6 @@
       {logging, false},
       {counter_aggregator, false},
       {logfile, "./radius.log"},
-      {metrics, [{enabled, [server, nas, client]}]},
       {recbuf, 8192}
    ]},
    {maintainers, ["Andreas Schultz", "Vladimir Tarasenko", "Yury Gargay"]},
