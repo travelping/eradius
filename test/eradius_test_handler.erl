@@ -14,7 +14,6 @@ start() ->
     application:set_env(eradius, session_nodes, local),
     application:set_env(eradius, one, [{{"ONE", []}, [{localhost(ip), "secret"}]}]),
     application:set_env(eradius, servers, [{one, {localhost(ip), [1812]}}]),
-    application:set_env(eradius, metrics, []),
     application:set_env(eradius, unreachable_timeout, 2),
     application:set_env(eradius, servers_pool, [{test_pool, [{localhost(tuple), 1812, "secret"}]}]),
     application:ensure_all_started(eradius),

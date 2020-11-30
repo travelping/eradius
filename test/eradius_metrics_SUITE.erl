@@ -52,8 +52,6 @@ init_per_suite(Config) ->
                               { {"error", [] }, [{"127.0.0.2", ?SECRET, [{nas_id, <<"error_nas">>}]}] }
                              ]},
                      {tables, [dictionary]},
-                     {metrics, [{enabled, [server, nas, client]},
-                                {subscribe_opts, []}]},
                      {client_ip, {127,0,0,2}},
                      {client_ports, 20},
                      {counter_aggregator, false}
