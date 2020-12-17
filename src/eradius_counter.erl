@@ -95,8 +95,8 @@ observe(Name, {{ClientName, ClientIP, _}, {ServerName, ServerIP, ServerPort}} = 
                 prometheus_histogram:observe(Name, [ServerIP, ServerPort, ServerName, ClientName, ClientIP], Value)
             catch _:_ ->
                     Buckets = application:get_env(eradius, histogram_buckets, [10, 30, 50, 75, 100, 1000, 2000]),
-                    prometheus_histogram:new([{name, Name}, {labels, [server_ip, server_port, server_name, client_name, client_ip]},
-                                              {buckets, Buckets}, {help, Help}]),
+                    prometheus_histogram:declare([{name, Name}, {labels, [server_ip, server_port, server_name, client_name, client_ip]},
+                                                  {buckets, Buckets}, {help, Help}]),
                     observe(Name, MetricsInfo, Value, Help)
             end;
         _ ->
@@ -109,8 +109,8 @@ observe(Name, #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip =
                 prometheus_histogram:observe(Name, [inet:ntoa(ServerIP), ServerPort, ServerName, inet:ntoa(NasIP), NasId], Value)
             catch _:_ ->
                     Buckets = application:get_env(eradius, histogram_buckets, [10, 30, 50, 75, 100, 1000, 2000]),
-                    prometheus_histogram:new([{name, Name}, {labels, [server_ip, server_port, server_name, nas_ip, nas_id]},
-                                              {buckets, Buckets}, {help, Help}]),
+                    prometheus_histogram:declare([{name, Name}, {labels, [server_ip, server_port, server_name, nas_ip, nas_id]},
+                                                  {buckets, Buckets}, {help, Help}]),
                     observe(Name, Nas, Value, ServerName, Help)
             end;
         _ ->
