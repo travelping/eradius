@@ -3,26 +3,33 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.2.0 - 24 December 2020
+---------------------------
+
+* Use `prometheus_histogram:declare/1` instead `prometheus_histogram:new/1` - [PR #173](https://github.com/travelping/eradius/pull/173)
+* Remove `metrics` env what was use for exameter - [PR #172](https://github.com/travelping/eradius/pull/172)
+* Cleanup `eradius.app.src` - [#171](https://github.com/travelping/eradius/pull/171)
+
 Version 2.1.0 - 12 November 2020
 ---------------------------
 
-* Add support for `failover` to `RADIUS` client
-* Add missing documentation of configuration
-* Add dictionary unloading functionality: `eradius_dict:unload_tables/1` `eradius_dict:unload_tables/2`
-* Update `meck` dependency to `0.9.0`
-* Remove `stacktrace_compat` dependency
+* Add support for `failover` to `RADIUS` client - [PR #154](https://github.com/travelping/eradius/pull/154)
+* Add missing documentation of configuration - [PR #167](https://github.com/travelping/eradius/pull/167)
+* Add dictionary unloading functionality: `eradius_dict:unload_tables/1` `eradius_dict:unload_tables/2` - [PR #169](https://github.com/travelping/eradius/pull/169)
+* Update `meck` dependency to `0.9.0` - [PR #168](https://github.com/travelping/eradius/pull/168)
+* Remove `stacktrace_compat` dependency - [PR #168](https://github.com/travelping/eradius/pull/168)
 
 Version 2.0.1 - 28 October 2020
 ---------------------------
 
-* Fix collecting of metrics in eradius_counter_aggregator
+* Fix collecting of metrics in `eradius_counter_aggregator` - [PR #164](https://github.com/travelping/eradius/pull/164)
 
 Version 2.0.0 - 26 October 2020
 ---------------------------
 
-* Add Ituma dictionary
-* Replace exometer with prometheus
-* Divide accounting metrics
+* Add Ituma dictionary - [PR #159](https://github.com/travelping/eradius/pull/159)
+* Replace exometer with prometheus - [PR #158](https://github.com/travelping/eradius/pull/158)
+* Divide accounting metrics - [PR #157](https://github.com/travelping/eradius/pull/157)
 
 Version 1.0.1 - 11 May 2020
 ---------------------------
