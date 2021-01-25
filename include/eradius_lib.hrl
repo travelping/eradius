@@ -56,6 +56,35 @@
 -define(RTCNAS_Request,     10).
 -define(RTCNAS_Reboot,      11).
 
+-record(client_counter, {
+          key                          :: term(),
+          requests                 = 0 :: non_neg_integer(),
+          replies                  = 0 :: non_neg_integer(),
+          accessRequests           = 0 :: non_neg_integer(),
+          accessAccepts            = 0 :: non_neg_integer(),
+          accessRejects            = 0 :: non_neg_integer(),
+          accessChallenges         = 0 :: non_neg_integer(),
+          accountRequestsStart     = 0 :: non_neg_integer(),
+          accountRequestsStop      = 0 :: non_neg_integer(),
+          accountRequestsUpdate    = 0 :: non_neg_integer(),
+          accountResponsesStart    = 0 :: non_neg_integer(),
+          accountResponsesStop     = 0 :: non_neg_integer(),
+          accountResponsesUpdate   = 0 :: non_neg_integer(),
+          coaRequests              = 0 :: non_neg_integer(),
+          coaAcks                  = 0 :: non_neg_integer(),
+          coaNaks                  = 0 :: non_neg_integer(),
+          discRequests             = 0 :: non_neg_integer(),
+          discAcks                 = 0 :: non_neg_integer(),
+          discNaks                 = 0 :: non_neg_integer(),
+          retransmissions          = 0 :: non_neg_integer(),
+          badAuthenticators        = 0 :: non_neg_integer(),
+          packetsDropped           = 0 :: non_neg_integer(),
+          unknownTypes             = 0 :: non_neg_integer(),
+          server_name                  :: string(),
+          pending                  = 0 :: non_neg_integer(),
+          timeouts                 = 0 :: non_neg_integer()
+         }).
+
 -record(nas_counter, {
           key                          :: term(),
           requests                 = 0 :: non_neg_integer(),
@@ -66,8 +95,12 @@
           accessAccepts            = 0 :: non_neg_integer(),
           accessRejects            = 0 :: non_neg_integer(),
           accessChallenges         = 0 :: non_neg_integer(),
-          accountRequests          = 0 :: non_neg_integer(),
-          accountResponses         = 0 :: non_neg_integer(),
+          accountRequestsStart     = 0 :: non_neg_integer(),
+          accountRequestsStop      = 0 :: non_neg_integer(),
+          accountRequestsUpdate    = 0 :: non_neg_integer(),
+          accountResponsesStart    = 0 :: non_neg_integer(),
+          accountResponsesStop     = 0 :: non_neg_integer(),
+          accountResponsesUpdate   = 0 :: non_neg_integer(),
           noRecords                = 0 :: non_neg_integer(),
           badAuthenticators        = 0 :: non_neg_integer(),
           packetsDropped           = 0 :: non_neg_integer(),
@@ -78,15 +111,19 @@
           coaNaks                  = 0 :: non_neg_integer(),
           discRequests             = 0 :: non_neg_integer(),
           discAcks                 = 0 :: non_neg_integer(),
-          discNaks                 = 0 :: non_neg_integer()
+          discNaks                 = 0 :: non_neg_integer(),
+          retransmissions          = 0 :: non_neg_integer(),
+          server_name                  :: string(),
+          pending                  = 0 :: non_neg_integer()
          }).
 
 -record(server_counter, {
-          key                  :: term(),
-          startTime            :: erlang:timestamp(),
-          resetTime            :: erlang:timestamp(),
-          invalidRequests = 0  :: non_neg_integer(),
-          discardNoHandler = 0 :: non_neg_integer()
+          key                   :: term(),
+          server_name           :: string(),
+          startTime             :: erlang:timestamp(),
+          resetTime             :: erlang:timestamp(),
+          invalidRequests   = 0 :: non_neg_integer(),
+          discardNoHandler  = 0 :: non_neg_integer()
 }).
 
 -record(nas_prop, {

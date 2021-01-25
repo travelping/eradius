@@ -37,7 +37,12 @@ start_link() ->
 init([]) ->
     ets:new(?MODULE, [ordered_set, protected, named_table, {keypos, #nas_counter.key}, {write_concurrency,true}]),
     eradius:modules_ready([?MODULE]),
-    erlang:send_after(?INIT_HB, self(), heartbeat),
+    EnableAggregator = application:get_env(eradius, counter_aggregator, false),
+    if EnableAggregator == true ->
+            erlang:send_after(?INIT_HB, self(), heartbeat);
+       true ->
+            ok
+    end,
     {ok, #state{me = make_ref(), reset = eradius_lib:timestamp()}}.
 
 %% @private
@@ -90,6 +95,12 @@ update_stats(Rec = #nas_counter{key = Key}) ->
                [] -> #nas_counter{key = Key};
                [Cnt] -> Cnt
     end,
+    ets:insert(?MODULE, add_counter(Cnt0, Rec));
+update_stats(Rec = #client_counter{key = Key}) ->
+    Cnt0 = case ets:lookup(?MODULE, Key) of
+               [] -> #client_counter{key = Key};
+               [Cnt] -> Cnt
+    end,
     ets:insert(?MODULE, add_counter(Cnt0, Rec)).
 
 add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
@@ -103,8 +114,12 @@ add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
              accessAccepts            = Cnt1#nas_counter.accessAccepts             + Cnt2#nas_counter.accessAccepts,
              accessRejects            = Cnt1#nas_counter.accessRejects             + Cnt2#nas_counter.accessRejects,
              accessChallenges         = Cnt1#nas_counter.accessChallenges          + Cnt2#nas_counter.accessChallenges,
-             accountRequests          = Cnt1#nas_counter.accountRequests           + Cnt2#nas_counter.accountRequests,
-             accountResponses         = Cnt1#nas_counter.accountResponses          + Cnt2#nas_counter.accountResponses,
+             accountRequestsStart     = Cnt1#nas_counter.accountRequestsStart      + Cnt2#nas_counter.accountRequestsStart,
+             accountRequestsStop      = Cnt1#nas_counter.accountRequestsStop       + Cnt2#nas_counter.accountRequestsStop,
+             accountRequestsUpdate    = Cnt1#nas_counter.accountRequestsUpdate     + Cnt2#nas_counter.accountRequestsUpdate,
+             accountResponsesStart    = Cnt1#nas_counter.accountResponsesStart     + Cnt2#nas_counter.accountResponsesStart,
+             accountResponsesStop     = Cnt1#nas_counter.accountResponsesStop      + Cnt2#nas_counter.accountResponsesStop,
+             accountResponsesUpdate   = Cnt1#nas_counter.accountResponsesUpdate    + Cnt2#nas_counter.accountResponsesUpdate,
              noRecords                = Cnt1#nas_counter.noRecords                 + Cnt2#nas_counter.noRecords,
              badAuthenticators        = Cnt1#nas_counter.badAuthenticators         + Cnt2#nas_counter.badAuthenticators,
              packetsDropped           = Cnt1#nas_counter.packetsDropped            + Cnt2#nas_counter.packetsDropped,
@@ -116,4 +131,32 @@ add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
              discRequests             = Cnt1#nas_counter.discRequests              + Cnt2#nas_counter.discRequests,
              discAcks                 = Cnt1#nas_counter.discAcks                  + Cnt2#nas_counter.discAcks,
              discNaks                 = Cnt1#nas_counter.discNaks                  + Cnt2#nas_counter.discNaks
-            }.
+      };
+add_counter(Cnt1 = #client_counter{}, Cnt2 = #client_counter{}) ->
+    #client_counter{
+             key                      = Cnt1#client_counter.key,
+             requests                 = Cnt1#client_counter.requests               + Cnt2#client_counter.requests,
+             replies                  = Cnt1#client_counter.replies                + Cnt2#client_counter.replies,
+             accessRequests           = Cnt1#client_counter.accessRequests         + Cnt2#client_counter.accessRequests,
+             accessAccepts            = Cnt1#client_counter.accessAccepts          + Cnt2#client_counter.accessAccepts,
+             accessRejects            = Cnt1#client_counter.accessRejects          + Cnt2#client_counter.accessRejects,
+             accessChallenges         = Cnt1#client_counter.accessChallenges       + Cnt2#client_counter.accessChallenges,
+             accountRequestsStart     = Cnt1#client_counter.accountRequestsStart   + Cnt2#client_counter.accountRequestsStart,
+             accountRequestsStop      = Cnt1#client_counter.accountRequestsStop    + Cnt2#client_counter.accountRequestsStop,
+             accountRequestsUpdate    = Cnt1#client_counter.accountRequestsUpdate  + Cnt2#client_counter.accountRequestsUpdate,
+             accountResponsesStart    = Cnt1#client_counter.accountResponsesStart  + Cnt2#client_counter.accountResponsesStart,
+             accountResponsesStop     = Cnt1#client_counter.accountResponsesStop   + Cnt2#client_counter.accountResponsesStop,
+             accountResponsesUpdate   = Cnt1#client_counter.accountResponsesUpdate + Cnt2#client_counter.accountResponsesUpdate,
+             badAuthenticators        = Cnt1#client_counter.badAuthenticators      + Cnt2#client_counter.badAuthenticators,
+             packetsDropped           = Cnt1#client_counter.packetsDropped         + Cnt2#client_counter.packetsDropped,
+             unknownTypes             = Cnt1#client_counter.unknownTypes           + Cnt2#client_counter.unknownTypes,
+             coaRequests              = Cnt1#client_counter.coaRequests            + Cnt2#client_counter.coaRequests,
+             coaAcks                  = Cnt1#client_counter.coaAcks                + Cnt2#client_counter.coaAcks,
+             coaNaks                  = Cnt1#client_counter.coaNaks                + Cnt2#client_counter.coaNaks,
+             discRequests             = Cnt1#client_counter.discRequests           + Cnt2#client_counter.discRequests,
+             discAcks                 = Cnt1#client_counter.discAcks               + Cnt2#client_counter.discAcks,
+             discNaks                 = Cnt1#client_counter.discNaks               + Cnt2#client_counter.discNaks,
+             retransmissions          = Cnt1#client_counter.retransmissions        + Cnt2#client_counter.retransmissions,
+             timeouts                 = Cnt1#client_counter.timeouts               + Cnt2#client_counter.timeouts,
+             pending                  = Cnt1#client_counter.pending                + Cnt2#client_counter.pending
+      }.

@@ -68,6 +68,7 @@ init_per_testcase(Test, Config) when   Test == dec_vendor_integer_t
                                 orelse Test == vendor_attribute_id_conflict_test ->
     application:set_env(eradius, tables, [dictionary]),
     eradius_dict:start_link(),
+    eradius_dict:unload_tables([dictionary_3gpp]),
     Config;
 init_per_testcase(_, Config) -> Config.
 

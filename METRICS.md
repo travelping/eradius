@@ -1,148 +1,85 @@
 # eradius metrics
 
-`eradius` uses exometer core to implement various operation metrics. 
-For now, there are 3 groups of metrics:
+`eradius` uses `prometheus.erl` to implement various operation metrics.
 
-* `server`
-* `nas` (server metrics separated per nas)
+For now, there are 2 groups of metrics:
+
+* `server` (metrics separated per nas and server names)
 * `client`
 
-Collecting of each group can be enabled/disabled though setting `metrics` env for `eradius` application:
-
-      {metrics, [{enabled, [server, nas, client]}]},
-
-By default it is `[server, nas, client]`.
+`server` metrics are separated per nas and server names.
 
 ### The following `server` metrics exist:
 
-_All metrics start with `[eradius, radius]` prefix and the prefix is not included into table to save space._
+_All metrics start with `eradius_` prefix and the prefix is not included into table to save space._
 
-| Metric                                                                                            | Type      |
-| ------------------------------------------------------------------------------------------------- | --------- |
-| [request, invalid, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]                 | histogram |
-| [request, invalid, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]               | counter   |
-| [request, malformed, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]               | histogram |
-| [request, malformed, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]             | counter   |
-| [request, dropped, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]                 | histogram |
-| [request, dropped, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]               | counter   |
-| [request, retransmission, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]        | counter   |
-| [request, duplicate, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]               | histogram |
-| [request, duplicate, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]             | counter   |
-| [request, bad_authenticator, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge] `*`   | histogram |
-| [request, bad_authenticator, server, $NAME, $IP, $PORT, total, undefined, undefined, counter] `*` | counter   | 
-| [request, unknown_type, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]            | histogram |
-| [request, unknown_type, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]          | counter   |
-| [request, total, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]                   | histogram |
-| [request, total, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]                 | counter   |
-| [request, access, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]                  | gauge     |
-| [request, access, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]                | histogram |
-| [request, accounting, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]              | histogram |
-| [request, accounting, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]            | counter   |
-| [request, coa, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]                     | histogram |
-| [request, coa, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]                   | counter   |
-| [request, disconnect, server, $NAME, $IP, $PORT, total, undefined, undefined, gauge]              | histogram |
-| [request, disconnect, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]            | counter   |
-| [response, total ,server, $NAME, $IP, $PORT, total, undefined, undefined, counter]                | counter   |
-| [response, access, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]               | counter   |
-| [response, accounting, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]           | counter   |
-| [response, access_accept, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]        | counter   |
-| [response, access_reject, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]        | counter   |
-| [response, access_challenge, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]     | counter   |
-| [response, disconnect_ack, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]       | counter   |
-| [response, disconnect_nak, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]       | counter   |
-| [response, coa_ack, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]              | counter   |
-| [response, coa_nak, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]              | counter   |
-| [request, pending, server, $NAME, $IP, $PORT, total, undefined, undefined, counter]               | counter   |
-| [time, last_request, server, $NAME, $IP, $PORT, total, undefined, undefined, ticks]               | gauge     |
-| [time, since_last_request, server, $NAME, $IP, $PORT, total, undefined, undefined, ticks]         | gauge     |
-| [time, last_reset, server, $NAME, $IP, $PORT, total, undefined, undefined, ticks]                 | gauge     |
-| [time, last_config_reset, server, $NAME, $IP, $PORT, total, undefined, undefined, ticks]          | gauge     |
-| [time, up, server, $NAME, $IP, $PORT, total, undefined, undefined, ticks]                         | gauge     |
-
-
-`*` - these metrics exist but not been updating.
-
-### The following `nas` metrics exist:
-
-_All metrics start with `[eradius, radius]` prefix and the prefix is not included into table to save space._
-
-
-| Metric                                                                                          | Type      |
-| ----------------------------------------------------------------------------------------------- | --------- |
-| [request, dropped, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge]                 | histogram |
-| [request, dropped, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]               | counter   |
-| [request, retransmission, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]        | counter   |
-| [request, duplicate, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge]               | histogram |
-| [request, duplicate, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]             | counter   |
-| [request, bad_authenticator, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge] `*`   | histogram |
-| [request, bad_authenticator, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter] `*` | counter   |
-| [request, unknown_type, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge]            | histogram |
-| [request, unknown_type, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]          | counter   |
-| [request, total, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge]                   | histogram |
-| [request, total, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]                 | counter   |
-| [request, access, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge]                  | histogram |
-| [request, access, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]                | counter   |
-| [request, accounting, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge]              | histogram |
-| [request, accounting, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]            | counter   |
-| [request, coa, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge]                     | histogram |
-| [request, coa, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]                   | counter   |
-| [request, disconnect, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, gauge]              | histogram |
-| [request, disconnect, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]            | counter   |
-| [response, total, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]                | counter   |
-| [response, access, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]               | counter   |
-| [response, accounting, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]           | counter   |
-| [response, access_accept, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]        | counter   |
-| [response, access_reject, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]        | counter   |
-| [response, access_challenge, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]     | counter   |
-| [response, disconnect_ack, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]       | counter   |
-| [response, disconnect_nak, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]       | counter   |
-| [response, coa_ack, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]              | counter   |
-| [response, coa_nak, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]              | counter   |
-| [request, pending, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, counter]               | counter   |
-| [time, last_request, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, ticks]               | gauge     |
-| [time, since_last_request, server, $NAME, $IP, $PORT, $NASID, $NASIP, undefined, ticks]         | gauge     |
-
-`*` - these metrics exist but not been updating.
+| Metric                                        | Labels                              | Type      |
+| ----------------------------------------------|-------------------------------------|-----------|
+| uptime_milliseconds                           | [$NAME, $IP, $PORT]                 | gauge     |
+| since_last_reset_milliseconds                 | [$NAME, $IP, $PORT]                 | gauge     |
+| requests_total                                | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| replies_total                                 | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| access_requests_total                         | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| accounting_requests_total                     | [$NAME, $IP, $PORT, $NASID, $NASIP, $TYPE] | counter   |
+| coa_requests_total                            | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| disconnect_requests                           | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| accept_responses_total                        | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| reject_responses_total                        | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| access_challenge_responses_total              | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| accounting_responses_total                    | [$NAME, $IP, $PORT, $NASID, $NASIP, $TYPE] | counter   |
+| coa_acks_total                                | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| coa_nacks_total                               | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| disconnect_acks_total                         | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| disconnect_nacks_total                        | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| malformed_requests_total                      | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| invalid_requests_total                        | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| retransmissions_total                         | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| duplicated_requests_total                     | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| pending_requests_total                        | [$NAME, $IP, $PORT, $NASID, $NASIP] | gauge     |
+| unknown_type_request_total                    | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| bad_authenticator_request_total               | [$NAME, $IP, $PORT, $NASID, $NASIP] | counter   |
+| request_duration_milliseconds                 | [$NAME, $IP, $PORT, $NASID, $NASIP] | histogram |
+| access_request_duration_milliseconds          | [$NAME, $IP, $PORT, $NASID, $NASIP] | histogram |
+| accounting_request_duration_milliseconds      | [$NAME, $IP, $PORT, $NASID, $NASIP] | histogram |
+| coa_request_duration_milliseconds             | [$NAME, $IP, $PORT, $NASID, $NASIP] | histogram |
+| disconnect_request_duration_milliseconds      | [$NAME, $IP, $PORT, $NASID, $NASIP] | histogram |
 
 ### The following `client` metrics exist:
 
-_All metrics start with `[eradius, radius]` prefix and the prefix is not included into table to save space._
+_All metrics start with `eradius` prefix and the prefix is not included into table to save space._
 
-| Metric                                                                                          | Type      |
-| ----------------------------------------------------------------------------------------------- | --------- |
-| [request, retransmission, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]          | histogram |
-| [request, retransmission, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]        | counter   |
-| [request, timeout, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]                 | histogram |
-| [request, timeout, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]               | counter   |
-| [request, bad_authenticator, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter] `*` | counter   |
-| [request, malformed, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter] `*`         | counter   |
-| [request, unknown_type, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter] `*`      | counter   | 
-| [request, total, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]                   | histogram | 
-| [request, total, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]                 | counter   |
-| [request, access, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]                  | histogram |
-| [request, access, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]                | counter   |
-| [request, accounting, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]              | histogram |
-| [request, accounting, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]            | counter   |
-| [request, coa, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]                     | histogram |
-| [request, coa, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]                   | counter   |
-| [request, disconnect, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, gauge]              | histogram |
-| [request, disconnect, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]            | counter   |
-| [response, total, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]                | counter   |
-| [response, access, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]               | counter   |
-| [response, accounting, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]           | counter   |
-| [response, access_accept, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]        | counter   |
-| [response, access_reject, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]        | counter   |
-| [response, access_challenge, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]     | counter   |
-| [response, dropped, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]              | counter   |
-| [response, disconnect_ack, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]       | counter   |
-| [response, disconnect_nak, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]       | counter   |
-| [response, coa_ack, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]              | counter   |
-| [response, coa_nak, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]              | counter   |
-| [request, pending, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, counter]               | counter   |
-| [time, last_request, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, ticks]               | gauge     |
-| [time, since_last_request, client, $CNAME, $CIP, undefined, $SNAME, $SIP, $SPORT, ticks]         | gauge     |
+| Metric                                             | Labels                                | Type      |
+| ---------------------------------------------------|---------------------------------------| ----------|
+|  client_requests_total                             | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_replies_total                              | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_access_requests_total                      | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_accounting_requests_total                  | [$NAME, $IP, $PORT, $CNAME, $CIP, $TYPE]     | counter   |
+|  client_coa_requests_total                         | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_disconnect_requests_total                  | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_retransmissions_total                      | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_timeouts_total                             | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_accept_responses_total                     | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_access_challenge_responses_total           | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_reject_responses_total                     | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_accounting_responses_total                 | [$NAME, $IP, $PORT, $CNAME, $CIP, $TYPE]     | counter   |
+|  client_coa_nacks_total                            | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_coa_acks_total                             | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_disconnect_acks_total                      | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_disconnect_nacks_total                     | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_packets_dropped_total                      | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_pending_requests_total                     | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_request_duration_milliseconds              | [$NAME, $IP, $PORT, $CNAME, $CIP]     | histogram |
+|  client_reply_duration_milliseconds                | [$NAME, $IP, $PORT, $CNAME, $CIP]     | histogram |
+|  client_access_request_duration_milliseconds       | [$NAME, $IP, $PORT, $CNAME, $CIP]     | histogram |
+|  client_accounting_request_duration_milliseconds   | [$NAME, $IP, $PORT, $CNAME, $CIP]     | histogram |
+|  client_coa_request_duration_milliseconds          | [$NAME, $IP, $PORT, $CNAME, $CIP]     | histogram |
+|  client_disconnect_request_duration_milliseconds   | [$NAME, $IP, $PORT, $CNAME, $CIP]     | histogram |
+|  client_unknown_type_request_total                 | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
+|  client_bad_authenticator_request_total            | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 
-`*` - these metrics exist but not been updating.
+### Labels
+
+Following prometheus labels are used to specify a metric:
 
 `$NAME` - Server name. `$IP:$PORT` or name from configuration if exists. For this configuration:
 
@@ -150,7 +87,7 @@ _All metrics start with `[eradius, radius]` prefix and the prefix is not include
         {root, {"127.0.0.1", [1812, 1813]}}
     ]}
 
-`root` will be used as a name. 
+`root` will be used as a name.
 
 `$IP` - server listener IP from configuration.
 
@@ -175,11 +112,6 @@ For "NAS2" `nas_id` will be used for `$NASID`(`name`)  `$NASIP` = "10.18.14.2".
 
 `$CIP` - `client_ip` from `eradius` enviroment.
 
-`$SNAME` - name from `server_name` option fduring call `eradius_client:send_request/3` or `undefined` by default.
+`$TYPE` - accounting type, can be `start` | `stop` | `update`
 
-`$SIP` - IP address of destination server.
-
-`$SPORT` - Port of destination server.
-
-Histograms are created with `slot_period` = 100 and `time_span` = 60000.
-All timing values in the histograms are in microseconds (µs).
+All timing values in the histograms are in milliseconds.

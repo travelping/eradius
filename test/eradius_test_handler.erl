@@ -2,7 +2,7 @@
 
 -behaviour(eradius_server).
 
--export([start/0, stop/0, send_request/1, radius_request/3]).
+-export([start/0, stop/0, send_request/1, send_request_failover/1, radius_request/3]).
 -export([localhost/1]).
 
 -include("include/eradius_lib.hrl").
@@ -14,7 +14,8 @@ start() ->
     application:set_env(eradius, session_nodes, local),
     application:set_env(eradius, one, [{{"ONE", []}, [{localhost(ip), "secret"}]}]),
     application:set_env(eradius, servers, [{one, {localhost(ip), [1812]}}]),
-    application:set_env(eradius, metrics, []),
+    application:set_env(eradius, unreachable_timeout, 2),
+    application:set_env(eradius, servers_pool, [{test_pool, [{localhost(tuple), 1812, "secret"}]}]),
     application:ensure_all_started(eradius),
     eradius:modules_ready([?MODULE]).
 
@@ -25,6 +26,15 @@ stop() ->
 
 send_request(IP) ->
     {ok, R, A} = eradius_client:send_request({IP, 1812, "secret"}, #radius_request{cmd = request}, []),
+    #radius_request{cmd = Cmd} = eradius_lib:decode_request(R, <<"secret">>, A),
+    Cmd.
+
+send_request_failover(Server) ->
+    {ok, Pools} = application:get_env(eradius, servers_pool),
+    SecondaryServers = proplists:get_value(test_pool, Pools),
+    {ok, R, A} = eradius_client:send_request(Server, #radius_request{cmd = request}, [{retries, 1},
+                                                                                      {timeout, 2000},
+                                                                                      {failover, SecondaryServers}]),
     #radius_request{cmd = Cmd} = eradius_lib:decode_request(R, <<"secret">>, A),
     Cmd.
 

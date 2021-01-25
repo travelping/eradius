@@ -1,0 +1,66 @@
+#
+# dictionary.ituma
+#
+
+VENDOR		Ituma	52315
+
+BEGIN-VENDOR	Ituma
+
+#
+#    Standard attribute
+#
+ATTRIBUTE       IM-NAS-Ethernet-MAC-Address                1       string
+ATTRIBUTE       IM-Wifi-BSSID                              2       octets
+ATTRIBUTE       IM-UE-MAC-Address                          3       string
+ATTRIBUTE       IM-UE-Host-Name                            4       string
+ATTRIBUTE       IM-UE-Sta-RSSI                             5       integer
+ATTRIBUTE       IM-Rule-Name                               6       string
+ATTRIBUTE       IM-Policy-Name                             7       string
+ATTRIBUTE       IM-NAS-Vendor-Name                         8       string
+ATTRIBUTE       IM-NAS-Vendor-Id                           9       integer
+ATTRIBUTE       IM-NAS-Model-Name                          10      string
+ATTRIBUTE       IM-NAS-Request-Type                        11      string
+ATTRIBUTE       IM-NAS-Type                                12      string
+ATTRIBUTE       IM-NAS-Ethernet-Identifier                 13      string
+ATTRIBUTE       IM-e164-Identity                           14      string
+ATTRIBUTE       IM-SSID                                    15      string
+ATTRIBUTE       IM-Real-Identity                           16      string
+ATTRIBUTE       IM-QoS-Name                                17      string
+ATTRIBUTE       IM-QoS-Index                               18      integer
+ATTRIBUTE       IM-QoS-Priority                            19      integer
+ATTRIBUTE       IM-Framed-NAT-IP-Address                   20      string
+ATTRIBUTE       IM-Framed-Port-Range-Start                 21      integer
+ATTRIBUTE       IM-Framed-Port-Range-End                   22      integer
+ATTRIBUTE       IM-Framed-Port-Range-ID                    23      string
+ATTRIBUTE       IM-CoA-Source-IP-Address                   24      string
+ATTRIBUTE       IM-Radius-Proxy-IP-Address                 25      string
+ATTRIBUTE       IM-Voucher-Name                            26      string
+ATTRIBUTE       IM-Enable-Timestamp                        27      string
+ATTRIBUTE       IM-Auth-Reply                              28      string
+ATTRIBUTE       IM-Has-Internet-Access                     29      integer
+ATTRIBUTE       IM-GRE-Tunnel-IP-Address                   30      string
+ATTRIBUTE       IM-Wifi-Connect-Type                       31      string
+ATTRIBUTE       IM-Secure-Real-Identity                    32      string
+ATTRIBUTE       IM-Area-Id-Str                             33      string
+ATTRIBUTE       IM-Session-Start-Acct-Input-Octets         34      integer
+ATTRIBUTE       IM-Session-Start-Acct-Output-Octets        35      integer
+ATTRIBUTE       IM-Session-Cleanup-Time-Stamp              36      string
+ATTRIBUTE       IM-Session-Start-Acct-Input-Octets-64      37      integer64
+ATTRIBUTE       IM-Session-Start-Acct-Output-Octets-64     38      integer64
+ATTRIBUTE       IM-Acct-Input-Octets-64                    39      integer64
+ATTRIBUTE       IM-Acct-Output-Octets-64                   40      integer64
+ATTRIBUTE       IM-Cisco-Session-Id                        41      string
+ATTRIBUTE       IM-End-Date                                42      date
+ATTRIBUTE       IM-Upload-Limit                            43      integer
+ATTRIBUTE       IM-Download-Limit                          44      integer
+ATTRIBUTE       IM-Accepted-TAC-Version                    45      float32
+ATTRIBUTE       IM-LI-Subsc-ID-Str                         46      string
+ATTRIBUTE       IM-LI-Nat-Port-Range                       47      string
+ATTRIBUTE       IM-LI-User-Name                            48      string
+ATTRIBUTE       IM-LI-NAS-ID                               49      string
+ATTRIBUTE       IM-LI-Location                             50      string
+ATTRIBUTE       IM-LI-Identifier                           51      string
+ATTRIBUTE       IM-LI-Access-State                         52      string
+ATTRIBUTE       IM-UE-Wwan-RSSI                            53      integer
+
+END-VENDOR	Ituma

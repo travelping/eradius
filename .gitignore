@@ -22,3 +22,5 @@ logs
 erl_crash.dump
 rebar
 _build
+rebar.lock
+rebar3
