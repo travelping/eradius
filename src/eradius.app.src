@@ -1,7 +1,7 @@
 %% vim: ft=erlang
 {application, eradius, [
    {description, "Erlang RADIUS server"},
-   {vsn, git},
+   {vsn, semver},
    {registered, [eradius_dict, eradius_sup, eradius_server_top_sup, eradius_server_sup, eradius_server_mon]},
    {applications, [kernel, stdlib, crypto]},
    {mod, {eradius, []}},
