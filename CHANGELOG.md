@@ -3,6 +3,20 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.2.1 - 4 February 2021
+---------------------------
+
+**Features** :rocket:
+* [#176](https://github.com/travelping/eradius/pull/176) Added [SemVer](https://semver.org/)
+
+**Bugfixes** :bug:
+* [#177](https://github.com/travelping/eradius/pull/177) Set servers_pool to empty list by default
+* [#178](https://github.com/travelping/eradius/pull/178) Fix getting of `servers_pools` from configuration in `eradius_proxy` handler
+* [#175](https://github.com/travelping/eradius/pull/175) Update `hex` package
+
+**Refactorings** :fire:
+* [#179](https://github.com/travelping/eradius/pull/179) Remove non use documentation
+
 Version 2.2.0 - 24 December 2020
 ---------------------------
 
