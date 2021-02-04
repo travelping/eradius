@@ -24,6 +24,7 @@ several authentication mechanisms and dynamic configuration
   * [Failover configuration](#failover-configuration)
   * [Failover Erlang code usage](#failover-erlang-code-usage)
 * [Eradius counter aggregator](#eradius-counter-aggregator)
+* [Tables](#tables)
 
 # Erlang Version Support
 
@@ -284,6 +285,16 @@ Configuration example:
     {counter_aggregator, true}
     %%% ...
 ]}]
+```
+
+# Tables
+
+A list of RADIUS dictionaries to be loaded at startup. The atoms in this list are resolved to files in
+the `priv` directory of the eradius application.
+
+Example:
+```
+    [dictionary, dictionary_cisco, dictionary_travelping]
 ```
 
 <!-- Badges -->
