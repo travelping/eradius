@@ -11,9 +11,7 @@
       {client_ip, undefined},
       {client_ports, 100},
       {resend_timeout, 30000},
-      {logging, false},
       {counter_aggregator, false},
-      {logfile, "./radius.log"},
       {recbuf, 8192}
    ]},
    {maintainers, ["Andreas Schultz", "Vladimir Tarasenko", "Yury Gargay"]},

@@ -283,9 +283,7 @@ handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, na
     case eradius_lib:decode_request(EncRequest, Secret) of
         Request = #radius_request{} ->
             Sender = {ServerIP, Port, Request#radius_request.reqid},
-            ?LOG(info, "~s", [eradius_log:collect_message(Sender, Request)],
-                 maps:from_list(eradius_log:collect_meta(Sender, Request))),
-            eradius_log:write_request(Sender, Request),
+            ?LOG(info, "Sender: ~p~nRequest ~p", [Sender, Request]),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
         {bad_pdu, "Message-Authenticator Attribute is invalid" = Reason} ->
             ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
@@ -318,23 +316,19 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             EncReply = eradius_lib:encode_reply(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
                                                                        msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
                                                                        eap_msg = EAPmsg}),
-            ?LOG(info, "~s", [eradius_log:collect_message(Sender, Reply)],
-                 maps:from_list(eradius_log:collect_meta(Sender, Reply))),
-            eradius_log:write_request(Sender, Reply),
+            ?LOG(info, "Sender: ~p~nReply: ~p", [Sender, Reply]),
             {reply, EncReply, {Request#radius_request.cmd, ReplyCmd}, Request};
         noreply ->
             ?LOG(error, "~s INF: Noreply for request ~p from handler ~p: returned value: ~p",
                         [printable_peer(ServerIP, Port), Request, HandlerArg, noreply]),
             {discard, handler_returned_noreply};
         {error, timeout} ->
-            ReqType = eradius_log:format_cmd(Request#radius_request.cmd),
             ReqId = integer_to_list(Request#radius_request.reqid),
             S = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
             NAS = eradius_lib:get_attr(Request, ?NAS_Identifier),
             NAS_IP = inet_parse:ntoa(NasProp#nas_prop.nas_ip),
-            ?LOG(error, "~s INF: Timeout after waiting for response to ~s(~s) from RADIUS NAS: ~s NAS_IP:~s",
-                 [printable_peer(ServerIP, Port), ReqType, ReqId, NAS, NAS_IP],
-                 maps:from_list(eradius_log:collect_meta(S, Request))),
+            ?LOG(error, "~s INF: Timeout after waiting for response to ~p(~s) from RADIUS NAS: ~s NAS_IP:~s S: ~p",
+                 [printable_peer(ServerIP, Port), Request#radius_request.cmd, ReqId, NAS, NAS_IP, S]),
             {discard, {bad_return, {error, timeout}}};
         OtherReturn ->
             ?LOG(error, "~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",

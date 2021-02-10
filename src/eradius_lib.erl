@@ -2,6 +2,7 @@
 -export([del_attr/2, get_attr/2, encode_request/1, encode_reply/1, decode_request/2, decode_request/3, decode_request_id/1]).
 -export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, get_attributes/1, set_attributes/2]).
 -export([timestamp/0, timestamp/1, printable_peer/2, make_addr_info/1]).
+-export([bin_to_hexstr/1]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
 % -compile(bin_opt_info).
@@ -555,3 +556,11 @@ message_authenticator(Secret, Msg) ->
     crypto:hmac(md5, Secret, Msg).
 
 -endif.
+
+bin_to_hexstr(Bin) ->
+    << << (hexchar(X)) >> || <<X:4>> <= Bin >>.
+
+hexchar(X) when X >= 0, X < 10 ->
+    X + $0;
+hexchar(X) when X >= 10, X < 16 ->
+    X + ($A - 10).

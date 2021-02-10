@@ -162,7 +162,7 @@ v2_generate_authenticator_response(PasswdHash, NTResponse, PeerChallenge, Authen
     FinalDigest = crypto:hash(sha, [Digest, ChallengeHash, v2_magic2()]),
 
     %% trailing space needed for some implementations...
-    <<"S=", (eradius_log:bin_to_hexstr(FinalDigest))/binary, " ">>.
+    <<"S=", (eradius_lib:bin_to_hexstr(FinalDigest))/binary, " ">>.
 
 %% crypto API changes in OTP >= 23
 -if(?OTP_RELEASE >= 23).

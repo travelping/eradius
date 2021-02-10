@@ -219,10 +219,6 @@ Example of full configuration with keys which can use in `eradius`:
     {counter_aggregator, false},
     %% List of histogram buckets for RADIUS servers metrics 
     {histogram_buckets, [10, 30, 50, 75, 100, 1000, 2000]},
-    %% Simple file-based logging of RADIUS requests and metadata
-    {logging, true},
-    %% Path to log file
-    {logfile, "./radius.log"},
     %% List of upstream RADIUS servers pools 
     {servers_pool, [
         {pool_name, [

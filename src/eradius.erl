@@ -5,7 +5,7 @@
          statistics/1]).
 
 -behaviour(application).
--export([start/2, stop/1, config_change/3]).
+-export([start/2, stop/1, config_change/2]).
 
 %% internal use
 
@@ -56,12 +56,9 @@ stop(_State) ->
     ok.
 
 %% @private
-config_change(Added, Changed, Removed) ->
+config_change(Added, Changed) ->
     lists:foreach(fun do_config_change/1, Added),
     lists:foreach(fun do_config_change/1, Changed),
-    Keys = [K || {K, _} <- Added ++ Changed] ++ Removed,
-    (lists:member(logging, Keys) or lists:member(logfile, Keys))
-        andalso eradius_log:reconfigure(),
     eradius_client:reconfigure().
 
 do_config_change({tables, NewTables}) ->
