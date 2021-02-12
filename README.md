@@ -1,5 +1,7 @@
 # eradius
 
+[![Hex.pm Version][hexpm version]][hexpm]
+[![Hex.pm Downloads][hexpm downloads]][hexpm]
 [![Build Status][travis badge]][travis]
 [![Coverage Status][coveralls badge]][coveralls]
 [![Erlang Versions][erlang version badge]][travis]
@@ -298,6 +300,9 @@ Example:
 ```
 
 <!-- Badges -->
+[hexpm]: https://hex.pm/packages/eradius
+[hexpm version]: https://img.shields.io/hexpm/v/eradius.svg?style=flat
+[hexpm downloads]: https://img.shields.io/hexpm/dt/eradius.svg?style=flat
 [travis]: https://travis-ci.com/travelping/eradius
 [travis badge]: https://img.shields.io/travis/com/travelping/eradius/master.svg?style=flat-square
 [coveralls]: https://coveralls.io/github/travelping/eradius
