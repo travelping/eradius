@@ -307,4 +307,4 @@ Example:
 [travis badge]: https://img.shields.io/travis/com/travelping/eradius/master.svg?style=flat-square
 [coveralls]: https://coveralls.io/github/travelping/eradius
 [coveralls badge]: https://img.shields.io/coveralls/travelping/eradius/master.svg?style=flat-square
-[erlang version badge]: https://img.shields.io/badge/erlang-R21.0%20to%2022.3-blue.svg?style=flat-square
+[erlang version badge]: https://img.shields.io/badge/erlang-R21.0%20to%2023.1.2-blue.svg?style=flat-square
