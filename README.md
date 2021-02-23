@@ -2,9 +2,9 @@
 
 [![Hex.pm Version][hexpm version]][hexpm]
 [![Hex.pm Downloads][hexpm downloads]][hexpm]
-[![Build Status][travis badge]][travis]
 [![Coverage Status][coveralls badge]][coveralls]
-[![Erlang Versions][erlang version badge]][travis]
+[![Build Status][gh badge]][gh]
+[![Erlang Versions][erlang version badge]][gh]
 
 This fork of `eradius` is a radical deviation from the original
 Jungerl code. It contains a generic [RADIUS](https://en.wikipedia.org/wiki/RADIUS) client, support for
@@ -34,7 +34,7 @@ All minor version of the current major release and the highest minor version of 
 previous major release will be supported.
 At the moment this means OTP 21.3, OTP 22.x and OTP 23.x are supported. OTP versions before 21.0
 do not work due the use of logger. When in doubt check the `otp_release` section in
-[.travis.yml](.travis.yml) for tested versions.
+[main.yml](.github/workflows/main.yml) for tested versions.
 
 # Building eradius
 
@@ -303,8 +303,8 @@ Example:
 [hexpm]: https://hex.pm/packages/eradius
 [hexpm version]: https://img.shields.io/hexpm/v/eradius.svg?style=flat
 [hexpm downloads]: https://img.shields.io/hexpm/dt/eradius.svg?style=flat
-[travis]: https://travis-ci.com/travelping/eradius
-[travis badge]: https://img.shields.io/travis/com/travelping/eradius/master.svg?style=flat-square
 [coveralls]: https://coveralls.io/github/travelping/eradius
 [coveralls badge]: https://img.shields.io/coveralls/travelping/eradius/master.svg?style=flat-square
-[erlang version badge]: https://img.shields.io/badge/erlang-R21.0%20to%2023.1.2-blue.svg?style=flat-square
+[gh]: https://github.com/travelping/eradius/actions/workflows/main.yml
+[gh badge]: https://img.shields.io/github/workflow/status/travelping/eradius/CI?style=flat-square
+[erlang version badge]: https://img.shields.io/badge/erlang-R22.0%20to%2023.2-blue.svg?style=flat-square
