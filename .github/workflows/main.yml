@@ -66,6 +66,7 @@ jobs:
   finish:
     needs: test
     runs-on: ubuntu-20.04
+    if: always()
     steps:
     - name: Coveralls Finished
       env:
