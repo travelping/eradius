@@ -301,8 +301,8 @@ Example:
 
 <!-- Badges -->
 [hexpm]: https://hex.pm/packages/eradius
-[hexpm version]: https://img.shields.io/hexpm/v/eradius.svg?style=flat
-[hexpm downloads]: https://img.shields.io/hexpm/dt/eradius.svg?style=flat
+[hexpm version]: https://img.shields.io/hexpm/v/eradius.svg?style=flat-square
+[hexpm downloads]: https://img.shields.io/hexpm/dt/eradius.svg?style=flat-square
 [coveralls]: https://coveralls.io/github/travelping/eradius
 [coveralls badge]: https://img.shields.io/coveralls/travelping/eradius/master.svg?style=flat-square
 [gh]: https://github.com/travelping/eradius/actions/workflows/main.yml
