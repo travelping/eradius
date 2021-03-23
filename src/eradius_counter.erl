@@ -2,7 +2,8 @@
 %%  This module implements the statitics counter for RADIUS servers and clients
 
 -module(eradius_counter).
--export([init_counter/1, inc_counter/2, dec_counter/2, reset_counter/1, inc_request_counter/2, inc_reply_counter/2, observe/4, observe/5]).
+-export([init_counter/1, init_counter/2, inc_counter/2, dec_counter/2, reset_counter/1, reset_counter/2,
+         inc_request_counter/2, inc_reply_counter/2, observe/4, observe/5]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -24,18 +25,15 @@
 %% @doc initialize a counter structure
 init_counter({ServerIP, ServerPort, ServerName}) when is_integer(ServerPort) ->
     #server_counter{key = {ServerIP, ServerPort}, startTime = eradius_lib:timestamp(), resetTime = eradius_lib:timestamp(), server_name = ServerName};
-init_counter(#nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId}) ->
-    #nas_counter{key = {{ServerIP, ServerPort}, NasIP, NasId}};
-init_counter({{ServerIP, ServerPort}, NasIP})
-  when is_tuple(ServerIP), is_integer(ServerPort), is_tuple(NasIP) ->
-    #nas_counter{key = {{ServerIP, ServerPort}, NasIP}};
 init_counter({{ClientName, ClientIP, ClientPort}, {ServerName, ServerIp, ServerPort}}) ->
     #client_counter{key = {{ClientName, ClientIP, ClientPort}, {ServerName, ServerIp, ServerPort}}, server_name = ServerName}.
+init_counter(#nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId}, ServerName) ->
+    #nas_counter{key = {{ServerIP, ServerPort}, NasIP, NasId}, server_name = ServerName}.
 
 %% @doc reset counters
-reset_counter(#server_counter{startTime = Up}) -> #server_counter{startTime = Up, resetTime = eradius_lib:timestamp()};
-reset_counter(Nas = #nas_prop{}) ->
-    init_counter(Nas).
+reset_counter(#server_counter{startTime = Up}) -> #server_counter{startTime = Up, resetTime = eradius_lib:timestamp()}.
+reset_counter(Nas = #nas_prop{}, ServerName) ->
+    init_counter(Nas, ServerName).
 
 %% @doc increment requests counters
 inc_request_counter(Counter, Nas) ->
@@ -153,41 +151,23 @@ handle_call(reset, _From, State) ->
 
 %% @private
 handle_cast({inc_counter, Counter, Key = {{_ClientName, _ClientIP, _ClientPort}, {_ServerName, _ServerIp, _ServerPort}}}, State) ->
-    Cnt0 = case ets:lookup(?MODULE, Key) of
-               [] -> init_counter(Key);
-               [Cnt] -> Cnt
-    end,
-    ets:insert(?MODULE, do_inc_counter(Counter, Cnt0)),
+    ets:update_counter(?MODULE, Key, {counter_idx(Counter, client), 1}, init_counter(Key)),
     {noreply, State};
 
 handle_cast({inc_counter, Counter, Nas = #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId}}, State) ->
     Key = {{ServerIP, ServerPort}, NasIP, NasId},
-    Cnt0 = case ets:lookup(?MODULE, Key) of
-               [] -> init_counter(Nas);
-               [Cnt] -> Cnt
-    end,
     {{ServerName, _, _}, _} = Nas#nas_prop.metrics_info,
-    Cnt1 = Cnt0#nas_counter{server_name = ServerName},
-    ets:insert(?MODULE, do_inc_counter(Counter, Cnt1)),
+    ets:update_counter(?MODULE, Key, {counter_idx(Counter, nas), 1}, init_counter(Nas, ServerName)),
     {noreply, State};
 
 handle_cast({dec_counter, Counter, Key = {{_ClientName, _ClientIP, _ClientPort}, {_ServerName, _ServerIp, _ServerPort}}}, State) ->
-    Cnt0 = case ets:lookup(?MODULE, Key) of
-               [] -> init_counter(Key);
-               [Cnt] -> Cnt
-    end,
-    ets:insert(?MODULE, do_dec_counter(Counter, Cnt0)),
+    ets:update_counter(?MODULE, Key, {counter_idx(Counter, client), -1}, init_counter(Key)),
     {noreply, State};
 
 handle_cast({dec_counter, Counter, Nas = #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId}}, State) ->
     Key = {{ServerIP, ServerPort}, NasIP, NasId},
-    Cnt0 = case ets:lookup(?MODULE, Key) of
-               [] -> init_counter(Nas);
-               [Cnt] -> Cnt
-    end,
     {{ServerName, _, _}, _} = Nas#nas_prop.metrics_info,
-    Cnt1 = Cnt0#nas_counter{server_name = ServerName},
-    ets:insert(?MODULE, do_dec_counter(Counter, Cnt1)),
+    ets:update_counter(?MODULE, Key, {counter_idx(Counter, nas), -1}, init_counter(Nas, ServerName)),
     {noreply, State};
 
 handle_cast({collect, Ref, Process}, State) ->
@@ -217,62 +197,57 @@ server_stats(Func) ->
     lists:foldl(fun(S, Acc) -> [eradius_server:stats(S, Func)|Acc] end, [], eradius_server_sup:all()).
 
 %% @private
-do_inc_counter(requests,                Counters = #nas_counter{requests = Value})                -> Counters#nas_counter{requests = Value + 1};
-do_inc_counter(replies,                 Counters = #nas_counter{replies = Value})                 -> Counters#nas_counter{replies = Value + 1};
-do_inc_counter(dupRequests,             Counters = #nas_counter{dupRequests = Value})             -> Counters#nas_counter{dupRequests = Value + 1};
-do_inc_counter(malformedRequests,       Counters = #nas_counter{malformedRequests = Value})       -> Counters#nas_counter{malformedRequests = Value + 1};
-do_inc_counter(accessRequests,          Counters = #nas_counter{accessRequests = Value})          -> Counters#nas_counter{accessRequests = Value + 1};
-do_inc_counter(accessAccepts,           Counters = #nas_counter{accessAccepts = Value})           -> Counters#nas_counter{accessAccepts = Value + 1};
-do_inc_counter(accessRejects,           Counters = #nas_counter{accessRejects = Value})           -> Counters#nas_counter{accessRejects = Value + 1};
-do_inc_counter(accessChallenges,        Counters = #nas_counter{accessChallenges = Value})        -> Counters#nas_counter{accessChallenges = Value + 1};
-do_inc_counter(noRecords,               Counters = #nas_counter{noRecords = Value})               -> Counters#nas_counter{noRecords = Value + 1};
-do_inc_counter(badAuthenticators,       Counters = #nas_counter{badAuthenticators = Value})       -> Counters#nas_counter{badAuthenticators = Value + 1};
-do_inc_counter(packetsDropped,          Counters = #nas_counter{packetsDropped = Value})          -> Counters#nas_counter{packetsDropped = Value + 1};
-do_inc_counter(unknownTypes,            Counters = #nas_counter{unknownTypes = Value})            -> Counters#nas_counter{unknownTypes = Value + 1};
-do_inc_counter(handlerFailure,          Counters = #nas_counter{handlerFailure = Value})          -> Counters#nas_counter{handlerFailure = Value + 1};
-do_inc_counter(coaRequests,             Counters = #nas_counter{coaRequests = Value})             -> Counters#nas_counter{coaRequests = Value + 1};
-do_inc_counter(coaAcks,                 Counters = #nas_counter{coaAcks = Value})                 -> Counters#nas_counter{coaAcks = Value + 1};
-do_inc_counter(coaNaks,                 Counters = #nas_counter{coaNaks = Value})                 -> Counters#nas_counter{coaNaks = Value + 1};
-do_inc_counter(discRequests,            Counters = #nas_counter{discRequests = Value})            -> Counters#nas_counter{discRequests = Value + 1};
-do_inc_counter(discAcks,                Counters = #nas_counter{discAcks = Value})                -> Counters#nas_counter{discAcks = Value + 1};
-do_inc_counter(discNaks,                Counters = #nas_counter{discNaks = Value})                -> Counters#nas_counter{discNaks = Value + 1};
-do_inc_counter(retransmissions,         Counters = #nas_counter{retransmissions = Value})         -> Counters#nas_counter{retransmissions = Value + 1};
-do_inc_counter(pending,                 Counters = #nas_counter{pending = Value})                 -> Counters#nas_counter{pending = Value + 1};
-do_inc_counter(accountRequestsStart,   Counters = #nas_counter{accountRequestsStart = Value})     -> Counters#nas_counter{accountRequestsStart = Value + 1};
-do_inc_counter(accountRequestsStop,    Counters = #nas_counter{accountRequestsStop = Value})      -> Counters#nas_counter{accountRequestsStop = Value + 1};
-do_inc_counter(accountRequestsUpdate,  Counters = #nas_counter{accountRequestsUpdate = Value})    -> Counters#nas_counter{accountRequestsUpdate = Value + 1};
-do_inc_counter(accountResponsesStart,  Counters = #nas_counter{accountResponsesStart = Value})    -> Counters#nas_counter{accountResponsesStart = Value + 1};
-do_inc_counter(accountResponsesStop,   Counters = #nas_counter{accountResponsesStop = Value})     -> Counters#nas_counter{accountResponsesStop = Value + 1};
-do_inc_counter(accountResponsesUpdate, Counters = #nas_counter{accountResponsesUpdate = Value})   -> Counters#nas_counter{accountResponsesUpdate = Value + 1};
+counter_idx(requests, nas) ->               #nas_counter.requests;
+counter_idx(replies, nas) ->                #nas_counter.replies;
+counter_idx(dupRequests, nas) ->            #nas_counter.dupRequests;
+counter_idx(malformedRequests, nas) ->      #nas_counter.malformedRequests;
+counter_idx(accessRequests, nas) ->         #nas_counter.accessRequests;
+counter_idx(accessAccepts, nas) ->          #nas_counter.accessAccepts;
+counter_idx(accessRejects, nas) ->          #nas_counter.accessRejects;
+counter_idx(accessChallenges, nas) ->       #nas_counter.accessChallenges;
+counter_idx(badAuthenticators, nas) ->      #nas_counter.badAuthenticators;
+counter_idx(packetsDropped, nas) ->         #nas_counter.packetsDropped;
+counter_idx(unknownTypes, nas) ->           #nas_counter.unknownTypes;
+counter_idx(handlerFailure, nas) ->         #nas_counter.handlerFailure;
+counter_idx(coaRequests, nas) ->            #nas_counter.coaRequests;
+counter_idx(coaAcks, nas) ->                #nas_counter.coaAcks;
+counter_idx(coaNaks, nas) ->                #nas_counter.coaNaks;
+counter_idx(discRequests, nas) ->           #nas_counter.discRequests;
+counter_idx(discAcks, nas) ->               #nas_counter.discAcks;
+counter_idx(discNaks, nas) ->               #nas_counter.discNaks;
+counter_idx(retransmissions, nas) ->        #nas_counter.retransmissions;
+counter_idx(pending, nas) ->                #nas_counter.pending;
+counter_idx(accountRequestsStart, nas) ->   #nas_counter.accountRequestsStart;
+counter_idx(accountRequestsStop, nas) ->    #nas_counter.accountRequestsStop;
+counter_idx(accountRequestsUpdate, nas) ->  #nas_counter.accountRequestsUpdate;
+counter_idx(accountResponsesStart, nas) ->  #nas_counter.accountResponsesStart;
+counter_idx(accountResponsesStop, nas) ->   #nas_counter.accountResponsesStop;
+counter_idx(accountResponsesUpdate, nas) -> #nas_counter.accountResponsesUpdate;
 
-do_inc_counter(requests,          Counters = #client_counter{requests = Value})          -> Counters#client_counter{requests = Value + 1};
-do_inc_counter(replies,           Counters = #client_counter{replies = Value})           -> Counters#client_counter{replies = Value + 1};
-do_inc_counter(accessRequests,    Counters = #client_counter{accessRequests = Value})    -> Counters#client_counter{accessRequests = Value + 1};
-do_inc_counter(coaRequests,       Counters = #client_counter{coaRequests = Value})       -> Counters#client_counter{coaRequests = Value + 1};
-do_inc_counter(discRequests,      Counters = #client_counter{discRequests = Value})      -> Counters#client_counter{discRequests = Value + 1};
-do_inc_counter(retransmissions,   Counters = #client_counter{retransmissions = Value})   -> Counters#client_counter{retransmissions = Value + 1};
-do_inc_counter(timeouts,          Counters = #client_counter{timeouts = Value})          -> Counters#client_counter{timeouts = Value + 1};
-do_inc_counter(accessAccepts,     Counters = #client_counter{accessAccepts = Value})     -> Counters#client_counter{accessAccepts = Value + 1};
-do_inc_counter(accessRejects,     Counters = #client_counter{accessRejects = Value})     -> Counters#client_counter{accessRejects = Value + 1};
-do_inc_counter(accessChallenges,  Counters = #client_counter{accessChallenges = Value})  -> Counters#client_counter{accessChallenges = Value + 1};
-do_inc_counter(coaNaks,           Counters = #client_counter{coaNaks = Value})           -> Counters#client_counter{coaNaks = Value + 1};
-do_inc_counter(coaAcks,           Counters = #client_counter{coaAcks = Value})           -> Counters#client_counter{coaAcks = Value + 1};
-do_inc_counter(discNaks,          Counters = #client_counter{discNaks = Value})          -> Counters#client_counter{discNaks = Value + 1};
-do_inc_counter(discAcks,          Counters = #client_counter{discAcks = Value})          -> Counters#client_counter{discAcks = Value + 1};
-do_inc_counter(badAuthenticators, Counters = #client_counter{badAuthenticators = Value}) -> Counters#client_counter{badAuthenticators = Value + 1};
-do_inc_counter(packetsDropped,    Counters = #client_counter{packetsDropped = Value})    -> Counters#client_counter{packetsDropped = Value + 1};
-do_inc_counter(unknownTypes,      Counters = #client_counter{unknownTypes = Value})      -> Counters#client_counter{unknownTypes = Value + 1};
-do_inc_counter(pending,           Counters = #client_counter{pending = Value})           -> Counters#client_counter{pending = Value + 1};
-do_inc_counter(accountRequestsStart,   Counters = #client_counter{accountRequestsStart = Value})   -> Counters#client_counter{accountRequestsStart = Value + 1};
-do_inc_counter(accountRequestsStop,    Counters = #client_counter{accountRequestsStop = Value})    -> Counters#client_counter{accountRequestsStop = Value + 1};
-do_inc_counter(accountRequestsUpdate,  Counters = #client_counter{accountRequestsUpdate = Value})  -> Counters#client_counter{accountRequestsUpdate = Value + 1}; 
-do_inc_counter(accountResponsesStart,  Counters = #client_counter{accountResponsesStart = Value})  -> Counters#client_counter{accountResponsesStart = Value + 1};
-do_inc_counter(accountResponsesStop,   Counters = #client_counter{accountResponsesStop = Value})   -> Counters#client_counter{accountResponsesStop = Value + 1};
-do_inc_counter(accountResponsesUpdate, Counters = #client_counter{accountResponsesUpdate = Value}) -> Counters#client_counter{accountResponsesUpdate = Value + 1}.
-
-%% @private
-do_dec_counter(pending, Counters = #nas_counter{pending = Value}) -> Counters#nas_counter{pending = Value - 1};
-do_dec_counter(pending, Counters = #client_counter{pending = Value}) -> Counters#client_counter{pending = Value - 1}.
+counter_idx(requests, client) ->               #client_counter.requests;
+counter_idx(replies, client) ->                #client_counter.replies;
+counter_idx(accessRequests, client) ->         #client_counter.accessRequests;
+counter_idx(coaRequests, client) ->            #client_counter.coaRequests;
+counter_idx(discRequests, client) ->           #client_counter.discRequests;
+counter_idx(retransmissions, client) ->        #client_counter.retransmissions;
+counter_idx(accessAccepts, client) ->          #client_counter.accessAccepts;
+counter_idx(accessRejects, client) ->          #client_counter.accessRejects;
+counter_idx(accessChallenges, client) ->       #client_counter.accessChallenges;
+counter_idx(coaNaks, client) ->                #client_counter.coaNaks;
+counter_idx(coaAcks, client) ->                #client_counter.coaAcks;
+counter_idx(discNaks, client) ->               #client_counter.discNaks;
+counter_idx(discAcks, client) ->               #client_counter.discAcks;
+counter_idx(badAuthenticators, client) ->      #client_counter.badAuthenticators;
+counter_idx(packetsDropped, client) ->         #client_counter.packetsDropped;
+counter_idx(unknownTypes, client) ->           #client_counter.unknownTypes;
+counter_idx(pending, client) ->                #client_counter.pending;
+counter_idx(timeouts, client) ->               #client_counter.timeouts;
+counter_idx(accountRequestsStart, client) ->   #client_counter.accountRequestsStart;
+counter_idx(accountRequestsStop, client) ->    #client_counter.accountRequestsStop;
+counter_idx(accountRequestsUpdate, client) ->  #client_counter.accountRequestsUpdate;
+counter_idx(accountResponsesStart, client) ->  #client_counter.accountResponsesStart;
+counter_idx(accountResponsesStop, client) ->   #client_counter.accountResponsesStop;
+counter_idx(accountResponsesUpdate, client) -> #client_counter.accountResponsesUpdate.
 
 add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
     #nas_counter{
