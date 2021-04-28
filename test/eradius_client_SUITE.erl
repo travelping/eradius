@@ -151,8 +151,8 @@ test(false, Msg) ->
 
 check(OldState, NewState = #state{no_ports = P}, null, A) -> check(OldState, NewState, P, A);
 check(OldState, NewState = #state{socket_ip = A}, P, null) -> check(OldState, NewState, P, A);
-check(#state{sockets = OS, no_ports = _OP, idcounters = _OC, socket_ip = OA},
-        #state{sockets = NS, no_ports = NP, idcounters = NC, socket_ip = NA},
+check(#state{sockets = OS, no_ports = _OP, idcounters = _OC, socket_ip = OA, sup = _, subscribed_clients = _},
+        #state{sockets = NS, no_ports = NP, idcounters = NC, socket_ip = NA, sup = _, subscribed_clients = _},
         P, A) ->
     {ok, PA} = parse_ip(A),
     test(PA == NA, "Adress not configured") and

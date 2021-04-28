@@ -33,12 +33,6 @@
 -define(SECRET2, <<"proxy_secret">>).
 -define(SECRET3, <<"test_secret">>).
 
--define(CLIENT_REQUESTS_COUNT, 1).
--define(CLIENT_PROXY_REQUESTS_COUNT, 4).
-
--define(NAS1_ACCESS_REQS, 1).
--define(NAS2_ACCESS_REQS, 4).
-
 start() ->
     application:load(eradius),
     ProxyConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, ?SECRET}},

@@ -34,7 +34,8 @@
 -define(ENC_PASSWORD, 186,128,194,207,68,25,190,19,23,226,48,206,244,143,56,238).
 -define(ENC_PASSWORD_ASCEND, 222,170,194,83,115,231,228,55,75,17,20,6,198,33,112,197).
 -define(PDU, #radius_request{ reqid = 1, secret = ?SECRET, authenticator = ?REQUEST_AUTHENTICATOR }).
-
+-define(RUser_Passwd, 2).
+-define(RUser_Name, 1).
 
 %% test callbacks
 all() -> [ipv6prefix,

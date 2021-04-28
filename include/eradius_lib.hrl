@@ -9,23 +9,7 @@
 -type atom_address() :: {atom_name(), {atom_ip(), atom_port()}}.
 -type atom_address_pair() :: {atom_address(), atom_address()}.
 
-%%- cmds
--define(RAccess_Request,       1).
--define(RAccess_Accept,        2).
--define(RAccess_Reject,        3).
--define(RAccounting_Request,   4).
--define(RAccounting_Response,  5).
--define(RAccess_Challenge,    11).
--define(RDisconnect_Request,  40).
--define(RDisconnect_Ack,      41).
--define(RDisconnect_Nak,      42).
--define(RCoa_Request,         43).
--define(RCoa_Ack,             44).
--define(RCoa_Nak,             45).
-
 %%- attribs
--define(RUser_Name,        1).
--define(RUser_Passwd,      2).
 -define(RNAS_Ip_Address,   4).
 -define(RReply_Msg,       18).
 -define(RState,           24).
@@ -37,8 +21,6 @@
 -define(RSession_Id,      44).
 -define(RSession_Time,    46).
 -define(RTerminate_Cause, 49).
--define(REAP_Message,     79).
--define(RMessage_Authenticator, 80).
 
 %%- attribute values
 -define(RStatus_Type_Start,  1).

@@ -25,7 +25,7 @@
 -export([start/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--record(state, {client, socket, pending, mode, counter}).
+-record(state, {pending, mode, counter}).
 
 start(SocketIP, Client, PortIdx) ->
     gen_server:start_link(?MODULE, [SocketIP, Client, PortIdx], []).

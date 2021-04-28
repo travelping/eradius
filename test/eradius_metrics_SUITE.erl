@@ -29,7 +29,7 @@
 -define(ATTRS_GOOD, [{?NAS_Identifier, "good"}, {?RStatus_Type, ?RStatus_Type_Start}]).
 -define(ATTRS_BAD, [{?NAS_Identifier, "bad"}]).
 -define(ATTRS_ERROR, [{?NAS_Identifier, "error"}]).
--define(LOCALHOST, eradius_test_handler:localhost(atom)).
+-define(LOCALHOST, eradius_test_handler:localhost(ip)).
 
 %% test callbacks
 all() -> [good_requests, bad_requests, error_requests].
@@ -37,9 +37,9 @@ all() -> [good_requests, bad_requests, error_requests].
 init_per_suite(Config) ->
     application:load(eradius),
     EradiusConfig = [{radius_callback, ?MODULE},
-                     {servers, [{good,  {eradius_test_handler:localhost(ip), [1812]}},  %% for 'positive' responses, e.g. access accepts
-                                {bad,  {eradius_test_handler:localhost(ip), [1813]}},   %% for 'negative' responses, e.g. coa naks
-                                {error,  {eradius_test_handler:localhost(ip), [1814]}}  %% here things go wrong, e.g. duplicate requests
+                     {servers, [{good,  {?LOCALHOST, [1812]}},  %% for 'positive' responses, e.g. access accepts
+                                {bad,  {?LOCALHOST, [1813]}},   %% for 'negative' responses, e.g. coa naks
+                                {error,  {?LOCALHOST, [1814]}}  %% here things go wrong, e.g. duplicate requests
                                ]},
                      {session_nodes, [node()]},
                      {good, [

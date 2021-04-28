@@ -56,9 +56,6 @@ all() -> [
 %% 16-octet PeerChallenge:
 -define(PEER_CHALLENGE, <<16#21, 16#40, 16#23, 16#24, 16#25, 16#5E, 16#26, 16#2A, 16#28, 16#29, 16#5F, 16#2B, 16#3A, 16#33, 16#7C, 16#7E>>).
 
-%% 8-octet Challenge:
--define(CHALLENGE, <<16#D0, 16#2E, 16#43, 16#86, 16#BC, 16#E9, 16#12, 16#26>>).
-
 %% 16-octet PasswordHash:
 -define(PASSWORD_HASH, <<16#44, 16#EB, 16#BA, 16#8D, 16#53, 16#12, 16#B8, 16#D6, 16#11, 16#47, 16#44, 16#11, 16#F5, 16#69, 16#89, 16#AE>>).
 
@@ -74,11 +71,8 @@ all() -> [
 %% MPPE keys
 -define(MASTER_KEY, <<16#FD, 16#EC, 16#E3, 16#71, 16#7A, 16#8C, 16#83, 16#8C, 16#B3, 16#88, 16#E5, 16#27, 16#AE, 16#3C, 16#DD, 16#31>>).
 -define(SEND_START_KEY40, <<16#8B, 16#7C, 16#DC, 16#14, 16#9B, 16#99, 16#3A, 16#1B>>).
--define(SEND_SESSION_KEY40, <<16#D1, 16#26, 16#9E, 16#C4, 16#9F, 16#A6, 16#2E, 16#3E>>).
 -define(SEND_START_KEY56, <<16#8B, 16#7C, 16#DC, 16#14, 16#9B, 16#99, 16#3A, 16#1B>>).
--define(SEND_SESSION_KEY56, <<16#D1, 16#5C, 16#00, 16#C4, 16#9F, 16#A6, 16#2E, 16#3E>>).
 -define(SEND_START_KEY128, <<16#8B, 16#7C, 16#DC, 16#14, 16#9B, 16#99, 16#3A, 16#1B, 16#A1, 16#18, 16#CB, 16#15, 16#3F, 16#56, 16#DC, 16#CB>>).
--define(SEND_SESSION_KEY128, <<16#40, 16#5C, 16#B2, 16#24, 16#7A, 16#79, 16#56, 16#E6, 16#E2, 16#11, 16#00, 16#7A, 16#E2, 16#7B, 16#22, 16#D4>>).
 
 %% 0-to-256-unicode-char Password:
 -define(PASSWORD2, <<16#4D, 16#79, 16#50, 16#77>>).

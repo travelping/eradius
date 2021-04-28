@@ -12,8 +12,6 @@
 -define(ip4_address_num(X), ?pos_int(X), X < 256).
 -define(ip4_address(T), ?ip4_address_num(element(1, T)), ?ip4_address_num(element(2, T)),
                         ?ip4_address_num(element(3, T)), ?ip4_address_num(element(4, T))).
--define(valid_atom(Value), Value =/= invalid).
--define(valid(X), is_tuple(X), ?valid_atom(element(1, X))).
 -define(is_io(IO), is_list(IO) orelse is_binary(IO)).
 -define(invalid(ErrorMsg, ErrorValue), {invalid, io_lib:format(ErrorMsg, ErrorValue)}).
 

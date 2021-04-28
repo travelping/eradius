@@ -66,7 +66,6 @@
 -include("dictionary.hrl").
 -include("eradius_dict.hrl").
 
--define(RESEND_TIMEOUT, 5000).          % how long the binary response is kept after sending it on the socket
 -define(RESEND_RETRIES, 3).             % how often a reply may be resent
 -define(HANDLER_REPLY_TIMEOUT, 15000).  % how long to wait before a remote handler is considered dead
 
@@ -83,6 +82,8 @@
     counter        :: #server_counter{}, % statistics counter,
     name           :: atom()             % server name
 }).
+
+-hank([unused_callbacks]).
 
 -optional_callbacks([validate_arguments/1]).
 

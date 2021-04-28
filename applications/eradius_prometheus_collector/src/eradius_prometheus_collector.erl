@@ -9,6 +9,8 @@
 
 -import(prometheus_model_helpers, [create_mf/5, gauge_metric/2, counter_metric/1]).
 
+-hank([unused_macros]).
+
 -define(METRIC_NAME_PREFIX, "eradius_").
 
 -define(METRICS, [
