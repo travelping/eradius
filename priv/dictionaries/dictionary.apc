@@ -1,0 +1,19 @@
+#	APC vendor attributes
+#
+#	$Id: dictionary.apc,v 1.0 2021/05/18 23:39:40 etnt Exp $
+#
+
+VENDOR APC 318
+
+BEGIN-VENDOR APC
+#
+# Attributes
+#
+ATTRIBUTE APC-Service-Type 1 integer APC
+
+VALUE APC-Service-Type Admin 1
+VALUE APC-Service-Type Device 2
+VALUE APC-Service-Type ReadOnly 3
+VALUE APC-Service-Type NetworkOnly 4
+
+END-VENDOR APC
