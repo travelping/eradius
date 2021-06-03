@@ -51,6 +51,7 @@ $INCLUDE dictionary.compat	# compability issues
 $INCLUDE dictionary.acc
 $INCLUDE dictionary.alcatel
 $INCLUDE dictionary.alteon
+$INCLUDE dictionary.apc
 $INCLUDE dictionary.ascend
 $INCLUDE dictionary.bay
 $INCLUDE dictionary.bintec

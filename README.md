@@ -32,7 +32,7 @@ several authentication mechanisms and dynamic configuration
 
 All minor version of the current major release and the highest minor version of the
 previous major release will be supported.
-At the moment this means OTP 21.3, OTP 22.x and OTP 23.x are supported. OTP versions before 21.0
+At the moment this means OTP `21.3`, OTP `22.x`, OTP `23.x` and OTP `24.x` are supported. OTP versions before `21.0`
 do not work due the use of logger. When in doubt check the `otp_release` section in
 [main.yml](.github/workflows/main.yml) for tested versions.
 
@@ -307,4 +307,4 @@ Example:
 [coveralls badge]: https://img.shields.io/coveralls/travelping/eradius/master.svg?style=flat-square
 [gh]: https://github.com/travelping/eradius/actions/workflows/main.yml
 [gh badge]: https://img.shields.io/github/workflow/status/travelping/eradius/CI?style=flat-square
-[erlang version badge]: https://img.shields.io/badge/erlang-22.0%20to%2023.2-blue.svg?style=flat-square
+[erlang version badge]: https://img.shields.io/badge/erlang-22.0%20to%2024.0.1-blue.svg?style=flat-square
