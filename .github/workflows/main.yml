@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [ $default-branch ]
+  release:
+    types:
+      - created
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: CI
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        otp: [22.3.4.16, 23.0.4, 23.1.5.0, 23.2.5.0, 24.0.3]
+    container:
+      image: erlang:${{ matrix.otp }}-alpine
+    steps:
+    - name: Prepare
+      run: |
+           apk update
+           apk --no-cache upgrade
+           apk --no-cache add git
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Build
+      run: rebar3 compile
+    - name: Run tests
+      run: |
+           rebar3 do xref
+           rebar3 do ct
+    - name: Coveralls
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        COVERALLS_FLAG_NAME: ${{ matrix.otp }}
+      run: DEBUG=1 rebar3 as test coveralls send || /bin/true
+    - name: Archive Test Output
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-output-${{ matrix.otp }}
+        path: |
+          _build/test/logs/
+          !_build/test/logs/last
+
+  slack:
+    needs: test
+    runs-on: ubuntu-20.04
+    if: always()
+    steps:
+    - name: Slack notification
+      uses: 8398a7/action-slack@v3
+      with:
+        author_name: "GitHub Actions"
+        username: ${{ github.event.repository.name }}
+        icon_emoji: ':octocat:'
+        fields: repo, message, ref, commit, author, action, eventName, workflow, job, took
+        status: ${{ needs.test.result }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+        MATRIX_CONTEXT: ${{ toJson(matrix) }}
+
+  finish:
+    needs: test
+    runs-on: ubuntu-20.04
+    if: always()
+    steps:
+    - name: Coveralls Finished
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+           curl -v -k https://coveralls.io/webhook \
+                --header "Content-Type: application/json" \
+                --data "{\"repo_name\":\"$GITHUB_REPOSITORY\",\"repo_token\":\"$GITHUB_TOKEN\",\"payload\":{\"build_num\":$GITHUB_RUN_ID,\"status\":\"done\"}}"

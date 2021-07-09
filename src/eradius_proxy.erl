@@ -108,7 +108,7 @@ compile_routes(Routes) ->
 send_to_server(_Request, {undefined, 0, []}, _) ->
     {error, no_route};
 send_to_server(#radius_request{reqid = ReqID} = Request, {{Server, Port, Secret}, Pool}, Options) ->
-    {ok, Pools} = application:get_env(eradius, servers_pool),
+    Pools = application:get_env(eradius, servers_pool, []),
     UpstreamServers = proplists:get_value(Pool, Pools, []),
     case eradius_client:send_request({Server, Port, Secret}, Request, [{failover, UpstreamServers} | Options]) of
         {ok, Result, Auth} ->

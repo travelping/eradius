@@ -1,8 +1,10 @@
 # eradius
 
-[![Build Status][travis badge]][travis]
+[![Hex.pm Version][hexpm version]][hexpm]
+[![Hex.pm Downloads][hexpm downloads]][hexpm]
 [![Coverage Status][coveralls badge]][coveralls]
-[![Erlang Versions][erlang version badge]][travis]
+[![Build Status][gh badge]][gh]
+[![Erlang Versions][erlang version badge]][gh]
 
 This fork of `eradius` is a radical deviation from the original
 Jungerl code. It contains a generic [RADIUS](https://en.wikipedia.org/wiki/RADIUS) client, support for
@@ -24,14 +26,15 @@ several authentication mechanisms and dynamic configuration
   * [Failover configuration](#failover-configuration)
   * [Failover Erlang code usage](#failover-erlang-code-usage)
 * [Eradius counter aggregator](#eradius-counter-aggregator)
+* [Tables](#tables)
 
 # Erlang Version Support
 
 All minor version of the current major release and the highest minor version of the
 previous major release will be supported.
-At the moment this means OTP 21.3, OTP 22.x and OTP 23.x are supported. OTP versions before 21.0
+At the moment this means OTP `21.3`, OTP `22.x`, OTP `23.x` and OTP `24.x` are supported. OTP versions before `21.0`
 do not work due the use of logger. When in doubt check the `otp_release` section in
-[.travis.yml](.travis.yml) for tested versions.
+[main.yml](.github/workflows/main.yml) for tested versions.
 
 # Building eradius
 
@@ -286,9 +289,22 @@ Configuration example:
 ]}]
 ```
 
+# Tables
+
+A list of RADIUS dictionaries to be loaded at startup. The atoms in this list are resolved to files in
+the `priv` directory of the eradius application.
+
+Example:
+```
+    [dictionary, dictionary_cisco, dictionary_travelping]
+```
+
 <!-- Badges -->
-[travis]: https://travis-ci.com/travelping/eradius
-[travis badge]: https://img.shields.io/travis/com/travelping/eradius/master.svg?style=flat-square
+[hexpm]: https://hex.pm/packages/eradius
+[hexpm version]: https://img.shields.io/hexpm/v/eradius.svg?style=flat-square
+[hexpm downloads]: https://img.shields.io/hexpm/dt/eradius.svg?style=flat-square
 [coveralls]: https://coveralls.io/github/travelping/eradius
 [coveralls badge]: https://img.shields.io/coveralls/travelping/eradius/master.svg?style=flat-square
-[erlang version badge]: https://img.shields.io/badge/erlang-R21.0%20to%2022.3-blue.svg?style=flat-square
+[gh]: https://github.com/travelping/eradius/actions/workflows/main.yml
+[gh badge]: https://img.shields.io/github/workflow/status/travelping/eradius/CI?style=flat-square
+[erlang version badge]: https://img.shields.io/badge/erlang-22.0%20to%2024.0.1-blue.svg?style=flat-square

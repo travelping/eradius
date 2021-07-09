@@ -1,4 +1,5 @@
 %% -*- erlang -*-
+
 ExistingErlOpts = proplists:get_value(erl_opts, CONFIG, []),
 CONFIG1 =
   try
@@ -10,9 +11,20 @@ CONFIG1 =
       _:_ ->
 	  CONFIG
   end,
-case os:getenv("TRAVIS") of
-    "true" ->
-	JobId = os:getenv("TRAVIS_JOB_ID"),
-	lists:keystore(coveralls_service_job_id, 1, CONFIG, {coveralls_service_job_id, JobId});
-    _ -> CONFIG1
+
+case {os:getenv("GITHUB_ACTIONS"), os:getenv("GITHUB_TOKEN")} of
+    {"true", Token} when is_list(Token) ->
+        CONFIG2 = [{coveralls_repo_token, Token},
+        {coveralls_service_job_id, os:getenv("GITHUB_RUN_ID")},
+        {coveralls_commit_sha, os:getenv("GITHUB_SHA")},
+        {coveralls_flag_name, os:getenv("COVERALLS_FLAG_NAME")} | CONFIG1],
+        case os:getenv("GITHUB_EVENT_NAME") =:= "pull_request"
+            andalso string:tokens(os:getenv("GITHUB_REF"), "/") of
+            [_, "pull", PRNO, _] ->
+                [{coveralls_service_pull_request, PRNO} | CONFIG2];
+            _ ->
+                CONFIG2
+        end;
+    _ ->
+        CONFIG1
 end.

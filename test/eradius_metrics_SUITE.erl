@@ -29,10 +29,11 @@
 -define(ATTRS_GOOD, [{?NAS_Identifier, "good"}, {?RStatus_Type, ?RStatus_Type_Start}]).
 -define(ATTRS_BAD, [{?NAS_Identifier, "bad"}]).
 -define(ATTRS_ERROR, [{?NAS_Identifier, "error"}]).
+-define(ATTRS_AS_RECORD, [{#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start}]).
 -define(LOCALHOST, eradius_test_handler:localhost(atom)).
 
 %% test callbacks
-all() -> [good_requests, bad_requests, error_requests].
+all() -> [good_requests, bad_requests, error_requests, request_with_attrs_as_record].
 
 init_per_suite(Config) ->
     application:load(eradius),
@@ -90,6 +91,10 @@ bad_requests(_Config) ->
 
 error_requests(_Config) ->
     check_single_request(error, request, access, access_accept).
+
+request_with_attrs_as_record(_Config) ->
+    ok = send_request(accreq, eradius_test_handler:localhost(tuple), 1812, ?ATTRS_AS_RECORD, [{server_name, good}, {client_name, test_records}]),
+    ok = check_metric(accreq, client_accounting_requests_total, [{server_name, good}, {client_name, test_records}, {acct_type, start}], 1).
 
 %% helpers
 check_single_request(good, EradiusRequestType, _RequestType, _ResponseType) ->

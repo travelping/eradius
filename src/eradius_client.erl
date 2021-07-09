@@ -528,7 +528,10 @@ client_request_counter_account_match_spec_compile() ->
             MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
                 ({?RStatus_Type, ?RStatus_Type_Start})  -> accountRequestsStart;
                 ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountRequestsStop;
-                ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
+                ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate;
+                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
+                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
+                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
             persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
@@ -541,7 +544,10 @@ client_response_counter_account_match_spec_compile() ->
             MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
                 ({?RStatus_Type, ?RStatus_Type_Start})  -> accountResponsesStart;
                 ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountResponsesStop;
-                ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
+                ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate;
+                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
+                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
+                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
             persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
@@ -554,13 +560,19 @@ client_request_counter_account_match_spec_compile() ->
     ets:match_spec_compile(ets:fun2ms(fun
         ({?RStatus_Type, ?RStatus_Type_Start})  -> accountRequestsStart;
         ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountRequestsStop;
-        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate end)).
+        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate;
+        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
+        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
+        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)).
 
 client_response_counter_account_match_spec_compile() ->
     ets:match_spec_compile(ets:fun2ms(fun
         ({?RStatus_Type, ?RStatus_Type_Start})  -> accountResponsesStart;
         ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountResponsesStop;
-        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate end)).
+        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate;
+        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
+        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
+        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)).
 
 -endif.
 
