@@ -14,7 +14,7 @@
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
 %% internal
 -export([reconfigure/0, send_remote_request_loop/8, find_suitable_peer/1,
-         restore_upstream_server/1]).
+         restore_upstream_server/1, store_radius_server_from_pool/3]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -80,13 +80,35 @@ send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andal
     TS1 = eradius_lib:timestamp(milli_seconds),
     ServerName = proplists:get_value(server_name, Options, undefined),
     MetricsInfo = make_metrics_info(Options, {IP, Port}),
-    update_client_requests(MetricsInfo),
     Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
-    Peer = {ServerName, {IP, Port}},
-    {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, Peer, MetricsInfo}),
-    Response = send_request_loop(Socket, ReqId, Peer, Request#radius_request{reqid = ReqId, secret = Secret}, Retries, Timeout, MetricsInfo),
-    proceed_response(Request, Response, Peer, TS1, MetricsInfo, Options);
+    SendReqFn = fun () ->
+        Peer = {ServerName, {IP, Port}},
+        update_client_requests(MetricsInfo),
+        {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, Peer, MetricsInfo}),
+        Response = send_request_loop(Socket, ReqId, Peer,
+                                     Request#radius_request{reqid = ReqId, secret = Secret},
+                                     Retries, Timeout, MetricsInfo),
+        proceed_response(Request, Response, Peer, TS1, MetricsInfo, Options)
+    end,
+    % If we have other RADIUS upstream servers check current one,
+    % maybe it is already marked as inactive and try to find another
+    % one
+    case proplists:get_value(failover, Options, []) of
+        [] ->
+            SendReqFn();
+        UpstreamServers ->
+            case find_suitable_peer([{IP, Port, Secret} | UpstreamServers]) of
+                [] ->
+                    no_active_servers;
+                {{IP, Port, Secret}, _NewPool} ->
+                    SendReqFn();
+                {NewPeer, NewPool} ->
+                    % current server is not in list of active servers, so use another one
+                    NewOptions = lists:keyreplace(failover, 1, Options, {failover, NewPool}),
+                    send_request(NewPeer, Request, NewOptions)
+            end
+    end;
 send_request({_IP, _Port, _Secret}, _Request, _Options) ->
     error(badarg).
 
@@ -385,7 +407,9 @@ configure(State) ->
 %% private
 prepare_pools() ->
     ets:new(?MODULE, [ordered_set, public, named_table, {keypos, 1}, {write_concurrency,true}]),
-    lists:foreach(fun({_PoolName, Servers}) -> prepare_pool(Servers) end, application:get_env(eradius, servers_pool, [])).
+    lists:foreach(fun({_PoolName, Servers}) -> prepare_pool(Servers) end, application:get_env(eradius, servers_pool, [])),
+    lists:foreach(fun(Server) -> store_upstream_servers(Server) end, application:get_env(eradius, servers, [])).
+
 prepare_pool([]) -> ok;
 prepare_pool([{Addr, Port, _, Opts} | Servers]) ->
     Retries = proplists:get_value(retries, Opts, ?DEFAULT_RETRIES),
@@ -394,6 +418,28 @@ prepare_pool([{Addr, Port, _, Opts} | Servers]) ->
 prepare_pool([{Addr, Port, _} | Servers]) ->
     store_radius_server_from_pool(Addr, Port, ?DEFAULT_RETRIES),
     prepare_pool(Servers).
+
+store_upstream_servers({Server, _}) ->
+    store_upstream_servers(Server);
+store_upstream_servers({Server, _, _}) ->
+    store_upstream_servers(Server);
+store_upstream_servers(Server) ->
+    HandlerDefinitions = application:get_env(eradius, Server, []),
+    UpdatePoolFn = fun (HandlerOpts) ->
+        {DefaultRoute, Routes, Retries} = eradius_proxy:get_routes_info(HandlerOpts),
+        eradius_proxy:put_default_route_to_pool(DefaultRoute, Retries),
+        eradius_proxy:put_routes_to_pool(Routes, Retries)
+    end,
+    lists:foreach(fun (HandlerDefinition) ->
+        case HandlerDefinition of
+            {{_, []}, _} ->             ok;
+            {{_, _, []}, _} ->          ok;
+            {{_, HandlerOpts}, _} ->    UpdatePoolFn(HandlerOpts);
+            {{_, _, HandlerOpts}, _} -> UpdatePoolFn(HandlerOpts);
+            _HandlerDefinition ->       ok
+        end
+    end,
+    HandlerDefinitions).
 
 %% private
 store_radius_server_from_pool(Addr, Port, Retries) when is_tuple(Addr) and is_integer(Port) and is_integer(Retries) ->

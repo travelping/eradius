@@ -24,8 +24,26 @@
 -include("test/eradius_test.hrl").
 
 -define(BAD_SERVER_IP, {eradius_test_handler:localhost(ip), 1820, "secret"}).
--define(BAD_SERVER_TUPLE, {{eradius_test_handler:localhost(tuple), 1820}, 3, 3}).
+-define(BAD_SERVER_INITIAL_RETRIES, 3).
+-define(BAD_SERVER_TUPLE_INITIAL, {{eradius_test_handler:localhost(tuple), 1820},
+                                   ?BAD_SERVER_INITIAL_RETRIES,
+                                   ?BAD_SERVER_INITIAL_RETRIES}).
+-define(BAD_SERVER_TUPLE, {{eradius_test_handler:localhost(tuple), 1820},
+                           ?BAD_SERVER_INITIAL_RETRIES - 1,
+                           ?BAD_SERVER_INITIAL_RETRIES}).
 -define(BAD_SERVER_IP_ETS_KEY, {eradius_test_handler:localhost(tuple), 1820}).
+
+-define(GOOD_SERVER_INITIAL_RETRIES, 3).
+-define(GOOD_SERVER_TUPLE, {{eradius_test_handler:localhost(tuple), 1812},
+                            ?GOOD_SERVER_INITIAL_RETRIES,
+                            ?GOOD_SERVER_INITIAL_RETRIES}).
+-define(GOOD_SERVER_2_TUPLE, {{{127, 0, 0, 2}, 1813},
+                              ?GOOD_SERVER_INITIAL_RETRIES,
+                              ?GOOD_SERVER_INITIAL_RETRIES}).
+
+-define(RADIUS_SERVERS, [?GOOD_SERVER_TUPLE,
+                         ?BAD_SERVER_TUPLE_INITIAL,
+                         ?GOOD_SERVER_2_TUPLE]).
 
 all() -> [
     send_request,
@@ -36,7 +54,8 @@ all() -> [
     wanna_send,
     reconf_ports_10,
     wanna_send,
-    send_request_failover
+    send_request_failover,
+    check_upstream_servers
   ].
 
 init_per_suite(Config) ->
@@ -57,6 +76,10 @@ init_per_testcase(send_request_failover, Config) ->
     application:stop(eradius),
     eradius_test_handler:start(),
     Config;
+init_per_testcase(check_upstream_servers, Config) ->
+    application:stop(eradius),
+    eradius_test_handler:start(),
+    Config;
 init_per_testcase(_Test, Config) ->
     Config.
 
@@ -64,6 +87,9 @@ end_per_testcase(send_request, Config) ->
     eradius_test_handler:stop(),
     Config;
 end_per_testcase(send_request_failover, Config) ->
+    eradius_test_handler:stop(),
+    Config;
+end_per_testcase(check_upstream_servers, Config) ->
     eradius_test_handler:stop(),
     Config;
 end_per_testcase(_Test, Config) ->
@@ -218,8 +244,11 @@ reconf_ports_10(_Config) ->
 
 send_request_failover(_Config) ->
     ?equal(accept, eradius_test_handler:send_request_failover(?BAD_SERVER_IP)),
-    ?equal([], ets:lookup(eradius_client, ?BAD_SERVER_IP_ETS_KEY)),
     {ok, Timeout} = application:get_env(eradius, unreachable_timeout),
     timer:sleep(Timeout * 1000),
     ?equal([?BAD_SERVER_TUPLE], ets:lookup(eradius_client, ?BAD_SERVER_IP_ETS_KEY)),
+    ok.
+
+check_upstream_servers(_Config) ->
+    ?equal(?RADIUS_SERVERS, ets:tab2list(eradius_client)),
     ok.

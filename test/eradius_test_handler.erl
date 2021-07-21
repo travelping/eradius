@@ -13,9 +13,14 @@ start() ->
     application:set_env(eradius, client_ip, localhost(tuple)),
     application:set_env(eradius, session_nodes, local),
     application:set_env(eradius, one, [{{"ONE", []}, [{localhost(ip), "secret"}]}]),
-    application:set_env(eradius, servers, [{one, {localhost(ip), [1812]}}]),
+    application:set_env(eradius, two, [{{"TWO", [{default_route, {{127, 0, 0, 2}, 1813, <<"secret">>}}]},
+                                        [{localhost(ip), "secret"}]}]),
+    application:set_env(eradius, servers, [{one, {localhost(ip), [1812]}},
+                                           {two, {localhost(ip), [1813]}}]),
     application:set_env(eradius, unreachable_timeout, 2),
-    application:set_env(eradius, servers_pool, [{test_pool, [{localhost(tuple), 1812, "secret"}]}]),
+    application:set_env(eradius, servers_pool, [{test_pool, [{localhost(tuple), 1812, "secret"},
+                                                             % fake upstream server for fail-over
+                                                             {localhost(tuple), 1820, "secret"}]}]),
     application:ensure_all_started(eradius),
     eradius:modules_ready([?MODULE]).
 
