@@ -27,7 +27,8 @@
 -module(eradius_proxy).
 
 -behaviour(eradius_server).
--export([radius_request/3, validate_arguments/1]).
+-export([radius_request/3, validate_arguments/1, get_routes_info/1,
+        put_default_route_to_pool/2, put_routes_to_pool/2]).
 
 -ifdef(TEST).
 -export([resolve_routes/4, validate_options/1, new_request/3,
@@ -43,6 +44,7 @@
 -define(DEFAULT_SEPARATOR, "@").
 -define(DEFAULT_TIMEOUT, 5000).
 -define(DEFAULT_RETRIES, 1).
+-define(DEFAULT_CLIENT_RETRIES, 3).
 
 -define(DEFAULT_OPTIONS, [{type, ?DEFAULT_TYPE},
                           {strip, ?DEFAULT_STRIP},
@@ -113,6 +115,10 @@ send_to_server(#radius_request{reqid = ReqID} = Request, {{Server, Port, Secret}
     case eradius_client:send_request({Server, Port, Secret}, Request, [{failover, UpstreamServers} | Options]) of
         {ok, Result, Auth} ->
             decode_request(Result, ReqID, Secret, Auth);
+        no_active_servers ->
+            % If all RADIUS servers are marked as inactive for now just use
+            % just skip fail-over mechanism and use default given Peer
+            send_to_server(Request, {Server, Port, Secret}, Options);
         Error ->
             ?LOG(error, "~p: error during send_request (~p)", [?MODULE, Error]),
             Error
@@ -242,6 +248,39 @@ strip(Username, prefix, true, Separator) ->
 
 route({RouteName, RouteRelay}) -> {RouteName, RouteRelay, undefined};
 route({_RouteName, _RouteRelay, _Pool} = Route) -> Route.
+
+get_routes_info(HandlerOpts) ->
+    DefaultRoute = lists:keyfind(default_route, 1, HandlerOpts),
+    Routes = lists:keyfind(routes, 1, HandlerOpts),
+    Options = lists:keyfind(options, 1, HandlerOpts),
+    Retries = case Options of
+                  false ->
+                      ?DEFAULT_CLIENT_RETRIES;
+                  {options, Opts} ->
+                      proplists:get_value(retries, Opts, ?DEFAULT_CLIENT_RETRIES)
+              end,
+    {DefaultRoute, Routes, Retries}.
+
+put_default_route_to_pool(false, _) -> ok;
+put_default_route_to_pool({default_route, {Host, Port, _Secret}}, Retries) ->
+    eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+put_default_route_to_pool({default_route, {Host, Port, _Secret}, _PoolName}, Retries) ->
+    eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+put_default_route_to_pool(_, _) -> ok.
+
+put_routes_to_pool(false, _Retries) -> ok;
+put_routes_to_pool({routes, Routes}, Retries) ->
+    lists:foreach(fun (Route) ->
+        case Route of
+            {_RouteName, {Host, Port, _Secret}} ->
+                eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+            {_RouteName, {Host, Port, _Secret}, _Pool} ->
+                eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+            {Host, Port, _Secret, _Opts} ->
+                eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+            _ -> ok
+        end
+    end, Routes).
 
 get_proxy_opt(_, [], Default)                            -> Default;
 get_proxy_opt(OptName, [{OptName, AddrOrRoutes} | _], _) -> AddrOrRoutes;
