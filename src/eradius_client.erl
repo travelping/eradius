@@ -180,6 +180,7 @@ proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_Serve
             ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             maybe_failover(Request, noreply, {ServerIP, Port}, Options);
         Decoded ->
+            update_server_status_metric(ServerIP, Port, true, Options),
             update_client_response(Decoded#radius_request.cmd, MetricsInfo, Request),
             {ok, Response, Authenticator}
     end;
@@ -190,6 +191,7 @@ proceed_response(Request, Response, {_ServerName, {ServerIP, Port}}, TS1, Metric
     maybe_failover(Request, Response, {ServerIP, Port}, Options).
 
 maybe_failover(Request, Response, {ServerIP, Port}, Options) ->
+    update_server_status_metric(ServerIP, Port, false, Options),
     case proplists:get_value(failover, Options, []) of
         [] ->
             Response;
@@ -443,6 +445,7 @@ store_upstream_servers(Server) ->
 
 %% private
 store_radius_server_from_pool(Addr, Port, Retries) when is_tuple(Addr) and is_integer(Port) and is_integer(Retries) ->
+    eradius_counter:set_boolean_metric(server_status, [Addr, Port], false),
     ets:insert(?MODULE, {{Addr, Port}, Retries, Retries});
 store_radius_server_from_pool(Addr, _, _) ->
     ?LOG(error, "bad IP address specified in RADIUS servers pool configuration ~p", [Addr]),
@@ -561,6 +564,21 @@ inc_responses_counter_accounting(MetricsInfo, #radius_request{attrs = Attrs}) ->
     ok;
 inc_responses_counter_accounting(_, _) ->
     ok.
+
+update_server_status_metric(IP, Port, false, _Options) ->
+    eradius_counter:set_boolean_metric(server_status, [IP, Port], false);
+update_server_status_metric(IP, Port, true, Options) ->
+    lists:foreach(fun (Server) ->
+        case Server of
+            {IP, Port, _Secret} ->
+                eradius_counter:set_boolean_metric(server_status, [IP, Port], false);
+            {IP, Port, _Secret, _Opts} ->
+                eradius_counter:set_boolean_metric(server_status, [IP, Port], false);
+             _ ->
+                ok
+      end
+    end, proplists:get_value(failover, Options, [])),
+    eradius_counter:set_boolean_metric(server_status, [IP, Port], true).
 
 %% check if we can use persistent_term for config
 %% persistent term was added in OTP 21.2 but we can't
