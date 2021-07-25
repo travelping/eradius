@@ -193,7 +193,7 @@ radius_request(#radius_request{cmd = coareq}, #nas_prop{nas_id = <<"bad_nas">>},
 radius_request(#radius_request{cmd = discreq}, #nas_prop{nas_id = <<"bad_nas">>}, _) ->
     {reply, #radius_request{cmd = discnak}};
 
-%% RADIUS NAS callbacks for 'bad' requests
+%% RADIUS NAS callbacks for 'error' requests
 radius_request(#radius_request{cmd = request}, #nas_prop{nas_id = <<"error_nas">>}, _) ->
     timer:sleep(1500), %% this will by default trigger one resend
     {reply, #radius_request{cmd = accept}}.
