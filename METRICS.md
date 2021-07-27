@@ -77,6 +77,18 @@ _All metrics start with `eradius` prefix and the prefix is not included into tab
 |  client_unknown_type_request_total                 | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 |  client_bad_authenticator_request_total            | [$NAME, $IP, $PORT, $CNAME, $CIP]     | counter   |
 
+Besides these metrics RADIUS client also may create optional server status metrics which
+could be enabled via `server_status_metrics_enabled` configuration option. These metrics
+represent active/inactive state of upstream RADIUS servers that RADIUS clients
+send requests to.
+
+If RADIUS server status metrics are enabled following additional metric will be exposed:
+
+| Metric                      | Labels              | Type    |
+|-----------------------------|---------------------|---------|
+| server_status               | [ $IP, $PORT ]      | boolean |
+
+
 ### Labels
 
 Following prometheus labels are used to specify a metric:

@@ -13,6 +13,7 @@
       {resend_timeout, 30000},
       {logging, false},
       {counter_aggregator, false},
+      {server_status_metrics_enabled, false},
       {logfile, "./radius.log"},
       {recbuf, 8192}
    ]},
