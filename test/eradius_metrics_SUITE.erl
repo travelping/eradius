@@ -61,7 +61,8 @@ init_per_suite(Config) ->
                      {tables, [dictionary]},
                      {client_ip, {127,0,0,2}},
                      {client_ports, 20},
-                     {counter_aggregator, false}
+                     {counter_aggregator, false},
+                     {server_status_metrics_enabled, true}
                     ],
     [application:set_env(eradius, Key, Value) || {Key, Value} <- EradiusConfig],
     application:set_env(prometheus, collectors, [eradius_prometheus_collector]),
@@ -79,6 +80,10 @@ end_per_suite(_Config) ->
     application:stop(eradius),
     application:stop(prometheus),
     ok.
+
+init_per_testcase(_, Config) ->
+    eradius_client:init_server_status_metrics(),
+    Config.
 
 %% tests
 good_requests(_Config) ->
@@ -126,7 +131,6 @@ check_single_request(bad, EradiusRequestType, _RequestType, _ResponseType) ->
     ok = check_metric(reject_responses_total, [{server_name, bad}], 1),
     ok = check_metric(server_status, true, [eradius_test_handler:localhost(tuple), 1813]);
 check_single_request(error, EradiusRequestType, _RequestType, _ResponseType) ->
-    eradius_client:reconfigure(),
     ok = send_request(EradiusRequestType, eradius_test_handler:localhost(tuple), 1814, ?ATTRS_ERROR,
                       [{server_name, error}, {client_name, test}, {timeout, 1000},
                        {failover, [{eradius_test_handler:localhost(tuple), 1812, ?SECRET}]}]),

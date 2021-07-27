@@ -232,6 +232,8 @@ Example of full configuration with keys which can use in `eradius`:
             {{127, 0, 0, 3}, 1812, <<"secret">>}
         ]}
     ]},
+    {server_status_metrics_enabled, false},
+    {counter_aggregator, false},
     %% Size of RADIUS receive buffer      
     {recbuf, 8192}
 ]}].
@@ -269,12 +271,15 @@ All pools are configured via:
     %%% ...
 ]}]
 ```
+
 ## Failover Erlang code usage
 In a case when RADIUS proxy (eradius_proxy handler) is not used, a list of RADIUS upstream servers could be passed to the `eradius_client:send_radius_request/3` via options, for example:
 ```erlang
 eradius_client:send_request(Server, Request, [{failover, [{"localhost", 1814, <<"secret">>}]}]).
 ```
 If `failover` option was not passed to the client through the options or RADIUS proxy configuration there should not be any performance impact as RADIUS client will try to a RADIUS request to only one RADIUS server that is defined in `eradius_client:send_request/3` options.
+
+For each secondary RADIUS server server status metrics could be enabled via boolean `server_status_metrics_enabled` configuration option.
 
 # Eradius counter aggregator
 The `eradius_counter_aggregator` would go over all nodes in an Erlang cluster and aggregate the counter values from all nodes.  

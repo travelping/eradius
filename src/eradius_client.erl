@@ -14,7 +14,8 @@
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
 %% internal
 -export([reconfigure/0, send_remote_request_loop/8, find_suitable_peer/1,
-         restore_upstream_server/1, store_radius_server_from_pool/3]).
+         restore_upstream_server/1, store_radius_server_from_pool/3,
+         init_server_status_metrics/0]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -410,7 +411,8 @@ configure(State) ->
 prepare_pools() ->
     ets:new(?MODULE, [ordered_set, public, named_table, {keypos, 1}, {write_concurrency,true}]),
     lists:foreach(fun({_PoolName, Servers}) -> prepare_pool(Servers) end, application:get_env(eradius, servers_pool, [])),
-    lists:foreach(fun(Server) -> store_upstream_servers(Server) end, application:get_env(eradius, servers, [])).
+    lists:foreach(fun(Server) -> store_upstream_servers(Server) end, application:get_env(eradius, servers, [])),
+    init_server_status_metrics().
 
 prepare_pool([]) -> ok;
 prepare_pool([{Addr, Port, _, Opts} | Servers]) ->
@@ -445,7 +447,6 @@ store_upstream_servers(Server) ->
 
 %% private
 store_radius_server_from_pool(Addr, Port, Retries) when is_tuple(Addr) and is_integer(Port) and is_integer(Retries) ->
-    eradius_counter:set_boolean_metric(server_status, [Addr, Port], false),
     ets:insert(?MODULE, {{Addr, Port}, Retries, Retries});
 store_radius_server_from_pool(Addr, _, _) ->
     ?LOG(error, "bad IP address specified in RADIUS servers pool configuration ~p", [Addr]),
@@ -541,6 +542,19 @@ parse_ip(T = {_, _, _, _}) ->
     {ok, T};
 parse_ip(T = {_, _, _, _, _, _}) ->
     {ok, T}.
+
+init_server_status_metrics() ->
+    case application:get_env(eradius, server_status_metrics_enabled, false) of
+        false ->
+            ok;
+        true ->
+            % That will be called at eradius startup and we must be sure that prometheus
+            % application already started if server status metrics supposed to be used
+            application:ensure_all_started(prometheus),
+            ets:foldl(fun ({{Addr, Port}, _, _}, _Acc) ->
+                eradius_counter:set_boolean_metric(server_status, [Addr, Port], false)
+            end, [], ?MODULE)
+    end.
 
 make_metrics_info(Options, {ServerIP, ServerPort}) ->
     ServerName = proplists:get_value(server_name, Options, undefined),
