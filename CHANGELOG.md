@@ -3,6 +3,16 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.2.3 - 29 July 2021
+---------------------------
+
+**Features** :rocket:
+* [#208](https://github.com/travelping/eradius/pull/208) Add `server_status` metric
+* [#210](https://github.com/travelping/eradius/pull/210) Make server status metrics optional
+
+**Bugfixes** :bug:
+* [#209](https://github.com/travelping/eradius/pull/209) Fix `NAS` name in metrics test commen
+
 Version 2.2.2 - 23 June 2021
 ---------------------------
 
