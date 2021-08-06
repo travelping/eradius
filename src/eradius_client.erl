@@ -104,6 +104,12 @@ send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andal
                     no_active_servers;
                 {{IP, Port, Secret}, _NewPool} ->
                     SendReqFn();
+                {NewPeer, []} ->
+                    % Special case, we don't have servers in the pool anymore, but we need
+                    % to preserve `failover` option to mark current server as inactive if
+                    % it will fail
+                    NewOptions = lists:keyreplace(failover, 1, Options, {failover, undefined}),
+                    send_request(NewPeer, Request, NewOptions);
                 {NewPeer, NewPool} ->
                     % current server is not in list of active servers, so use another one
                     NewOptions = lists:keyreplace(failover, 1, Options, {failover, NewPool}),
@@ -219,13 +225,7 @@ handle_failed_request(Request, {ServerIP, Port} = _FailedServer, UpstreamServers
                     ets:update_counter(?MODULE, {ServerIP, Port}, -FailedTries)
             end;
         [] ->
-            % That could be an upstream server defined as default proxy relay or just
-            % just RADIUS server that was used by default via send_request/3,
-            % so initially such servers is not in the pool. So just skip it for now,
-            % and put it into ets later
-            Timeout = application:get_env(eradius, unreachable_timeout, 60),
-            timer:apply_after(Timeout * 1000, ?MODULE, restore_upstream_server,
-                              [{ServerIP, Port, ?DEFAULT_RETRIES, ?DEFAULT_RETRIES}])
+            ok
     end,
     case find_suitable_peer(UpstreamServers) of
         [] ->
@@ -582,16 +582,24 @@ inc_responses_counter_accounting(_, _) ->
 update_server_status_metric(IP, Port, false, _Options) ->
     eradius_counter:set_boolean_metric(server_status, [IP, Port], false);
 update_server_status_metric(IP, Port, true, Options) ->
-    lists:foreach(fun (Server) ->
-        case Server of
-            {IP, Port, _Secret} ->
-                eradius_counter:set_boolean_metric(server_status, [IP, Port], false);
-            {IP, Port, _Secret, _Opts} ->
-                eradius_counter:set_boolean_metric(server_status, [IP, Port], false);
-             _ ->
-                ok
-      end
-    end, proplists:get_value(failover, Options, [])),
+    UpstreamServers = proplists:get_value(failover, Options, []),
+    % set all servesr from pool as inactive
+    if is_list(UpstreamServers) ->
+        lists:foreach(fun (Server) ->
+            case Server of
+                {ServerIP, ServerPort, _} ->
+                    eradius_counter:set_boolean_metric(server_status, [ServerIP, ServerPort], false);
+                {ServerIP, ServerPort, _, _} ->
+                    eradius_counter:set_boolean_metric(server_status, [ServerIP, ServerPort], false);
+                _ ->
+                    ok
+            end
+
+        end, UpstreamServers);
+    true ->
+        ok
+    end,
+    % set current service as active
     eradius_counter:set_boolean_metric(server_status, [IP, Port], true).
 
 %% check if we can use persistent_term for config
@@ -654,6 +662,8 @@ client_response_counter_account_match_spec_compile() ->
 
 -endif.
 
+find_suitable_peer(undefined) ->
+    [];
 find_suitable_peer([]) ->
     [];
 find_suitable_peer([{IP, Port, Secret} | Pool]) ->
