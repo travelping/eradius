@@ -3,6 +3,12 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.2.4 - 9 August 2021
+---------------------------
+
+**Bugfixes** :bug:
+* [#213](https://github.com/travelping/eradius/pull/213) Fix updating of server status metric
+
 Version 2.2.3 - 29 July 2021
 ---------------------------
 
@@ -108,7 +114,7 @@ Version 0.9.0 - 07 Feb 2018
 
 Version 0.8.9 - 12 Dec 2017
 ---------------------------
-* Reworks dicts to maps in client and node_mon 
+* Reworks dicts to maps in client and node_mon
 * Parse $INCLUDE directive in priv/dictionaries/dictionary\* files
 * Get rid of tetrapak
 
