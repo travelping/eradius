@@ -49,7 +49,7 @@
 %%   }).
 %%   '''
 -module(eradius_server).
--export([start_link/3]).
+-export([start_link/3, start_link/4]).
 -export_type([port_number/0, req_id/0]).
 
 %% internal
@@ -92,11 +92,15 @@
 -callback radius_request(#radius_request{}, #nas_prop{}, HandlerData :: term()) -> 
     {reply, #radius_request{}} | noreply | {error, timeout}.
 
-%% @private
 -spec start_link(atom(), inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
 start_link(ServerName, IP = {A,B,C,D}, Port) ->
     Name = list_to_atom(lists:flatten(io_lib:format("eradius_server_~b.~b.~b.~b:~b", [A,B,C,D,Port]))),
-    gen_server:start_link({local, Name}, ?MODULE, {ServerName, IP, Port}, []).
+    gen_server:start_link({local, Name}, ?MODULE, {ServerName, IP, Port, []}, []).
+
+-spec start_link(atom(), inet:ip4_address(), port_number(), [inet:socket_setopt()]) -> {ok, pid()} | {error, term()}.
+start_link(ServerName, IP = {A,B,C,D}, Port, Opts) ->
+    Name = list_to_atom(lists:flatten(io_lib:format("eradius_server_~b.~b.~b.~b:~b", [A,B,C,D,Port]))),
+    gen_server:start_link({local, Name}, ?MODULE, {ServerName, IP, Port, Opts}, []).
 
 stats(Server, Function) ->
     gen_server:call(Server, {stats, Function}).
@@ -104,15 +108,20 @@ stats(Server, Function) ->
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server Callbacks
 %% @private
-init({ServerName, IP, Port}) ->
+init({ServerName, IP, Port, Opts}) ->
     process_flag(trap_exit, true),
     RecBuf = application:get_env(eradius, recbuf, 8192),
     case gen_udp:open(Port, [{active, once}, {ip, IP}, binary, {recbuf, RecBuf}]) of
         {ok, Socket} ->
-            {ok, #state{socket = Socket,
+            case inet:setopts(Socket, Opts) of
+                ok ->
+                    {ok, #state{socket = Socket,
                         ip = IP, port = Port, name = ServerName,
                         transacts = ets:new(transacts, []),
                         counter = eradius_counter:init_counter({IP, Port, ServerName})}};
+                {error, Reason} ->
+                    {stop, Reason}
+            end;
         {error, Reason} ->
             {stop, Reason}
     end.
