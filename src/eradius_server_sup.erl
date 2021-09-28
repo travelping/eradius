@@ -18,7 +18,11 @@ start_link() ->
 
 start_instance(_ServerAddr = {ServerName, {IP, Port}}) ->
     ?LOG(info, "Starting RADIUS Listener at ~s", [printable_peer(IP, Port)]),
-    supervisor:start_child(?SERVER, [ServerName, IP, Port]).
+    supervisor:start_child(?SERVER, [ServerName, IP, Port]);
+
+start_instance(_ServerAddr = {ServerName, {IP, Port, Opts}}) ->
+    ?LOG(info, "Starting RADIUS Listener at ~s", [printable_peer(IP, Port)]),
+    supervisor:start_child(?SERVER, [ServerName, IP, Port, Opts]).
 
 stop_instance(_ServerAddr = {_ServerName, {IP, Port}}, Pid) ->
     ?LOG(info, "Stopping RADIUS Listener at ~s", [printable_peer(IP, Port)]),
