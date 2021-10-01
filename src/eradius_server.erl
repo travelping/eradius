@@ -60,7 +60,6 @@
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include("eradius_lib.hrl").
 -include("dictionary.hrl").
@@ -93,9 +92,8 @@
     {reply, #radius_request{}} | noreply | {error, timeout}.
 
 -spec start_link(atom(), inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
-start_link(ServerName, IP = {A,B,C,D}, Port) ->
-    Name = list_to_atom(lists:flatten(io_lib:format("eradius_server_~b.~b.~b.~b:~b", [A,B,C,D,Port]))),
-    gen_server:start_link({local, Name}, ?MODULE, {ServerName, IP, Port, []}, []).
+start_link(ServerName, IP, Port) ->
+    start_link(ServerName, IP, Port, []).
 
 -spec start_link(atom(), inet:ip4_address(), port_number(), [inet:socket_setopt()]) -> {ok, pid()} | {error, term()}.
 start_link(ServerName, IP = {A,B,C,D}, Port, Opts) ->
@@ -111,17 +109,12 @@ stats(Server, Function) ->
 init({ServerName, IP, Port, Opts}) ->
     process_flag(trap_exit, true),
     RecBuf = application:get_env(eradius, recbuf, 8192),
-    case gen_udp:open(Port, [{active, once}, {ip, IP}, binary, {recbuf, RecBuf}]) of
+    case gen_udp:open(Port, [{active, once}, {ip, IP}, binary, {recbuf, RecBuf}] ++ Opts) of
         {ok, Socket} ->
-            case inet:setopts(Socket, Opts) of
-                ok ->
-                    {ok, #state{socket = Socket,
-                        ip = IP, port = Port, name = ServerName,
-                        transacts = ets:new(transacts, []),
-                        counter = eradius_counter:init_counter({IP, Port, ServerName})}};
-                {error, Reason} ->
-                    {stop, Reason}
-            end;
+            {ok, #state{socket = Socket,
+                ip = IP, port = Port, name = ServerName,
+                transacts = ets:new(transacts, []),
+                counter = eradius_counter:init_counter({IP, Port, ServerName})}};
         {error, Reason} ->
             {stop, Reason}
     end.
