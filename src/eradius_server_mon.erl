@@ -126,6 +126,8 @@ configure(#state{running = Running}) ->
             {ok, #state{running = NewRunning}}
     end.
 
+server_naslist({ServerName, {IP, Port, _Opts}, HandlerList}) ->
+    server_naslist({ServerName, {IP, Port}, HandlerList});
 server_naslist({ServerName, {IP, Port}, HandlerList}) ->
     lists:map(fun({NasId, NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs}) ->
                 ServerInfo = eradius_lib:make_addr_info({ServerName, {IP, Port}}),
@@ -144,18 +146,24 @@ update_server(Running, ToStop, ToStart) ->
                                  eradius_server_sup:stop_instance(ServerAddr, Pid),
                                  StoppedServer
                         end, ToStop),
-    NewStarted = lists:map(fun(ServerAddr = {ServerName, Addr = {IP, Port}}) ->
-                               case eradius_server_sup:start_instance(ServerAddr) of
-                                   {ok, Pid} ->
-                                       {ServerName, Addr, Pid};
-                                   {error, Error} ->
-                                       ?LOG(error, "Could not start listener on host: ~s, occuring error: ~p",
-                                       [printable_peer(IP, Port), Error])
-                               end
-                           end, ToStart),
+    StartFn = fun({ServerName, Addr = {IP, Port, _Opts}}=ServerAddr) ->
+        case eradius_server_sup:start_instance(ServerAddr) of
+            {ok, Pid} ->
+                {ServerName, Addr, Pid};
+            {error, Error} ->
+                ?LOG(error, "Could not start listener on host: ~s, occurring error: ~p",
+                [printable_peer(IP, Port), Error])
+        end
+    end,
+    NewStarted = lists:map(fun
+        ({ServerName, {IP, Port}}) ->
+            StartFn({ServerName, {IP, Port, []}});
+        (ServerAddr) ->
+            StartFn(ServerAddr)
+        end,
+        ToStart),
     (Running -- Stopped) ++ NewStarted.
 
 update_nases(ToDelete, ToInsert) ->
     lists:foreach(fun(Nas) -> ets:delete_object(?NAS_TAB, Nas) end, ToDelete),
     lists:foreach(fun(Nas) -> ets:insert(?NAS_TAB, Nas) end, ToInsert).
-
