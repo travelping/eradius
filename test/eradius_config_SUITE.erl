@@ -23,7 +23,7 @@
 -include("../include/eradius_lib.hrl").
 -include("eradius_test.hrl").
 
-all() -> [config_1, config_2, config_extra_options, config_nas_removing, config_with_ranges, log_test, generate_ip_list_test].
+all() -> [config_extra_options, config_1, config_2, config_nas_removing, config_with_ranges, log_test, generate_ip_list_test].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(eradius),
@@ -118,26 +118,25 @@ config_2(_Config) ->
     ok.
 
 config_extra_options(_Config) ->
-    ExtraOptions = [{exit_on_close, true}, {linger, {true, 1}}],
+    ExtraOptions = [{linger, {true, 1}}],
     Nodes = ['node1@host1', 'node2@host2'],
-    Conf = [{session_nodes, [
-                             {"NodeGroup", Nodes}
-                            ]
-            },
+    Conf = [{session_nodes, Nodes},
             {servers, [
                        {root, {eradius_test_handler:localhost(ip), [1812, 1813], ExtraOptions}}
                       ]},
             {root, [
-                    { {handler, "NAS", []},
-                        [ {"10.18.14.2", <<"secret2">>, [{group, "NodeGroup"}]} ]}
+                      { {handler1, "NAS1", [arg1, arg2]},
+                          [{"10.18.14.2/30", <<"secret1">>}]},
+                      { {handler2, "NAS2", [arg1, arg2]},
+                          [{{10, 18, 14, 3}, <<"secret2">>, [{nas_id, <<"name">>}]}]}
                    ]}],
     apply_conf(Conf),
     LocalHost = eradius_test_handler:localhost(tuple),
-    ?match({ok, {handler, []},
+    ?match({ok, {handler1, [arg1, arg2]},
                 #nas_prop{
                           server_ip = LocalHost,
                           server_port = 1812,
-                          nas_id = <<"NAS_10.18.14.2">>,
+                          nas_id = <<"NAS1_10.18.14.2">>,
                           nas_ip = {10,18,14,2},
                           handler_nodes = Nodes
                          }}, eradius_server_mon:lookup_handler(LocalHost, 1812, {10,18,14,2})),
