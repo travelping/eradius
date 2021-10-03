@@ -13,22 +13,20 @@ several authentication mechanisms and dynamic configuration
 
 # Contents
 
-- [eradius](#eradius)
-- [Contents](#contents)
-- [Erlang Version Support](#erlang-version-support)
-- [Building eradius](#building-eradius)
-- [Using eradius](#using-eradius)
-- [Run sample server](#run-sample-server)
-- [Metrics](#metrics)
-- [RADIUS server configuration](#radius-server-configuration)
-  - [eradius configuration example 1](#eradius-configuration-example-1)
-  - [eradius configuration example 2](#eradius-configuration-example-2)
-  - [eradius configuration example 3](#eradius-configuration-example-3)
-- [Support of failover for client](#support-of-failover-for-client)
-  - [Failover configuration](#failover-configuration)
-  - [Failover Erlang code usage](#failover-erlang-code-usage)
-- [Eradius counter aggregator](#eradius-counter-aggregator)
-- [Tables](#tables)
+* [Erlang Version Support](#erlang-version-support)
+* [Building eradius](#building-eradius)
+* [Using eradius](#using-eradius)
+* [Run sample server](#run-sample-server)
+* [Metrics](#metrics)
+* [RADIUS server configuration](#radius-server-configuration)
+  * [eradius configuration example 1](#eradius-configuration-example-1)
+  * [eradius configuration example 2](#eradius-configuration-example-2)
+  * [eradius configuration example 3](#eradius-configuration-example-3)
+* [Support of failover for client](#support-of-failover-for-client)
+  * [Failover configuration](#failover-configuration)
+  * [Failover Erlang code usage](#failover-erlang-code-usage)
+* [Eradius counter aggregator](#eradius-counter-aggregator)
+* [Tables](#tables)
 
 # Erlang Version Support
 
