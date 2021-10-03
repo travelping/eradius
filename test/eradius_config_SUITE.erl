@@ -119,17 +119,16 @@ config_2(_Config) ->
 
 config_extra_options(_Config) ->
     ExtraOptions = [{exit_on_close, true}, {linger, {true, 1}}],
-    Conf = [
-            {root, [
-                {{"root", []}, [{"10.18.14.3", <<"secret1">>}]}
-            ]},
-            {servers, [
+    Conf = [{servers, [
                 {root, {"10.18.14.3", [1812, 1813], ExtraOptions}}
+            ]},
+            {root, [
+                {{handler, "NAS", []}, [{"10.18.14.3", <<"secret1">>}]}
             ]}
         ],
     apply_conf(Conf),
     LocalHost = eradius_test_handler:localhost(tuple),
-    ?match({ok, {handler,[arg1,arg2]},
+    ?match({ok, {handler, []},
                 #nas_prop{
                           server_ip = LocalHost,
                           server_port = 1812,
