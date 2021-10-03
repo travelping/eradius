@@ -119,23 +119,28 @@ config_2(_Config) ->
 
 config_extra_options(_Config) ->
     ExtraOptions = [{exit_on_close, true}, {linger, {true, 1}}],
-    Conf = [{servers, [
-                {root, {"10.18.14.3", [1812, 1813], ExtraOptions}}
-            ]},
+    Nodes = ['node1@host1', 'node2@host2'],
+    Conf = [{session_nodes, [
+                             {"NodeGroup", Nodes}
+                            ]
+            },
+            {servers, [
+                       {root, {eradius_test_handler:localhost(ip), [1812, 1813], ExtraOptions}}
+                      ]},
             {root, [
-                {{handler, "NAS", []}, [{"10.18.14.3", <<"secret1">>}]}
-            ]}
-        ],
+                    { {handler, "NAS", []},
+                        [ {"10.18.14.2", <<"secret2">>, [{group, "NodeGroup"}]} ]}
+                   ]}],
     apply_conf(Conf),
     LocalHost = eradius_test_handler:localhost(tuple),
     ?match({ok, {handler, []},
                 #nas_prop{
                           server_ip = LocalHost,
                           server_port = 1812,
-                          nas_id = <<"NAS1_10.18.14.3">>,
-                          nas_ip = {10,18,14,3},
-                          handler_nodes = ['node1@host1', 'node2@host2']
-                         }}, eradius_server_mon:lookup_handler(LocalHost, 1812, {10,18,14,3})),
+                          nas_id = <<"NAS_10.18.14.2">>,
+                          nas_ip = {10,18,14,2},
+                          handler_nodes = Nodes
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1812, {10,18,14,2})),
     ok.
 
 config_nas_removing(_Config) ->
