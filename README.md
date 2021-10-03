@@ -13,20 +13,22 @@ several authentication mechanisms and dynamic configuration
 
 # Contents
 
-* [Erlang Version Support](#erlang-version-support)
-* [Building eradius](#building-eradius)
-* [Using eradius](#using-eradius)
-* [Run sample server](#run-sample-server)
-* [Metrics](#metrics)
-* [RADIUS server configuration](#radius-server-configuration)
-  * [eradius configuration example 1](#eradius-configuration-example-1)
-  * [eradius configuration example 2](#eradius-configuration-example-2)
-  * [eradius configuration example 3](#eradius-configuration-example-3)
-* [Support of failover for client](#support-of-failover-for-client)
-  * [Failover configuration](#failover-configuration)
-  * [Failover Erlang code usage](#failover-erlang-code-usage)
-* [Eradius counter aggregator](#eradius-counter-aggregator)
-* [Tables](#tables)
+- [eradius](#eradius)
+- [Contents](#contents)
+- [Erlang Version Support](#erlang-version-support)
+- [Building eradius](#building-eradius)
+- [Using eradius](#using-eradius)
+- [Run sample server](#run-sample-server)
+- [Metrics](#metrics)
+- [RADIUS server configuration](#radius-server-configuration)
+  - [eradius configuration example 1](#eradius-configuration-example-1)
+  - [eradius configuration example 2](#eradius-configuration-example-2)
+  - [eradius configuration example 3](#eradius-configuration-example-3)
+- [Support of failover for client](#support-of-failover-for-client)
+  - [Failover configuration](#failover-configuration)
+  - [Failover Erlang code usage](#failover-erlang-code-usage)
+- [Eradius counter aggregator](#eradius-counter-aggregator)
+- [Tables](#tables)
 
 # Erlang Version Support
 
@@ -98,12 +100,13 @@ servers == { servers, [<Server>] }
 ```
 Each server is tuple ({}):
 ```
-Server == { <SymbolicName>, { <IP>, [<Ports>] } } | { <SymbolicName>, { <IP>, [<Ports>] }, <ExtraServerOptions> }
+Server == { <SymbolicName>, { <IP>, [<Ports>] } } | { <SymbolicName>, { <IP>, [<Ports>], <ExtraSocketOptions> }, <ExtraServerOptions> }
 ExtraServerOptions == [<ServerOption>]
+ExtraSocketOptions == [socket_setopt()] (see: https://erlang.org/doc/man/inet.html#setopts-2)
 ServerOption == {rate_config, <SymbolicNameLimit> | <RateConfigList>}
 ```
 
-Rate configuration can be configurated per server, in extra configuration, with a symbolic name or directly in server
+Rate configuration can be configured per server, in extra configuration, with a symbolic name or directly in server
 ```
 {SymbolicNameLimit, RateConfigList}
 RateConfigList == [<RateOption>]
@@ -114,12 +117,15 @@ Each server is assigned a list of handlers. This list defines the NASes that are
 which handler is to process the request.
 
 Handler assignment: `{<SymbolicName>, [<Handlers>]}`
+
 ```
 SymbolicName == Reference to a previously defined server.
 Handler == { <HandlerDefinition>, [<Sources>] }
 ```
+
 If only one handler module is used, it can be defined globally as `{radius_callback, <HandlerMod>}`.
 If more than one handler modules are used, they have to be given in the HandlerDefinition:
+
 ```
 HandlerDefinition == {<HandlerMod>, <NasId>, <HandlerArgs>} | {<NasId>, <HandlerArgs>}
 HandlerMod == Handler module to process the received requests.
@@ -140,8 +146,9 @@ Session nodes == {session_nodes, ['node@host', ...]} | {session_nodes, [{<GroupN
 
 ## eradius configuration example 1
 
-All requests are forwarded to the same globally defined list of nodes.  
+All requests are forwarded to the same globally defined list of nodes.
 Only one handler module is used.
+
 ```erlang
 [{eradius, [
     {session_nodes, ['node1@host1', 'node2@host2']},
@@ -164,8 +171,9 @@ Only one handler module is used.
 
 ## eradius configuration example 2
 
-Requests of different sources are forwarded to different nodes.  
+Requests of different sources are forwarded to different nodes.
 Different handlers are used for the sources.
+
 ```erlang
 [{eradius, [
     {session_nodes, [
@@ -178,23 +186,25 @@ Different handlers are used for the sources.
     {root, [
         {
             {tposs_pcrf_handler1, "NAS1", [handler_arg1, handler_arg2]},
-            [ {"10.18.14.2", <<"secret1">>, [{group, "NodeGroup1"}]} ] 
+            [ {"10.18.14.2", <<"secret1">>, [{group, "NodeGroup1"}]} ]
         },
         {
             {tposs_pcrf_handler2, "NAS2", [handler_arg3, handler_arg4]},
-            [ {"10.18.14.3", <<"secret2">>, [{group, "NodeGroup2"}]} ] 
+            [ {"10.18.14.3", <<"secret2">>, [{group, "NodeGroup2"}]} ]
         }
     ]}
 ]}]
 ```
+
 ## eradius configuration example 3
 
 Example of full configuration with keys which can use in `eradius`:
+
 ```erlang
 [{eradius, [
     %% The IP address used to send RADIUS requests
     {client_ip, {127, 0, 0, 1}},
-    %% The maximum number of open ports that will be used by RADIUS clients   
+    %% The maximum number of open ports that will be used by RADIUS clients
     {client_ports, 256},
     %% how long the binary response is kept before re-sending it
     {resend_timeout, 500},
@@ -234,7 +244,7 @@ Example of full configuration with keys which can use in `eradius`:
     ]},
     {server_status_metrics_enabled, false},
     {counter_aggregator, false},
-    %% Size of RADIUS receive buffer      
+    %% Size of RADIUS receive buffer
     {recbuf, 8192}
 ]}].
 ```
@@ -251,6 +261,7 @@ Secondary RADIUS servers could be specified via RADIUS proxy configuration, with
 ## Failover configuration
 
 Configuration example of failover where the `pool_name` is `atom` specifies name of a pool of secondary RADIUS servers.
+
 ```erlang
 [{eradius, [
     %%% ...
@@ -274,9 +285,11 @@ All pools are configured via:
 
 ## Failover Erlang code usage
 In a case when RADIUS proxy (eradius_proxy handler) is not used, a list of RADIUS upstream servers could be passed to the `eradius_client:send_radius_request/3` via options, for example:
+
 ```erlang
 eradius_client:send_request(Server, Request, [{failover, [{"localhost", 1814, <<"secret">>}]}]).
 ```
+
 If `failover` option was not passed to the client through the options or RADIUS proxy configuration there should not be any performance impact as RADIUS client will try to a RADIUS request to only one RADIUS server that is defined in `eradius_client:send_request/3` options.
 
 For each secondary RADIUS server server status metrics could be enabled via boolean `server_status_metrics_enabled` configuration option.
@@ -300,6 +313,7 @@ A list of RADIUS dictionaries to be loaded at startup. The atoms in this list ar
 the `priv` directory of the eradius application.
 
 Example:
+
 ```
     [dictionary, dictionary_cisco, dictionary_travelping]
 ```
