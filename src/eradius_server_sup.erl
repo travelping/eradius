@@ -26,7 +26,10 @@ start_instance(_ServerAddr = {ServerName, {IP, Port, Opts}}) ->
 
 stop_instance(_ServerAddr = {_ServerName, {IP, Port}}, Pid) ->
     ?LOG(info, "Stopping RADIUS Listener at ~s", [printable_peer(IP, Port)]),
-    supervisor:terminate_child(?SERVER, Pid).
+    supervisor:terminate_child(?SERVER, Pid);
+
+stop_instance(ServerAddr = {_ServerName, {_IP, _Port, _Opts}}, Pid) ->
+    stop_instance(ServerAddr, Pid).
 
 all() ->
     lists:map(fun({_, Child, _, _}) -> Child end, supervisor:which_children(?SERVER)).

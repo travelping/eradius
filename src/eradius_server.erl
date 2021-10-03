@@ -60,6 +60,7 @@
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include("eradius_lib.hrl").
 -include("dictionary.hrl").
@@ -109,12 +110,12 @@ stats(Server, Function) ->
 init({ServerName, IP, Port, Opts}) ->
     process_flag(trap_exit, true),
     RecBuf = application:get_env(eradius, recbuf, 8192),
-    case gen_udp:open(Port, [{active, once}, {ip, IP}, binary, {recbuf, RecBuf}] ++ Opts) of
+    case gen_udp:open(Port, [{active, once}, {ip, IP}, binary, {recbuf, RecBuf} | Opts]) of
         {ok, Socket} ->
             {ok, #state{socket = Socket,
-                ip = IP, port = Port, name = ServerName,
-                transacts = ets:new(transacts, []),
-                counter = eradius_counter:init_counter({IP, Port, ServerName})}};
+                        ip = IP, port = Port, name = ServerName,
+                        transacts = ets:new(transacts, []),
+                        counter = eradius_counter:init_counter({IP, Port, ServerName})}};
         {error, Reason} ->
             {stop, Reason}
     end.

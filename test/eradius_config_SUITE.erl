@@ -23,10 +23,9 @@
 -include("../include/eradius_lib.hrl").
 -include("eradius_test.hrl").
 
-all() -> [config_1, config_2, config_nas_removing, config_with_ranges, log_test, generate_ip_list_test].
+all() -> [config_1, config_2, config_extra_options, config_nas_removing, config_with_ranges, log_test, generate_ip_list_test].
 
 init_per_suite(Config) ->
-    % Is it a good practise? Copied fron client test
     {ok, _} = application:ensure_all_started(eradius),
     Config.
 
@@ -116,6 +115,28 @@ config_2(_Config) ->
                           nas_ip = {10,18,14,2},
                           handler_nodes = ['node3@host3', 'node4@host4']
                          }}, eradius_server_mon:lookup_handler(LocalHost, 1813, {10,18,14,2})),
+    ok.
+
+config_extra_options(_Config) ->
+    ExtraOptions = [{exit_on_close, true}, {linger, {true, 1}}],
+    Conf = [
+            {root, [
+                {{"root", []}, [{"10.18.14.3", <<"secret1">>}]}
+            ]},
+            {servers, [
+                {root, {"10.18.14.3", [1812, 1813], ExtraOptions}}
+            ]}
+        ],
+    apply_conf(Conf),
+    LocalHost = eradius_test_handler:localhost(tuple),
+    ?match({ok, {handler,[arg1,arg2]},
+                #nas_prop{
+                          server_ip = LocalHost,
+                          server_port = 1812,
+                          nas_id = <<"NAS1_10.18.14.3">>,
+                          nas_ip = {10,18,14,3},
+                          handler_nodes = ['node1@host1', 'node2@host2']
+                         }}, eradius_server_mon:lookup_handler(LocalHost, 1812, {10,18,14,3})),
     ok.
 
 config_nas_removing(_Config) ->
