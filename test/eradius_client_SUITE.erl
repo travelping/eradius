@@ -139,7 +139,7 @@ parse_ip(Address) when is_list(Address) ->
     inet_parse:address(Address);
 parse_ip(T = {_, _, _, _}) ->
     {ok, T};
-parse_ip(T = {_, _, _, _, _, _}) ->
+parse_ip(T = {_, _, _, _, _, _, _, _}) ->
     {ok, T}.
 
 %% CHECK
