@@ -22,6 +22,7 @@ several authentication mechanisms and dynamic configuration
   * [eradius configuration example 1](#eradius-configuration-example-1)
   * [eradius configuration example 2](#eradius-configuration-example-2)
   * [eradius configuration example 3](#eradius-configuration-example-3)
+  * [eradius configuration example 3](#eradius-configuration-example-4)
 * [Support of failover for client](#support-of-failover-for-client)
   * [Failover configuration](#failover-configuration)
   * [Failover Erlang code usage](#failover-erlang-code-usage)
@@ -98,9 +99,9 @@ servers == { servers, [<Server>] }
 ```
 Each server is tuple ({}):
 ```
-Server == { <SymbolicName>, { <IP>, [<Ports>] } } | { <SymbolicName>, { <IP>, [<Ports>], <ExtraSocketOptions> }, <ExtraServerOptions> }
+Server == { <SymbolicName>, { <IP>, [<Ports>] } } | { <SymbolicName>, { <IP>, [<Ports>], <ExtraSocketOptions> } }
 ExtraServerOptions == [<ServerOption>]
-ExtraSocketOptions == [socket_setopt()] (see: https://erlang.org/doc/man/inet.html#setopts-2)
+ExtraSocketOptions == [{socket_opts, [socket_setopt()]}] (see: https://erlang.org/doc/man/inet.html#setopts-2)
 ServerOption == {rate_config, <SymbolicNameLimit> | <RateConfigList>}
 ```
 
@@ -195,6 +196,34 @@ Different handlers are used for the sources.
 ```
 
 ## eradius configuration example 3
+
+Requests of different sources are forwarded to different nodes.
+Different handlers are used for the sources.
+
+```erlang
+[{eradius, [
+    {session_nodes, [
+        {"NodeGroup1", ['node1@host1', 'node2@host2']},
+        {"NodeGroup2", ['node3@host3', 'node4@host4']}
+    ]},
+    {servers, [
+        {root, {"127.0.0.1", [1812, 1813], [{socket_opts, [{recbuf, 8192},
+                                                           {netns, "/var/run/netns/myns"}]}]}}
+    ]},
+    {root, [
+        {
+            {tposs_pcrf_handler1, "NAS1", [handler_arg1, handler_arg2]},
+            [ {"10.18.14.2", <<"secret1">>, [{group, "NodeGroup1"}]} ]
+        },
+        {
+            {tposs_pcrf_handler2, "NAS2", [handler_arg3, handler_arg4]},
+            [ {"10.18.14.3", <<"secret2">>, [{group, "NodeGroup2"}]} ]
+        }
+    ]}
+]}]
+```
+
+## eradius configuration example 4
 
 Example of full configuration with keys which can use in `eradius`:
 
