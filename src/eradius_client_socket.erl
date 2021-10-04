@@ -13,12 +13,12 @@ start(SocketIP, Client, PortIdx, Options) ->
 init([SocketIP, Client, PortIdx, Options]) ->
     Client ! {PortIdx, self()},
     ExtraOptions =
-      case SocketIP of
-        undefined ->
-          Options;
-        SocketIP when is_tuple(SocketIP) ->
-          [{ip, SocketIP} | Options]
-      end,
+        case SocketIP of
+            undefined ->
+                Options;
+            SocketIP when is_tuple(SocketIP) ->
+                [{ip, SocketIP} | Options]
+        end,
     RecBuf = application:get_env(eradius, recbuf, 8192),
     {ok, Socket} = gen_udp:open(0, [{active, once}, binary , {recbuf, RecBuf} | ExtraOptions]),
     {ok, #state{client = Client, socket = Socket, pending = maps:new(), mode = active, counter = 0}}.

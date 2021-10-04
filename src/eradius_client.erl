@@ -76,14 +76,14 @@ send_request({Host, Port, Secret}, Request, Options)
             send_request({IP, Port, Secret}, Request, Options);
         _Err ->
           case inet:gethostbyname(Host, inet6) of
-            {ok, #hostent{h_addrtype = inet6, h_addr_list = [IP]}} ->
-                send_request({IP, Port, Secret}, Request, Options);
-            {ok, #hostent{h_addrtype = inet6, h_addr_list = [_ | _] = IPs}} ->
-                Index = rand:uniform(length(IPs)),
-                IP = lists:nth(Index, IPs),
-                send_request({IP, Port, Secret}, Request, Options);
-            _Err ->
-              error(badarg)
+              {ok, #hostent{h_addrtype = inet6, h_addr_list = [IP]}} ->
+                  send_request({IP, Port, Secret}, Request, Options);
+              {ok, #hostent{h_addrtype = inet6, h_addr_list = [_ | _] = IPs}} ->
+                  Index = rand:uniform(length(IPs)),
+                  IP = lists:nth(Index, IPs),
+                  send_request({IP, Port, Secret}, Request, Options);
+              _Err ->
+                  error(badarg)
           end
     end;
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
@@ -327,11 +327,11 @@ init([]) ->
 
 %% @private
 inet_family_based_on_peer(_PeerSocket = {{_, _, _, _}, _port}) ->
-  [inet];
+    [inet];
 inet_family_based_on_peer(_PeerSocket = {{_, _, _, _, _, _, _, _}, _port}) ->
-  [inet6];
+    [inet6];
 inet_family_based_on_peer(_PeerSocket) ->
-  [].
+    [].
 
 %% @private
 handle_call({wanna_send, Peer = {_PeerName, PeerSocket}, _MetricsInfo}, _From, State) ->
