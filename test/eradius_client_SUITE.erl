@@ -122,7 +122,7 @@ split2(N, List1, [L|List2]) -> split2(N-1, [L|List1], List2).
 
 meckStart() ->
     ok = meck:new(eradius_client_socket),
-    ok = meck:expect(eradius_client_socket, start, fun(X, Y, Z) -> eradius_client_socket_test:start(X, Y, Z) end),
+    ok = meck:expect(eradius_client_socket, start, fun(X, Y, Z, O) -> eradius_client_socket_test:start(X, Y, Z, O) end),
     ok = meck:expect(eradius_client_socket, init, fun(X) -> eradius_client_socket_test:init(X) end),
     ok = meck:expect(eradius_client_socket, handle_call, fun(X, Y, Z) -> eradius_client_socket_test:handle_call(X, Y, Z) end),
     ok = meck:expect(eradius_client_socket, handle_cast, fun(X, Y) -> eradius_client_socket_test:handle_cast(X, Y) end),
@@ -139,7 +139,7 @@ parse_ip(Address) when is_list(Address) ->
     inet_parse:address(Address);
 parse_ip(T = {_, _, _, _}) ->
     {ok, T};
-parse_ip(T = {_, _, _, _, _, _}) ->
+parse_ip(T = {_, _, _, _, _, _, _, _}) ->
     {ok, T}.
 
 %% CHECK
