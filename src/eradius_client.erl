@@ -62,19 +62,29 @@ send_request(NAS, Request) ->
 %   If no answer is received within the specified timeout, the request will be sent again.
 -spec send_request(nas_address(), #radius_request{}, options()) ->
     {ok, binary(), eradius_lib:authenticator()} | {error, 'timeout' | 'socket_down'}.
-send_request({Host, Port, Secret}, Request, Options) 
+send_request({Host, Port, Secret}, Request, Options)
   when ?GOOD_CMD(Request) andalso is_binary(Host) ->
     send_request({erlang:binary_to_list(Host), Port, Secret}, Request, Options);
-send_request({Host, Port, Secret}, Request, Options) 
+send_request({Host, Port, Secret}, Request, Options)
   when ?GOOD_CMD(Request) andalso is_list(Host) ->
     case inet:gethostbyname(Host) of
-        {ok, #hostent{h_addrtype = inet, h_addr_list = [IP]}} -> 
+        {ok, #hostent{h_addrtype = inet, h_addr_list = [IP]}} ->
             send_request({IP, Port, Secret}, Request, Options);
-        {ok, #hostent{h_addrtype = inet, h_addr_list = [_ | _] = IPs}} -> 
+        {ok, #hostent{h_addrtype = inet, h_addr_list = [_ | _] = IPs}} ->
             Index = rand:uniform(length(IPs)),
             IP = lists:nth(Index, IPs),
             send_request({IP, Port, Secret}, Request, Options);
-        _ -> error(badarg)
+        _Err ->
+          case inet:gethostbyname(Host, inet6) of
+            {ok, #hostent{h_addrtype = inet6, h_addr_list = [IP]}} ->
+                send_request({IP, Port, Secret}, Request, Options);
+            {ok, #hostent{h_addrtype = inet6, h_addr_list = [_ | _] = IPs}} ->
+                Index = rand:uniform(length(IPs)),
+                IP = lists:nth(Index, IPs),
+                send_request({IP, Port, Secret}, Request, Options);
+            _Err ->
+              error(badarg)
+          end
     end;
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
     TS1 = eradius_lib:timestamp(milli_seconds),
@@ -316,9 +326,18 @@ init([]) ->
     end.
 
 %% @private
+inet_family_based_on_peer(_PeerSocket = {{_, _, _, _}, _port}) ->
+  [inet];
+inet_family_based_on_peer(_PeerSocket = {{_, _, _, _, _, _, _, _}, _port}) ->
+  [inet6];
+inet_family_based_on_peer(_PeerSocket) ->
+  [].
+
+%% @private
 handle_call({wanna_send, Peer = {_PeerName, PeerSocket}, _MetricsInfo}, _From, State) ->
     {PortIdx, ReqId, NewIdCounters} = next_port_and_req_id(PeerSocket, State#state.no_ports, State#state.idcounters),
-    {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip, State#state.sup),
+    InetFamily = inet_family_based_on_peer(PeerSocket),
+    {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip, InetFamily, State#state.sup),
     IsCreated = lists:member(Peer, State#state.clients),
     NewState = case IsCreated of
                    false ->
@@ -464,11 +483,11 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
     NewCounters = Counters#{Peer => {NextPortIdx, NextReqId}},
     {NextPortIdx, NextReqId, NewCounters}.
 
-find_socket_process(PortIdx, Sockets, SocketIP, Sup) ->
+find_socket_process(PortIdx, Sockets, SocketIP, Options, Sup) ->
     case array:get(PortIdx, Sockets) of
         undefined ->
             Res = supervisor:start_child(Sup, {PortIdx,
-                {eradius_client_socket, start, [SocketIP, self(), PortIdx]},
+                {eradius_client_socket, start, [SocketIP, self(), PortIdx, Options]},
                 transient, brutal_kill, worker, [eradius_client_socket]}),
             Pid = case Res of
                 {ok, P} -> P;
@@ -490,7 +509,7 @@ parse_ip(Address) when is_list(Address) ->
     inet_parse:address(Address);
 parse_ip(T = {_, _, _, _}) ->
     {ok, T};
-parse_ip(T = {_, _, _, _, _, _}) ->
+parse_ip(T = {_, _, _, _, _, _, _, _}) ->
     {ok, T}.
 
 make_metrics_info(Options, {ServerIP, ServerPort}) ->
