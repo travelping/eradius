@@ -69,6 +69,7 @@
 -define(RESEND_TIMEOUT, 5000).          % how long the binary response is kept after sending it on the socket
 -define(RESEND_RETRIES, 3).             % how often a reply may be resent
 -define(HANDLER_REPLY_TIMEOUT, 15000).  % how long to wait before a remote handler is considered dead
+-define(DEFAULT_RADIUS_SERVER_OPTS(IP), [{active, once}, {ip, IP}, binary]).
 
 -type port_number() :: 1..65535.
 -type req_id()      :: byte().
@@ -109,8 +110,10 @@ stats(Server, Function) ->
 %% @private
 init({ServerName, IP, Port, Opts}) ->
     process_flag(trap_exit, true),
-    RecBuf = application:get_env(eradius, recbuf, 8192),
-    case gen_udp:open(Port, [{active, once}, {ip, IP}, binary, {recbuf, RecBuf} | Opts]) of
+    ExtraServerOptions = proplists:get_value(socket_opts, Opts, []),
+    DefaultRecBuf = application:get_env(eradius, recbuf, 8192),
+    ExtraServerOptionsWithBuf = add_recbuf_to_options(DefaultRecBuf, ExtraServerOptions),
+    case gen_udp:open(Port, ?DEFAULT_RADIUS_SERVER_OPTS(IP) ++ ExtraServerOptionsWithBuf) of
         {ok, Socket} ->
             {ok, #state{socket = Socket,
                         ip = IP, port = Port, name = ServerName,
@@ -165,6 +168,16 @@ handle_info({'EXIT', HandlerPid, _Reason}, State = #state{transacts = Transacts}
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
+
+%% @private
+-spec add_recbuf_to_options(pos_integer(), proplists:proplist()) -> proplists:proplist().
+add_recbuf_to_options(RecBuf, Opts) ->
+    case proplists:get_value(recbuf, Opts) of
+        undefined ->
+            [{recbuf, RecBuf} | Opts];
+        _Val ->
+            Opts
+    end.
 
 %% @private
 terminate(_Reason, State) ->
