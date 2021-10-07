@@ -22,7 +22,7 @@ several authentication mechanisms and dynamic configuration
   * [eradius configuration example 1](#eradius-configuration-example-1)
   * [eradius configuration example 2](#eradius-configuration-example-2)
   * [eradius configuration example 3](#eradius-configuration-example-3)
-  * [eradius configuration example 3](#eradius-configuration-example-4)
+  * [eradius configuration example 4](#eradius-configuration-example-4)
 * [Support of failover for client](#support-of-failover-for-client)
   * [Failover configuration](#failover-configuration)
   * [Failover Erlang code usage](#failover-erlang-code-usage)
