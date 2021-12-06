@@ -68,15 +68,8 @@ send_request({Host, Port, Secret}, Request, Options)
     send_request({erlang:binary_to_list(Host), Port, Secret}, Request, Options);
 send_request({Host, Port, Secret}, Request, Options) 
   when ?GOOD_CMD(Request) andalso is_list(Host) ->
-    case inet:gethostbyname(Host) of
-        {ok, #hostent{h_addrtype = inet, h_addr_list = [IP]}} -> 
-            send_request({IP, Port, Secret}, Request, Options);
-        {ok, #hostent{h_addrtype = inet, h_addr_list = [_ | _] = IPs}} -> 
-            Index = rand:uniform(length(IPs)),
-            IP = lists:nth(Index, IPs),
-            send_request({IP, Port, Secret}, Request, Options);
-        _ -> error(badarg)
-    end;
+    IP = get_ip(Host),
+    send_request({IP, Port, Secret}, Request, Options);
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
     TS1 = eradius_lib:timestamp(milli_seconds),
     ServerName = proplists:get_value(server_name, Options, undefined),
@@ -448,8 +441,11 @@ store_upstream_servers(Server) ->
 %% private
 store_radius_server_from_pool(Addr, Port, Retries) when is_tuple(Addr) and is_integer(Port) and is_integer(Retries) ->
     ets:insert(?MODULE, {{Addr, Port}, Retries, Retries});
-store_radius_server_from_pool(Addr, _, _) ->
-    ?LOG(error, "bad IP address specified in RADIUS servers pool configuration ~p", [Addr]),
+store_radius_server_from_pool(Addr, Port, Retries) when is_list(Addr) and is_integer(Port) and is_integer(Retries) ->
+    IP = get_ip(Addr),
+    ets:insert(?MODULE, {{IP, Port}, Retries, Retries});
+store_radius_server_from_pool(Addr, Port, Retries) ->
+    ?LOG(error, "bad RADIUS upstream server specified in RADIUS servers pool configuration ~p", [{Addr, Port, Retries}]),
     error(badarg).
 
 configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NAdd) ->
@@ -675,3 +671,13 @@ find_suitable_peer([{IP, Port, Secret} | Pool]) ->
     end;
 find_suitable_peer([{IP, Port, Secret, _Opts} | Pool]) ->
     find_suitable_peer([{IP, Port, Secret} | Pool]).
+
+get_ip(Host) ->
+    case inet:gethostbyname(Host) of
+        {ok, #hostent{h_addrtype = inet, h_addr_list = [IP]}} ->
+            IP;
+        {ok, #hostent{h_addrtype = inet, h_addr_list = [_ | _] = IPs}} ->
+            Index = rand:uniform(length(IPs)),
+            lists:nth(Index, IPs);
+        _ -> error(badarg)
+    end.
