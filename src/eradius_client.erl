@@ -71,7 +71,7 @@ send_request({Host, Port, Secret}, Request, Options)
     IP = get_ip(Host),
     send_request({IP, Port, Secret}, Request, Options);
 send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andalso is_tuple(IP) ->
-    TS1 = eradius_lib:timestamp(milli_seconds),
+    TS1 = erlang:monotonic_time(),
     ServerName = proplists:get_value(server_name, Options, undefined),
     MetricsInfo = make_metrics_info(Options, {IP, Port}),
     Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
@@ -122,7 +122,7 @@ send_remote_request(Node, NAS, Request) ->
 %   The request will not be sent again if the remote node is unreachable.
 -spec send_remote_request(node(), nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'node_down' | 'socket_down'}.
 send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
-    TS1 = eradius_lib:timestamp(milli_seconds),
+    TS1 = erlang:monotonic_time(),
     ServerName = proplists:get_value(server_name, Options, undefined),
     MetricsInfo = make_metrics_info(Options, {IP, Port}),
     update_client_requests(MetricsInfo),
@@ -160,7 +160,7 @@ restore_upstream_server({ServerIP, Port, Retries, InitialRetries}) ->
     ets:insert(?MODULE, {{ServerIP, Port}, Retries, InitialRetries}).
 
 proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_ServerName, {ServerIP, Port}}, TS1, MetricsInfo, Options) ->
-    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_lib:timestamp(milli_seconds) - TS1, Request),
+    update_client_request(Request#radius_request.cmd, MetricsInfo, erlang:monotonic_time() - TS1, Request),
     update_client_responses(MetricsInfo),
     case eradius_lib:decode_request(Response, Secret, Authenticator) of
         {bad_pdu, "Message-Authenticator Attribute is invalid" = Reason} ->
@@ -187,7 +187,7 @@ proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_Serve
 
 proceed_response(Request, Response, {_ServerName, {ServerIP, Port}}, TS1, MetricsInfo, Options) ->
     update_client_responses(MetricsInfo),
-    update_client_request(Request#radius_request.cmd, MetricsInfo, eradius_lib:timestamp(milli_seconds) - TS1, Request),
+    update_client_request(Request#radius_request.cmd, MetricsInfo, erlang:monotonic_time() - TS1, Request),
     maybe_failover(Request, Response, {ServerIP, Port}, Options).
 
 maybe_failover(Request, Response, {ServerIP, Port}, Options) ->
@@ -241,7 +241,8 @@ send_request_loop(Socket, ReqId, Peer, Request, Retries, Timeout, MetricsInfo) -
     send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, Retries, MetricsInfo, Request#radius_request.secret, Request).
 
 send_request_loop(_Socket, SMon, _Peer, _ReqId, _Authenticator, _EncRequest, Timeout, 0, MetricsInfo, _Secret, Request) ->
-    update_client_request(timeout, MetricsInfo, Timeout, Request),
+    TS = erlang:convert_time_unit(Timeout, millisecond, native),
+    update_client_request(timeout, MetricsInfo, TS, Request),
     erlang:demonitor(SMon, [flush]),
     {error, timeout};
 send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authenticator, EncRequest, Timeout, RetryN, MetricsInfo, Secret, Request) ->
@@ -257,7 +258,8 @@ send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authent
             {error, Error}
     after
         Timeout ->
-            update_client_request(retransmission, MetricsInfo, Timeout, Request),
+            TS = erlang:convert_time_unit(Timeout, millisecond, native),
+            update_client_request(retransmission, MetricsInfo, TS, Request),
             send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, RetryN - 1, MetricsInfo, Secret, Request)
     end.
 
