@@ -126,7 +126,7 @@ init({ServerName, IP, Port, Opts}) ->
 %% @private
 handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet},
             State  = #state{name = ServerName, transacts = Transacts, ip = _IP, port = _Port}) ->
-    TS1 = eradius_lib:timestamp(milli_seconds),
+    TS1 = erlang:monotonic_time(),
     case lookup_nas(State, FromIP, Packet) of
         {ok, ReqID, Handler, NasProp} ->
             #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
@@ -220,7 +220,7 @@ do_radius(ServerPid, ServerName, ReqKey, Handler = {HandlerMod, _}, NasProp, {ud
         {reply, EncReply, {ReqCmd, RespCmd}, Request} ->
             ?LOG(debug, "~s From: ~s INF: Sending response for request ~p",
                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), ReqKey]),
-            TS2 = eradius_lib:timestamp(milli_seconds),
+            TS2 = erlang:monotonic_time(),
             inc_counter({ReqCmd, RespCmd}, ServerName, NasProp, TS2 - TS1, Request),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             case application:get_env(eradius, resend_timeout, 2000) of
