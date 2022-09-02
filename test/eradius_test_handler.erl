@@ -20,7 +20,7 @@ start() ->
     application:set_env(eradius, unreachable_timeout, 2),
     application:set_env(eradius, servers_pool, [{test_pool, [{localhost(tuple), 1812, "secret"},
                                                              % fake upstream server for fail-over
-                                                             {localhost(tuple), 1820, "secret"}]}]),
+                                                             {localhost(string), 1820, "secret"}]}]),
     application:ensure_all_started(eradius),
     eradius:modules_ready([?MODULE]).
 
