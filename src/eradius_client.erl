@@ -664,6 +664,14 @@ find_suitable_peer(undefined) ->
     [];
 find_suitable_peer([]) ->
     [];
+find_suitable_peer([{Host, Port, Secret} | Pool]) when is_list(Host) ->
+    try
+	IP = get_ip(Host),
+	find_suitable_peer([{IP, Port, Secret} | Pool])
+    catch _:_ ->
+	% can't resolve ip by some reasons, just ignore it
+	find_suitable_peer(Pool)
+    end;
 find_suitable_peer([{IP, Port, Secret} | Pool]) ->
     case ets:lookup(?MODULE, {IP, Port}) of
         [] ->
