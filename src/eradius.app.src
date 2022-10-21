@@ -15,7 +15,8 @@
       {counter_aggregator, false},
       {server_status_metrics_enabled, false},
       {logfile, "./radius.log"},
-      {recbuf, 8192}
+      {recbuf, 8192},
+      {sndbuf, 131072}
    ]},
    {maintainers, ["Andreas Schultz", "Vladimir Tarasenko", "Yury Gargay"]},
    {licenses, ["MIT"]},

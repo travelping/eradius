@@ -87,10 +87,10 @@
 
 -optional_callbacks([validate_arguments/1]).
 
--callback validate_arguments(Args :: list()) -> 
+-callback validate_arguments(Args :: list()) ->
     boolean() | {true, NewArgs :: list()}.
 
--callback radius_request(#radius_request{}, #nas_prop{}, HandlerData :: term()) -> 
+-callback radius_request(#radius_request{}, #nas_prop{}, HandlerData :: term()) ->
     {reply, #radius_request{}} | noreply | {error, timeout}.
 
 -spec start_link(atom(), inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
@@ -110,10 +110,9 @@ stats(Server, Function) ->
 %% @private
 init({ServerName, IP, Port, Opts}) ->
     process_flag(trap_exit, true),
-    ExtraServerOptions = proplists:get_value(socket_opts, Opts, []),
-    DefaultRecBuf = application:get_env(eradius, recbuf, 8192),
-    ExtraServerOptionsWithBuf = add_recbuf_to_options(DefaultRecBuf, ExtraServerOptions),
-    case gen_udp:open(Port, ?DEFAULT_RADIUS_SERVER_OPTS(IP) ++ ExtraServerOptionsWithBuf) of
+    Opts = proplists:get_value(socket_opts, Opts, []),
+    SockOpts = ?DEFAULT_RADIUS_SERVER_OPTS(IP) ++ add_sock_opt(recbuf, 8192, Opts) ++ add_sock_opt(sndbuf, 131072, Opts),
+    case gen_udp:open(Port, SockOpts) of
         {ok, Socket} ->
             {ok, #state{socket = Socket,
                         ip = IP, port = Port, name = ServerName,
@@ -170,11 +169,12 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 %% @private
--spec add_recbuf_to_options(pos_integer(), proplists:proplist()) -> proplists:proplist().
-add_recbuf_to_options(RecBuf, Opts) ->
-    case proplists:get_value(recbuf, Opts) of
+-spec add_sock_opt(recbuf | sndbuf, pos_integer(), proplists:proplist()) -> proplists:proplist().
+add_sock_opt(OptName, Default, Opts) ->
+    Buf = application:get_env(eradius, OptName, Default),
+    case proplists:get_value(OptName, Opts) of
         undefined ->
-            [{recbuf, RecBuf} | Opts];
+            [{OptName, Buf} | Opts];
         _Val ->
             Opts
     end.

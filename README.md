@@ -208,6 +208,7 @@ Different handlers are used for the sources.
     ]},
     {servers, [
         {root, {"127.0.0.1", [1812, 1813], [{socket_opts, [{recbuf, 8192},
+                                                           {sndbuf, 131072},
                                                            {netns, "/var/run/netns/myns"}]}]}}
     ]},
     {root, [
@@ -256,13 +257,13 @@ Example of full configuration with keys which can use in `eradius`:
         {acct, {"127.0.0.1", [1813]}}
     ]},
     {counter_aggregator, false},
-    %% List of histogram buckets for RADIUS servers metrics 
+    %% List of histogram buckets for RADIUS servers metrics
     {histogram_buckets, [10, 30, 50, 75, 100, 1000, 2000]},
     %% Simple file-based logging of RADIUS requests and metadata
     {logging, true},
     %% Path to log file
     {logfile, "./radius.log"},
-    %% List of upstream RADIUS servers pools 
+    %% List of upstream RADIUS servers pools
     {servers_pool, [
         {pool_name, [
             {{127, 0, 0, 2}, 1812, <<"secret">>, [{retries, 3}]},
@@ -272,7 +273,9 @@ Example of full configuration with keys which can use in `eradius`:
     {server_status_metrics_enabled, false},
     {counter_aggregator, false},
     %% Size of RADIUS receive buffer
-    {recbuf, 8192}
+    {recbuf, 8192},
+    %% The minimum size of the send buffer to use for the RADIUS
+    {sndbuf, 131072}
 ]}].
 ```
 
