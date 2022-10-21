@@ -25,7 +25,7 @@ jobs:
            apk --no-cache upgrade
            apk --no-cache add git
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Build
       run: rebar3 compile
     - name: Run tests
@@ -39,7 +39,7 @@ jobs:
       run: DEBUG=1 rebar3 as test coveralls send || /bin/true
     - name: Archive Test Output
       if: ${{ always() }}
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: test-output-${{ matrix.otp }}
         path: |
