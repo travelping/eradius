@@ -3,7 +3,7 @@ eradius
 
 A generic RADIUS client and server.
 
-Version 2.3 - 21 October 2022
+Version 2.3.0 - 21 October 2022
 ---------------------------
 
 **Bugfixes** :bug:
