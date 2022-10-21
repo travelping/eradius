@@ -131,11 +131,12 @@ config_socket_options(_Config) ->
 
 config_options(_Config) ->
     Opts = [{socket_opts, [{recbuf, 8192},
+                           {sndbuf, 131072},
                            {netns, "/var/run/netns/net1"}]}],
     ?match(Opts, eradius_config:validate_options(Opts)),
     ok.
 test_validate_server(_Config) ->
-    SocketOpts = [{socket_opts, [{recbuf, 8192}, {netns, "/var/run/netns/net1"}]}],
+    SocketOpts = [{socket_opts, [{recbuf, 8192}, {sndbuf, 131072}, {netns, "/var/run/netns/net1"}]}],
     Opts = {{127, 0, 0, 1}, 1812, SocketOpts},
     ?match(Opts, eradius_config:validate_server(Opts)),
     Opts2 = {{127, 0, 0, 1}, "1812", SocketOpts},
