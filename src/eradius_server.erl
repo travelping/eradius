@@ -110,9 +110,9 @@ stats(Server, Function) ->
 %% @private
 init({ServerName, IP, Port, Opts}) ->
     process_flag(trap_exit, true),
-    Opts = proplists:get_value(socket_opts, Opts, []),
-    SockOpts = ?DEFAULT_RADIUS_SERVER_OPTS(IP) ++ add_sock_opt(recbuf, 8192, Opts) ++ add_sock_opt(sndbuf, 131072, Opts),
-    case gen_udp:open(Port, SockOpts) of
+    SockOpts = proplists:get_value(socket_opts, Opts, []),
+    SockOptsDef = ?DEFAULT_RADIUS_SERVER_OPTS(IP) ++ add_sock_opt(recbuf, 8192, SockOpts) ++ add_sock_opt(sndbuf, 131072, SockOpts),
+    case gen_udp:open(Port, SockOptsDef) of
         {ok, Socket} ->
             {ok, #state{socket = Socket,
                         ip = IP, port = Port, name = ServerName,
