@@ -19,7 +19,8 @@ init([SocketIP, Client, PortIdx]) ->
             ExtraOptions = [{ip, SocketIP}]
     end,
     RecBuf = application:get_env(eradius, recbuf, 8192),
-    {ok, Socket} = gen_udp:open(0, [{active, once}, binary , {recbuf, RecBuf} | ExtraOptions]),
+    SndBuf = application:get_env(eradius, sndbuf, 131072),
+    {ok, Socket} = gen_udp:open(0, [{active, once}, binary , {recbuf, RecBuf}, {sndbuf, SndBuf} | ExtraOptions]),
     {ok, #state{client = Client, socket = Socket, pending = maps:new(), mode = active, counter = 0}}.
 
 handle_call(_Request, _From, State) ->

@@ -6,6 +6,7 @@
 -include_lib("prometheus/include/prometheus.hrl").
 
 -export([deregister_cleanup/1, collect_mf/2, collect_metrics/2, fetch_counter/2, fetch_counter/3, fetch_histogram/2]).
+-export([augment_counters/1]).
 
 -import(prometheus_model_helpers, [create_mf/5, gauge_metric/2, counter_metric/1]).
 
@@ -80,8 +81,12 @@ fetch_histogram(Name, Labels) ->
     try
         lists:flatten(lists:map(fun ({LabelsFromStat, Buckets, DurationUnit}) ->
             case compare_labels(Labels, LabelsFromStat) of
-               true -> {Buckets, LabelsFromStat, DurationUnit};
-               _ -> []
+                true ->
+                    {Buckets1, Values} = lists:unzip(Buckets),
+                    Values1 = augment_counters(Values),
+                    Buckets2 = lists:zip(Buckets1, Values1),
+                    {Buckets2, LabelsFromStat, DurationUnit};
+                _ -> []
             end
         end, prometheus_histogram:values(default, Name)))
     catch _:_ -> [] end.
@@ -122,6 +127,16 @@ fetch_counter(Name, Stat, Labels) ->
                   end
             end, Metrics))
     end.
+
+%% from prometheus.erl as prometheus_histogram:values/1 returns
+%% non-cumulative values
+augment_counters([Start | Counters]) ->
+  augment_counters(Counters, [Start], Start).
+
+augment_counters([], LAcc, _CAcc) ->
+  LAcc;
+augment_counters([Counter | Counters], LAcc, CAcc) ->
+  augment_counters(Counters, LAcc ++ [CAcc + Counter], CAcc + Counter).
 
 build_metric(uptime_milliseconds, Type, Stat) ->
     {{ServerMetrics, _}, _, _} = Stat,

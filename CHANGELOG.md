@@ -3,6 +3,20 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.3.0 - 21 October 2022
+---------------------------
+
+**Bugfixes** :bug:
+* [#223](https://github.com/travelping/eradius/pull/223) Remove duplicated Login-Host attribute from `dictionary.compat`
+* [#220](https://github.com/travelping/eradius/pull/220) Use native time unit for prometheus histograms
+* [#218](https://github.com/travelping/eradius/pull/218) `prometheus_collector`: return cumulative values in histograms
+
+**Features** :rocket:
+* [#225](https://github.com/travelping/eradius/pull/225) Add support of `sndbuf`
+* [#222](https://github.com/travelping/eradius/pull/222) Resolve a failover RADIUS server hostname if need
+* [#219](https://github.com/travelping/eradius/pull/219) Allow to specify hostname in failover `RADIUS` servers
+* [#215](https://github.com/travelping/eradius/pull/215) Support optional socket options
+
 Version 2.2.4 - 9 August 2021
 ---------------------------
 
