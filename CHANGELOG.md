@@ -3,6 +3,13 @@ eradius
 
 A generic RADIUS client and server.
 
+Version 2.3.1 - 23 October 2022
+---------------------------
+
+**Bugfixes** :bug:
+* [#230](https://github.com/travelping/eradius/pull/230) Fix duplicates socket opts
+* [#229](https://github.com/travelping/eradius/pull/229) Fix socket opts rebind
+
 Version 2.3.0 - 21 October 2022
 ---------------------------
 
