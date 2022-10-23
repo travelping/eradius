@@ -110,8 +110,10 @@ stats(Server, Function) ->
 %% @private
 init({ServerName, IP, Port, Opts}) ->
     process_flag(trap_exit, true),
-    SockOpts = proplists:get_value(socket_opts, Opts, []),
-    SockOptsDef = ?DEFAULT_RADIUS_SERVER_OPTS(IP) ++ add_sock_opt(recbuf, 8192, SockOpts) ++ add_sock_opt(sndbuf, 131072, SockOpts),
+    SockOpts0 = proplists:get_value(socket_opts, Opts, []),
+    SockOpts1 = add_sock_opt(recbuf, 8192, SockOpts0),
+    SockOpts = add_sock_opt(sndbuf, 131072, SockOpts1),
+    SockOptsDef = ?DEFAULT_RADIUS_SERVER_OPTS(IP) ++ SockOpts,
     case gen_udp:open(Port, SockOptsDef) of
         {ok, Socket} ->
             {ok, #state{socket = Socket,
@@ -171,9 +173,9 @@ handle_info(_Info, State) ->
 %% @private
 -spec add_sock_opt(recbuf | sndbuf, pos_integer(), proplists:proplist()) -> proplists:proplist().
 add_sock_opt(OptName, Default, Opts) ->
-    Buf = application:get_env(eradius, OptName, Default),
     case proplists:get_value(OptName, Opts) of
         undefined ->
+            Buf = application:get_env(eradius, OptName, Default),
             [{OptName, Buf} | Opts];
         _Val ->
             Opts
