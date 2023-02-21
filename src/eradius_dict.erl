@@ -12,7 +12,6 @@
 -include("eradius_dict.hrl").
 
 -define(SERVER, ?MODULE).
--define(TABLENAME, ?MODULE).
 
 -type table_name() :: atom() | string().
 -type attribute_id() :: pos_integer() | {vendor_id(), pos_integer()}.
@@ -58,7 +57,6 @@ unload_tables(Dir, Tables) when is_list(Tables) ->
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
 init([]) ->
-    dict_init(),
     {ok, InitialLoadTables} = application:get_env(eradius, tables),
     do_load_tables(code:priv_dir(eradius), InitialLoadTables),
     {ok, #state{}}.
@@ -110,7 +108,7 @@ do_unload_tables(Dir, Tables) ->
         throw:{consult, FailedTable} ->
             ?LOG(error, "Failed to unload RADIUS table: ~s (wanted: ~p)", [FailedTable, Tables]),
             {error, {consult, FailedTable}}
-    end. 
+    end.
 
 -spec prepare_tables(file:filename(), [table_name()]) -> {list(), list()}.
 prepare_tables(Dir, Tables) ->
@@ -123,58 +121,22 @@ prepare_tables(Dir, Tables) ->
     end, Tables),
     lists:partition(fun({include, _}) -> true; (_) -> false end, All).
 
-%% check if we can use persistent_term for config
-%% persistent term was added in OTP 21.2 but we can't
-%% check minor versions with macros so we're stuck waiting
-%% for OTP 22
--ifdef(HAVE_PERSISTENT_TERM).
-
-dict_init() ->
-    ok.
-
 dict_insert(Value) when is_list(Value) ->
     [dict_insert(V) || V <- Value];
 dict_insert(Value) when is_tuple(Value) ->
-    Key = {?TABLENAME, element(1, Value), element(2, Value)},
+    Key = {?MODULE, element(1, Value), element(2, Value)},
     persistent_term:put(Key, Value).
 
 dict_delete(Value) when is_list(Value) ->
     [dict_delete(V) || V <- Value];
 dict_delete(Value) when is_tuple(Value) ->
-    Key = {?TABLENAME, element(1, Value), element(2, Value)},
+    Key = {?MODULE, element(1, Value), element(2, Value)},
     persistent_term:erase(Key).
 
 dict_lookup(Type, Id) ->
     try
-	persistent_term:get({?TABLENAME, Type, Id})
+	persistent_term:get({?MODULE, Type, Id})
     catch
 	error:badarg ->
 	    false
     end.
-
--else.
-
-dict_init() ->
-    ets:new(?TABLENAME, [set, named_table, {keypos, 1}, protected]).
-
-dict_insert(Value) when is_list(Value) ->
-    [dict_insert(V) || V <- Value];
-dict_insert(Value) when is_tuple(Value) ->
-    Key = {element(1, Value), element(2, Value)},
-    ets:insert(?TABLENAME, {Key, Value}).
-
-dict_delete(Value) when is_list(Value) ->
-    [dict_delete(V) || V <- Value];
-dict_delete(Value) when is_tuple(Value) ->
-    Key = {element(1, Value), element(2, Value)},
-    ets:delete(?TABLENAME, Key).
-
-dict_lookup(Type, Id) ->
-    try
-	ets:lookup_element(?TABLENAME, {Type, Id}, 2)
-    catch
-	error:badarg ->
-	    false
-    end.
-
--endif.

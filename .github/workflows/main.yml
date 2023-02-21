@@ -2,49 +2,23 @@ name: CI
 
 on:
   push:
-  pull_request:
-    branches: [ $default-branch ]
-  release:
-    types:
-      - created
-  workflow_dispatch:
 
 jobs:
   test:
-    name: CI
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         otp: [22, 23, 24, 25]
     container:
       image: erlang:${{ matrix.otp }}-alpine
     steps:
-    - name: Prepare
-      run: |
-           apk update
-           apk --no-cache upgrade
-           apk --no-cache add git
     - name: Checkout
       uses: actions/checkout@v3
     - name: Build
       run: rebar3 compile
     - name: Run tests
       run: |
-           rebar3 do xref
-           rebar3 do ct
-    - name: Coveralls
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        COVERALLS_FLAG_NAME: ${{ matrix.otp }}
-      run: DEBUG=1 rebar3 as test coveralls send || /bin/true
-    - name: Archive Test Output
-      if: ${{ always() }}
-      uses: actions/upload-artifact@v3
-      with:
-        name: test-output-${{ matrix.otp }}
-        path: |
-          _build/test/logs/
-          !_build/test/logs/last
+           rebar3 do xref, ct
 
   slack:
     needs: test
@@ -63,16 +37,3 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         MATRIX_CONTEXT: ${{ toJson(matrix) }}
-
-  finish:
-    needs: test
-    runs-on: ubuntu-20.04
-    if: always()
-    steps:
-    - name: Coveralls Finished
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-           curl -v -k https://coveralls.io/webhook \
-                --header "Content-Type: application/json" \
-                --data "{\"repo_name\":\"$GITHUB_REPOSITORY\",\"repo_token\":\"$GITHUB_TOKEN\",\"payload\":{\"build_num\":$GITHUB_RUN_ID,\"status\":\"done\"}}"
