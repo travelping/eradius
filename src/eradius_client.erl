@@ -36,8 +36,8 @@
                         Req#radius_request.cmd == 'coareq' orelse
                         Req#radius_request.cmd == 'discreq')).
 
--type nas_address() :: {string() | binary() | inet:ip_address(), 
-                        eradius_server:port_number(), 
+-type nas_address() :: {string() | binary() | inet:ip_address(),
+                        eradius_server:port_number(),
                         eradius_lib:secret()}.
 -type options() :: [{retries, pos_integer()} |
                     {timeout, timeout()} |
@@ -63,10 +63,10 @@ send_request(NAS, Request) ->
 %   If no answer is received within the specified timeout, the request will be sent again.
 -spec send_request(nas_address(), #radius_request{}, options()) ->
     {ok, binary(), eradius_lib:authenticator()} | {error, 'timeout' | 'socket_down'}.
-send_request({Host, Port, Secret}, Request, Options) 
+send_request({Host, Port, Secret}, Request, Options)
   when ?GOOD_CMD(Request) andalso is_binary(Host) ->
     send_request({erlang:binary_to_list(Host), Port, Secret}, Request, Options);
-send_request({Host, Port, Secret}, Request, Options) 
+send_request({Host, Port, Secret}, Request, Options)
   when ?GOOD_CMD(Request) andalso is_list(Host) ->
     IP = get_ip(Host),
     send_request({IP, Port, Secret}, Request, Options);
@@ -600,12 +600,6 @@ update_server_status_metric(IP, Port, true, Options) ->
     % set current service as active
     eradius_counter:set_boolean_metric(server_status, [IP, Port], true).
 
-%% check if we can use persistent_term for config
-%% persistent term was added in OTP 21.2 but we can't
-%% check minor versions with macros so we're stuck waiting
-%% for OTP 22
--ifdef(HAVE_PERSISTENT_TERM).
-
 client_request_counter_account_match_spec_compile() ->
     case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
@@ -637,28 +631,6 @@ client_response_counter_account_match_spec_compile() ->
         MatchSpecCompile ->
             MatchSpecCompile
     end.
-
--else.
-
-client_request_counter_account_match_spec_compile() ->
-    ets:match_spec_compile(ets:fun2ms(fun
-        ({?RStatus_Type, ?RStatus_Type_Start})  -> accountRequestsStart;
-        ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountRequestsStop;
-        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)).
-
-client_response_counter_account_match_spec_compile() ->
-    ets:match_spec_compile(ets:fun2ms(fun
-        ({?RStatus_Type, ?RStatus_Type_Start})  -> accountResponsesStart;
-        ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountResponsesStop;
-        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)).
-
--endif.
 
 find_suitable_peer(undefined) ->
     [];

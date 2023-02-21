@@ -446,12 +446,6 @@ inc_discard_counter(malformed, NasProp) ->
 inc_discard_counter(_Reason, NasProp) ->
     eradius_counter:inc_counter(packetsDropped, NasProp).
 
-%% check if we can use persistent_term for config
-%% persistent term was added in OTP 21.2 but we can't
-%% check minor versions with macros so we're stuck waiting
-%% for OTP 22
--ifdef(HAVE_PERSISTENT_TERM).
-
 server_request_counter_account_match_spec_compile() ->
     case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
@@ -477,19 +471,3 @@ server_response_counter_account_match_spec_compile() ->
         MatchSpecCompile ->
             MatchSpecCompile
     end.
-
--else.
-
-server_request_counter_account_match_spec_compile() ->
-    ets:match_spec_compile(ets:fun2ms(fun
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)).
-
-server_response_counter_account_match_spec_compile() ->
-    ets:match_spec_compile(ets:fun2ms(fun
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
-        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)).
-
--endif.
