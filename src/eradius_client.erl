@@ -655,7 +655,8 @@ find_suitable_peer([{IP, Port, Secret, _Opts} | Pool]) ->
     find_suitable_peer([{IP, Port, Secret} | Pool]).
 
 get_ip(Host) ->
-    case inet:gethostbyname(Host) of
+    DnsLookup = application:get_env(eradius, dns_lookup_hook, fun inet:gethostbyname/1 ),
+    case DnsLookup(Host) of
         {ok, #hostent{h_addrtype = inet, h_addr_list = [IP]}} ->
             IP;
         {ok, #hostent{h_addrtype = inet, h_addr_list = [_ | _] = IPs}} ->

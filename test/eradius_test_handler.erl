@@ -2,7 +2,7 @@
 
 -behaviour(eradius_server).
 
--export([start/0, stop/0, send_request/1, send_request_failover/1, radius_request/3]).
+-export([start/0, stop/0, send_request/1, send_request/2, send_request_failover/1, radius_request/3]).
 -export([localhost/1]).
 
 -include("include/eradius_lib.hrl").
@@ -30,7 +30,9 @@ stop() ->
     application:start(eradius).
 
 send_request(IP) ->
-    {ok, R, A} = eradius_client:send_request({IP, 1812, "secret"}, #radius_request{cmd = request}, []),
+    send_request(IP, []).
+send_request(IP, Options) ->
+    {ok, R, A} = eradius_client:send_request({IP, 1812, "secret"}, #radius_request{cmd = request}, Options),
     #radius_request{cmd = Cmd} = eradius_lib:decode_request(R, <<"secret">>, A),
     Cmd.
 

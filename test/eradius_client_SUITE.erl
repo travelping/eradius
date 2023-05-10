@@ -47,6 +47,7 @@
 
 all() -> [
     send_request,
+    dns_lookup_hook,
     wanna_send,
     reconf_address,
     wanna_send,
@@ -72,6 +73,10 @@ init_per_testcase(send_request, Config) ->
     application:stop(eradius),
     eradius_test_handler:start(),
     Config;
+init_per_testcase(dns_lookup_hook, Config) ->
+    application:stop(eradius),
+    eradius_test_handler:start(),
+    Config;
 init_per_testcase(send_request_failover, Config) ->
     application:stop(eradius),
     eradius_test_handler:start(),
@@ -84,6 +89,9 @@ init_per_testcase(_Test, Config) ->
     Config.
 
 end_per_testcase(send_request, Config) ->
+    eradius_test_handler:stop(),
+    Config;
+end_per_testcase(dns_lookup_hook, Config) ->
     eradius_test_handler:stop(),
     Config;
 end_per_testcase(send_request_failover, Config) ->
@@ -207,6 +215,22 @@ send_request(_Config) ->
     ?equal(accept, eradius_test_handler:send_request(eradius_test_handler:localhost(binary))),
     ok.
 
+dns_lookup_hook(_Config) ->
+    application:set_env(eradius, dns_lookup_hook, fun dns_lookup_callback/1),
+    ?equal(accept, eradius_test_handler:send_request(eradius_test_handler:localhost(binary))),
+
+    %% Test against 127.0.0.2 => timeout
+    application:set_env(eradius, dns_lookup_hook, fun dns_lookup_fail_callback/1),
+    try
+        eradius_test_handler:send_request(eradius_test_handler:localhost(binary), [{timeout, 100}]),
+        error(badmatch)
+    catch
+        error:{badmatch, {error, timeout}} ->
+            ok
+    end,
+    application:unset_env(eradius, dns_lookup_hook).
+
+
 send(FUN, Ports, Address) ->
     meckStart(),
     {ok, OldState} = gen_server:call(eradius_client, debug),
@@ -252,3 +276,9 @@ send_request_failover(_Config) ->
 check_upstream_servers(_Config) ->
     ?equal(?RADIUS_SERVERS, ets:tab2list(eradius_client)),
     ok.
+
+dns_lookup_callback(_) ->
+    {ok,{hostent,"localhost",[],inet,4,[{127,0,0,1}]}}.
+
+dns_lookup_fail_callback(_) ->
+    {ok,{hostent,"localhost",[],inet,4,[{127,0,0,2}]}}.

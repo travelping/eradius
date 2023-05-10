@@ -274,7 +274,9 @@ Example of full configuration with keys which can use in `eradius`:
     %% Size of RADIUS receive buffer
     {recbuf, 8192},
     %% The minimum size of the send buffer to use for the RADIUS
-    {sndbuf, 131072}
+    {sndbuf, 131072},
+    %% Define a custom DNS-lookup function to replace `inet:gethostbyname/1`
+    {dns_lookup_hook, fun inet:gethostbyname/1}
 ]}].
 ```
 
