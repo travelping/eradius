@@ -4,15 +4,22 @@
 %%   It accepts following configuration:
 %%
 %%   ```
-%%   [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}, pool_name},
+%%   [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}, [{pool, pool_name}, {retries, 5}, {timeout, 5000}],
 %%    {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-%%    {routes,  [{"^test-[0-9].", {{127, 0, 0, 1}, 1815, <<"secret1">>}, pool_name}]}]
+%%    {routes,  [{"^test-[0-9].", {{127, 0, 0, 1}, 1815, <<"secret1">>}, [{pool, pool_name}, {retries, 5}, {timeout, 5000}]}]}]
 %%   '''
 %%
-%%   Where the pool_name is optional field that contains list of
-%%   RADIUS servers pool name that will be used for fail-over.
+%%   Or for backward compatibility:
 %%
-%%   Pools of RADIUS servers are defined in eradius configuration:
+%%   ```
+%%   [{default_route, {{127, 0, 0, 1}, 1813, <<"secret">>}, pool_name},
+%%    {options, [{type, realm}, {strip, true}, {separator, "@"}]},
+%%    {routes,  [{"^test-[0-9].", {{127, 0, 0, 1}, 1815, <<"secret1">>}, [{pool, pool_name}, {retries, 5}, {timeout, 5000}]}]}]
+%%   '''
+%%
+%%   Where the `pool_name` is the name of the pool that must be specified
+%%   in the `servers_pool` configuration and will be used as a pointer to
+%%   the list of secondary RADIUS servers for fail-over scenarios.
 %%
 %%   ```
 %%   {servers_pool, [{pool_name, [
@@ -52,8 +59,9 @@
                           {timeout, ?DEFAULT_TIMEOUT},
                           {retries, ?DEFAULT_RETRIES}]).
 
+-type pool_name() :: atom().
 -type route() :: eradius_client:nas_address() |
-                 {eradius_client:nas_address(), PoolName :: atom()}.
+                 {eradius_client:nas_address(), RouteOptions :: [tuple()] | pool_name()}.
 -type routes() :: [{Name :: string(), eradius_client:nas_address()}] |
                   [{Name :: string(), eradius_client:nas_address(), PoolName :: atom()}].
 -type undefined_route() :: {undefined, 0, []}.
@@ -64,9 +72,7 @@ radius_request(Request, _NasProp, Args) ->
     Options = proplists:get_value(options, Args, ?DEFAULT_OPTIONS),
     Username = eradius_lib:get_attr(Request, ?User_Name),
     {NewUsername, Route} = resolve_routes(Username, DefaultRoute, Routes, Options),
-    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
-    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
-    SendOpts = [{retries, Retries}, {timeout, Timeout}],
+    SendOpts = get_send_options(Route, Options),
     send_to_server(new_request(Request, Username, NewUsername), Route, SendOpts).
 
 validate_arguments(Args) ->
@@ -84,12 +90,13 @@ validate_arguments(Args) ->
 compile_routes(undefined) -> [];
 compile_routes(Routes) ->
     RoutesOpts = lists:map(fun (Route) ->
-        {Name, Relay, Pool} = route(Route),
+        {Name, Relay, RouteOptions} = route(Route),
         case re:compile(Name) of
             {ok, R} ->
-                case validate_route({Relay, Pool}) of
-                    false -> false;
-                    _ -> {R, Relay, Pool}
+                case validate_route({Relay, RouteOptions}) of
+                    false ->
+			false;
+                    _ -> {R, Relay, RouteOptions}
                 end;
             {error, {Error, Position}} ->
                 throw("Error during regexp compilation - " ++ Error ++ " at position " ++ integer_to_list(Position))
@@ -109,9 +116,9 @@ compile_routes(Routes) ->
     {reply, Reply :: #radius_request{}} | term().
 send_to_server(_Request, {undefined, 0, []}, _) ->
     {error, no_route};
-send_to_server(#radius_request{reqid = ReqID} = Request, {{Server, Port, Secret}, Pool}, Options) ->
-    Pools = application:get_env(eradius, servers_pool, []),
-    UpstreamServers = proplists:get_value(Pool, Pools, []),
+
+send_to_server(#radius_request{reqid = ReqID} = Request, {{Server, Port, Secret}, RelayOpts}, Options) ->
+    UpstreamServers = get_failover_servers(RelayOpts),
     case eradius_client:send_request({Server, Port, Secret}, Request, [{failover, UpstreamServers} | Options]) of
         {ok, Result, Auth} ->
             decode_request(Result, ReqID, Secret, Auth);
@@ -141,11 +148,10 @@ decode_request(Result, ReqID, Secret, Auth) ->
             Error
     end.
 
-
 % @private
 -spec validate_route(Route :: route()) -> boolean().
-validate_route({{Host, Port, Secret}, PoolName}) when is_atom(PoolName) ->
-    validate_route({Host, Port, Secret});
+validate_route({{Host, Port, Secret}, RouteOpts}) ->
+    validate_route_options(RouteOpts) and validate_route({Host, Port, Secret});
 validate_route({_Host, Port, _Secret}) when not is_integer(Port); Port =< 0; Port > 65535 -> false;
 validate_route({_Host, _Port, Secret}) when not is_list(Secret), not is_binary(Secret) -> false;
 validate_route({Host, _Port, _Secret}) when is_list(Host) -> true;
@@ -156,6 +162,27 @@ validate_route({Host, Port, Secret}) when is_tuple(Host) ->
     end;
 validate_route({Host, _Port, _Secret}) when is_binary(Host) -> true;
 validate_route(_) -> false.
+
+% @private
+-spec validate_route_options(Options :: [proplists:property()] | pool_name()) -> boolean().
+validate_route_options(PoolName) when is_atom(PoolName) ->
+    true;
+validate_route_options([]) ->
+    true;
+validate_route_options(Options) ->
+    Keys = proplists:get_keys(Options),
+    lists:all(fun(Key) -> validate_route_option(Key, proplists:get_value(Key, Options)) end, Keys).
+
+% @private
+-spec validate_route_option(Key :: atom(), Value :: term()) -> boolean().
+validate_route_option(timeout, Value) when is_integer(Value) ->
+    true;
+validate_route_option(retries, Value) when is_integer(Value) ->
+    true;
+validate_route_option(pool, Value) when is_atom(Value) ->
+    true;
+validate_route_option(_, _) ->
+    false.
 
 % @private
 -spec validate_options(Options :: [proplists:property()]) -> boolean().
@@ -209,10 +236,10 @@ find_suitable_relay(Key, [{Regexp, Relay} | Routes], DefaultRoute) ->
         nomatch -> find_suitable_relay(Key, Routes, DefaultRoute);
         _ -> Relay
     end;
-find_suitable_relay(Key, [{Regexp, Relay, PoolName} | Routes], DefaultRoute) ->
+find_suitable_relay(Key, [{Regexp, Relay, RelayOpts} | Routes], DefaultRoute) ->
     case re:run(Key, Regexp, [{capture, none}]) of
         nomatch -> find_suitable_relay(Key, Routes, DefaultRoute);
-        _ -> {Relay, PoolName}
+        _ -> {Relay, RelayOpts}
     end.
 
 % @private
@@ -246,8 +273,8 @@ strip(Username, prefix, true, Separator) ->
         [_ | Tail] -> string:join(Tail, Separator)
     end.
 
-route({RouteName, RouteRelay}) -> {RouteName, RouteRelay, undefined};
-route({_RouteName, _RouteRelay, _Pool} = Route) -> Route.
+route({RouteName, RouteRelay}) -> {RouteName, RouteRelay, []};
+route({_RouteName, _RouteRelay, _RoutOptions} = Route) -> Route.
 
 get_routes_info(HandlerOpts) ->
     DefaultRoute = lists:keyfind(default_route, 1, HandlerOpts),
@@ -284,5 +311,24 @@ put_routes_to_pool({routes, Routes}, Retries) ->
 
 get_proxy_opt(_, [], Default)                            -> Default;
 get_proxy_opt(OptName, [{OptName, AddrOrRoutes} | _], _) -> AddrOrRoutes;
-get_proxy_opt(OptName, [{OptName, Addr, Pool} | _], _)   -> {Addr, Pool};
+get_proxy_opt(OptName, [{OptName, Addr, Opts} | _], _)   -> {Addr, Opts};
 get_proxy_opt(OptName, [_ | Args], Default)              -> get_proxy_opt(OptName, Args, Default).
+
+get_send_options({_Relay, RelayOpts}, Options) when is_list(RelayOpts) ->
+    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
+    RelayTimeout = proplists:get_value(timeout, RelayOpts, Timeout),
+    RelayRetries = proplists:get_value(retries, RelayOpts, Retries),
+    [{retries, RelayRetries}, {timeout, RelayTimeout}];
+get_send_options(_Route, Options) ->
+    Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
+    [{retries, Retries}, {timeout, Timeout}].
+
+get_failover_servers(RelayOpts) when is_list(RelayOpts) ->
+    Pools = application:get_env(eradius, servers_pool, []),
+    Pool = proplists:get_value(pool, RelayOpts, undefined),
+    proplists:get_value(Pool, Pools, []);
+get_failover_servers(Pool) ->
+    Pools = application:get_env(eradius, servers_pool, []),
+    proplists:get_value(Pool, Pools, []).

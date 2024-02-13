@@ -247,7 +247,7 @@ Example of full configuration with keys which can use in `eradius`:
     ]},
     %% NAS specified for `acct` RADIUS server
     {acct, [
-        {{eradius_proxy, "radius_acct", [{default_route, {{127, 0, 0, 2}, 1813, <<"secret">>}, pool_name}]},
+        {{eradius_proxy, "radius_acct", [{default_route, {{127, 0, 0, 2}, 1813, <<"secret">>}, [{pool, pool_name}, {timeout, 5000}, {retries, 3}]]},
         [{"127.0.0.1", "secret"}]}
     ]},
     %% List of RADIUS servers
@@ -294,11 +294,12 @@ Configuration example of failover where the `pool_name` is `atom` specifies name
 ```erlang
 [{eradius, [
     %%% ...
-    {default_route, {{127, 0, 0, 1}, 1812, <<"secret">>}, pool_name}
+    {default_route, {{127, 0, 0, 1}, 1812, <<"secret">>}, [{pool, pool_name}]}
     %%% ...
 ]}]
 ```
 All pools are configured via:
+
 ```erlang
 [{eradius, [
     %%% ...
