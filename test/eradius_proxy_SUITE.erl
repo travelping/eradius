@@ -41,37 +41,44 @@ resolve_routes_test(_) ->
     {ok, R1} = re:compile("prod"),
     {ok, R2} = re:compile("test"),
     {ok, R3} = re:compile("^dev_.*"),
-    Routes = [{R1, Prod}, {R2, Test, test_pool}, {R3, Dev}],
+    Routes = [{R1, Prod}, {R2, Test, [{pool, test_pool}]}, {R3, Dev}],
     % default
     ?equal({undefined, DefaultRoute}, eradius_proxy:resolve_routes(undefined, DefaultRoute, Routes,[])),
     ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user">>, DefaultRoute, Routes, [])),
     ?equal({"user@prod", Prod}, eradius_proxy:resolve_routes(<<"user@prod">>, DefaultRoute, Routes,[])),
-    ?equal({"user@test", {Test, test_pool}}, eradius_proxy:resolve_routes(<<"user@test">>, DefaultRoute, Routes,[])),
+    ?equal({"user@test", {Test, [{pool, test_pool}]}}, eradius_proxy:resolve_routes(<<"user@test">>, DefaultRoute, Routes,[])),
     % strip
     Opts = [{strip, true}],
     ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user">>, DefaultRoute, Routes, Opts)),
     ?equal({"user", Prod}, eradius_proxy:resolve_routes(<<"user@prod">>, DefaultRoute, Routes, Opts)),
-    ?equal({"user", {Test, test_pool}}, eradius_proxy:resolve_routes(<<"user@test">>, DefaultRoute, Routes, Opts)),
+    ?equal({"user", {Test, [{pool, test_pool}]}}, eradius_proxy:resolve_routes(<<"user@test">>, DefaultRoute, Routes, Opts)),
     ?equal({"user", Dev}, eradius_proxy:resolve_routes(<<"user@dev_server">>, DefaultRoute, Routes, Opts)),
     ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user@dev-server">>, DefaultRoute, Routes, Opts)),
 
     % prefix
     Opts1 = [{type, prefix}, {separator, "/"}],
     ?equal({"user/example", DefaultRoute}, eradius_proxy:resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts1)),
-    ?equal({"test/user", {Test, test_pool}}, eradius_proxy:resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts1)),
+    ?equal({"test/user", {Test, [{pool, test_pool}]}}, eradius_proxy:resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts1)),
     % prefix and strip
     Opts2 = Opts ++ Opts1,
     ?equal({"example", DefaultRoute}, eradius_proxy:resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts2)),
-    ?equal({"user", {Test, test_pool}}, eradius_proxy:resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts2)),
+    ?equal({"user", {Test, [{pool, test_pool}]}}, eradius_proxy:resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts2)),
     ok.
 
 validate_arguments_test(_) ->
     GoodConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
                   {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-                  {routes, [{"test_1", {eradius_test_handler:localhost(tuple), 1815, <<"secret1">>}, test_pool},
+                  {routes, [{"test_1", {eradius_test_handler:localhost(tuple), 1815, <<"secret1">>}, [{pool, test_pool}]},
                             {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
                            ]}
                  ],
+    GoodOldConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}, test_pool},
+		     {options, [{type, realm}, {strip, true}, {separator, "@"}]},
+		     {routes, [{"test_1", {eradius_test_handler:localhost(tuple), 1815, <<"secret1">>}, [{pool, test_pool}]},
+			       {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
+			      ]}
+		    ],
+
     BadConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
                  {options, [{type, abc}]}
                  ],
@@ -92,11 +99,13 @@ validate_arguments_test(_) ->
                   {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}},
                              {"test_2", {"localhost", 1816, <<"secret2">>}}
                             ]}],
-    BadConfig6 = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>, "wrong_pool"}}],
+    BadConfig6 = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>, [{pool, "wrong_pool"}]}}],
     BadConfig7 = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
-                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}, "wrong_pool"}]}],
+                  {routes,  [{"test", {wrong_ip, 1815, <<"secret1">>}, [{pool, "wrong_pool"}]}]}],
     {Result, ConfigData} = eradius_proxy:validate_arguments(GoodConfig),
     ?equal(true, Result),
+    {Valid, _} = eradius_proxy:validate_arguments(GoodOldConfig),
+    ?equal(true, Valid),
     {routes, Routes} = lists:keyfind(routes, 1, ConfigData),
     [{{CompiledRegexp_1, _, _, _, _}, _, _}, {{CompiledRegexp_2, _, _, _, _}, _, _}] = Routes,
     ?equal(re_pattern, CompiledRegexp_1),
