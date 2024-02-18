@@ -22,15 +22,15 @@
 
 -behaviour(gen_server).
 
--export([start/3]).
+-export([start/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -record(state, {client, socket, pending, mode, counter}).
 
-start(SocketIP, Client, PortIdx) ->
-    gen_server:start_link(?MODULE, [SocketIP, Client, PortIdx], []).
+start(SocketIP, Client, PortIdx, Options) ->
+    gen_server:start_link(?MODULE, [SocketIP, Client, PortIdx, Options], []).
 
-init([_SocketIP, Client, PortIdx]) ->
+init([_SocketIP, Client, PortIdx, Options]) ->
     Client ! {PortIdx, self()},
     eradius_client_SUITE:addSocket(),
     {ok, #state{pending = maps:new(), mode = active, counter = 0}}.
