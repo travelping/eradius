@@ -162,28 +162,30 @@ restore_upstream_server({ServerIP, Port, Retries, InitialRetries}) ->
 proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_ServerName, {ServerIP, Port}}, TS1, MetricsInfo, Options) ->
     update_client_request(Request#radius_request.cmd, MetricsInfo, erlang:monotonic_time() - TS1, Request),
     update_client_responses(MetricsInfo),
-    case eradius_lib:decode_request(Response, Secret, Authenticator) of
-        {bad_pdu, "Message-Authenticator Attribute is invalid" = Reason} ->
-            update_client_response(bad_authenticator, MetricsInfo, Request),
-            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
-            noreply;
-        {bad_pdu, "Authenticator Attribute is invalid" = Reason} ->
-            update_client_response(bad_authenticator, MetricsInfo, Request),
-            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
-            noreply;
-        {bad_pdu, "unknown request type" = Reason} ->
-            update_client_response(unknown_req_type, MetricsInfo, Request),
-            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
-            noreply;
-        {bad_pdu, Reason} ->
-            update_client_response(dropped, MetricsInfo, Request),
-            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
-            maybe_failover(Request, noreply, {ServerIP, Port}, Options);
-        Decoded ->
-            update_server_status_metric(ServerIP, Port, true, Options),
-            update_client_response(Decoded#radius_request.cmd, MetricsInfo, Request),
-            {ok, Response, Authenticator}
-    end;
+    {ok, Response, Authenticator};
+
+    %% case eradius_lib:decode_request(Response, Secret, Authenticator) of
+    %%     {bad_pdu, "Message-Authenticator Attribute is invalid" = Reason} ->
+    %%         update_client_response(bad_authenticator, MetricsInfo, Request),
+    %%         ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+    %%         noreply;
+    %%     {bad_pdu, "Authenticator Attribute is invalid" = Reason} ->
+    %%         update_client_response(bad_authenticator, MetricsInfo, Request),
+    %%         ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+    %%         noreply;
+    %%     {bad_pdu, "unknown request type" = Reason} ->
+    %%         update_client_response(unknown_req_type, MetricsInfo, Request),
+    %%         ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+    %%         noreply;
+    %%     {bad_pdu, Reason} ->
+    %%         update_client_response(dropped, MetricsInfo, Request),
+    %%         ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+    %%         maybe_failover(Request, noreply, {ServerIP, Port}, Options);
+    %%     Decoded ->
+    %%         update_server_status_metric(ServerIP, Port, true, Options),
+    %%         update_client_response(Decoded#radius_request.cmd, MetricsInfo, Request),
+    %%         {ok, Response, Authenticator}
+    %% end;
 
 proceed_response(Request, Response, {_ServerName, {ServerIP, Port}}, TS1, MetricsInfo, Options) ->
     update_client_responses(MetricsInfo),
@@ -404,7 +406,7 @@ configure(State) ->
 
 %% private
 prepare_pools() ->
-    ets:new(?MODULE, [ordered_set, public, named_table, {keypos, 1}, {write_concurrency,true}]),
+    ets:new(?MODULE, [ordered_set, public, named_table, {keypos, 1}, {read_concurrency,true}]),
     lists:foreach(fun({_PoolName, Servers}) -> prepare_pool(Servers) end, application:get_env(eradius, servers_pool, [])),
     lists:foreach(fun(Server) -> store_upstream_servers(Server) end, application:get_env(eradius, servers, [])),
     init_server_status_metrics().
@@ -510,7 +512,9 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
             NextReqId = 0
     end,
     NewCounters = Counters#{Peer => {NextPortIdx, NextReqId}},
-    {NextPortIdx, NextReqId, NewCounters}.
+    R = {NextPortIdx, NextReqId, NewCounters},
+    %% ?LOG(info, "~s: ~p", [?FUNCTION_NAME, R]),
+    R.
 
 find_socket_process(PortIdx, Sockets, SocketIP, Sup) ->
     case array:get(PortIdx, Sockets) of

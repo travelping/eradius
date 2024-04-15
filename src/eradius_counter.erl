@@ -86,17 +86,17 @@ aggregate({Servers, {ResetTS, Nass}}) ->
 %% @doc Set Value for the given prometheus boolean metric by the given Name with
 %% the given values
 set_boolean_metric(Name, Labels, Value) ->
-    case code:is_loaded(prometheus) of
-        {file, _} ->
+    %% case code:is_loaded(prometheus) of
+    %%     {file, _} ->
             try
                 prometheus_boolean:set(Name, Labels, Value)
             catch _:_ ->
                 prometheus_boolean:declare([{name, server_status}, {labels, [server_ip, server_port]},
                                             {help, "Status of an upstream RADIUS Server"}]),
                 prometheus_boolean:set(Name, Labels, Value)
-            end;
-        _ ->
-            ok
+        %%     end;
+        %% _ ->
+        %%     ok
     end.
 
 %% @doc Update the given histogram metric value
@@ -104,8 +104,8 @@ set_boolean_metric(Name, Labels, Value) ->
 %% it is much easy to use histograms in this way. As we don't need to manage buckets and do
 %% the other histogram things in eradius, but prometheus.erl will do it for us
 observe(Name, {{ClientName, ClientIP, _}, {ServerName, ServerIP, ServerPort}} = MetricsInfo, Value, Help) ->
-    case code:is_loaded(prometheus) of
-        {file, _} ->
+    %% case code:is_loaded(prometheus) of
+    %%     {file, _} ->
             try
                 prometheus_histogram:observe(Name, [ServerIP, ServerPort, ServerName, ClientName, ClientIP], Value)
             catch _:_ ->
@@ -114,13 +114,14 @@ observe(Name, {{ClientName, ClientIP, _}, {ServerName, ServerIP, ServerPort}} = 
                                                   {duration_unit, milliseconds},
                                                   {buckets, Buckets}, {help, Help}]),
                     observe(Name, MetricsInfo, Value, Help)
-            end;
-        _ ->
-            ok
+        %%     end;
+        %% _ ->
+        %%     ok
     end.
+
 observe(Name, #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip = NasIP, nas_id = NasId} = Nas, Value, ServerName, Help) ->
-    case code:is_loaded(prometheus) of
-        {file, _} ->
+    %% case code:is_loaded(prometheus) of
+    %%     {file, _} ->
             try
                 prometheus_histogram:observe(Name, [inet:ntoa(ServerIP), ServerPort, ServerName, inet:ntoa(NasIP), NasId], Value)
             catch _:_ ->
@@ -129,9 +130,9 @@ observe(Name, #nas_prop{server_ip = ServerIP, server_port = ServerPort, nas_ip =
                                                   {duration_unit, milliseconds},
                                                   {buckets, Buckets}, {help, Help}]),
                     observe(Name, Nas, Value, ServerName, Help)
-            end;
-        _ ->
-            ok
+        %%     end;
+        %% _ ->
+        %%     ok
     end.
 
 %% helper to be called from the aggregator to fetch this nodes values

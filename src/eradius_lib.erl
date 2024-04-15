@@ -1,4 +1,6 @@
 -module(eradius_lib).
+-compile([export_all, nowarn_export_all]).
+
 -export([del_attr/2, get_attr/2, encode_request/1, encode_reply/1, decode_request/2, decode_request/3, decode_request_id/1]).
 -export([random_authenticator/0, zero_authenticator/0, pad_to/2, set_attr/3, get_attributes/1, set_attributes/2]).
 -export([timestamp/0, timestamp/1, printable_peer/2, make_addr_info/1]).
@@ -133,6 +135,8 @@ encode_eap_message(#radius_request{eap_msg = <<>>}, EncReq) ->
     EncReq.
 
 -spec encode_attributes(#radius_request{}, attribute_list()) -> {binary(), non_neg_integer()}.
+encode_attributes(_Req, Attributes) when is_binary(Attributes) ->
+    {Attributes, byte_size(Attributes)};
 encode_attributes(Req, Attributes) ->
     F = fun ({A = #attribute{}, Val}, {Body, BodySize}) ->
                 EncAttr = encode_attribute(Req, A, Val),
