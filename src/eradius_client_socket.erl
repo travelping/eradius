@@ -11,7 +11,6 @@ start(SocketIP, Client, PortIdx) ->
     gen_server:start_link(?MODULE, [SocketIP, Client, PortIdx], []).
 
 init([SocketIP, Client, PortIdx]) ->
-    Client ! {PortIdx, self()},
     case SocketIP of
         undefined ->
             ExtraOptions = [];
