@@ -1,22 +1,22 @@
-% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
+%% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
 
-% Permission is hereby granted, free of charge, to any person obtaining a
-% copy of this software and associated documentation files (the "Software"),
-% to deal in the Software without restriction, including without limitation
-% the rights to use, copy, modify, merge, publish, distribute, sublicense,
-% and/or sell copies of the Software, and to permit persons to whom the
-% Software is furnished to do so, subject to the following conditions:
+%% Permission is hereby granted, free of charge, to any person obtaining a
+%% copy of this software and associated documentation files (the "Software"),
+%% to deal in the Software without restriction, including without limitation
+%% the rights to use, copy, modify, merge, publish, distribute, sublicense,
+%% and/or sell copies of the Software, and to permit persons to whom the
+%% Software is furnished to do so, subject to the following conditions:
 
-% The above copyright notice and this permission notice shall be included in
-% all copies or substantial portions of the Software.
+%% The above copyright notice and this permission notice shall be included in
+%% all copies or substantial portions of the Software.
 
-% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-% DEALINGS IN THE SOFTWARE.
+%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+%% DEALINGS IN THE SOFTWARE.
 
 -module(eradius_client_SUITE).
 -compile(export_all).
@@ -46,17 +46,17 @@
                          ?GOOD_SERVER_2_TUPLE]).
 
 all() -> [
-    send_request,
-    wanna_send,
-    reconf_address,
-    wanna_send,
-    reconf_ports_30,
-    wanna_send,
-    reconf_ports_10,
-    wanna_send,
-    send_request_failover,
-    check_upstream_servers
-  ].
+          send_request,
+          wanna_send,
+          reconf_address,
+          wanna_send,
+          reconf_ports_30,
+          wanna_send,
+          reconf_ports_10,
+          wanna_send,
+          send_request_failover,
+          check_upstream_servers
+         ].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(eradius),
@@ -132,13 +132,13 @@ testSocket(Pid) ->
     end.
 
 -record(state, {
-    socket_ip :: inet:ip_address(),
-    no_ports = 1 :: pos_integer(),
-    idcounters = maps:new() :: map(),
-    sockets = array:new() :: array:array(),
-    sup :: pid(),
-    subscribed_clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
-}).
+                socket_ip :: inet:ip_address(),
+                no_ports = 1 :: pos_integer(),
+                idcounters = maps:new() :: map(),
+                sockets = array:new() :: array:array(),
+                sup :: pid(),
+                subscribed_clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
+               }).
 
 split(N, List) -> split2(N, [], List).
 
@@ -178,25 +178,25 @@ test(false, Msg) ->
 check(OldState, NewState = #state{no_ports = P}, null, A) -> check(OldState, NewState, P, A);
 check(OldState, NewState = #state{socket_ip = A}, P, null) -> check(OldState, NewState, P, A);
 check(#state{sockets = OS, no_ports = _OP, idcounters = _OC, socket_ip = OA},
-        #state{sockets = NS, no_ports = NP, idcounters = NC, socket_ip = NA},
-        P, A) ->
+      #state{sockets = NS, no_ports = NP, idcounters = NC, socket_ip = NA},
+      P, A) ->
     {ok, PA} = parse_ip(A),
     test(PA == NA, "Adress not configured") and
-    case NA of
-        OA  ->
-            {_, Rest} = split(NP, array:to_list(OS)),
-            test(P == NP,"Ports not configured") and
-            test(maps:fold( fun(_Peer, {NextPortIdx, _NextReqId}, Akk) ->
-                                    Akk and (NextPortIdx =< NP)
-                            end, true, NC), "Invalid port counter") and
-            test(getSocketCount() =< NP, "Sockets not closed") and
-            test(array:size(NS) =< NP, "Socket array not resized") and
-            test(lists:all(fun(Pid) -> testSocket(Pid) end, Rest), "Sockets still available");
-        _   ->
-            test(array:size(NS) == 0, "Socket array not cleaned") and
-            test(getSocketCount() == 0, "Sockets not closed") and
-            test(lists:all(fun(Pid) -> testSocket(Pid) end, array:to_list(OS)), "Sockets still available")
-    end.
+        case NA of
+            OA  ->
+                {_, Rest} = split(NP, array:to_list(OS)),
+                test(P == NP,"Ports not configured") and
+                    test(maps:fold( fun(_Peer, {NextPortIdx, _NextReqId}, Akk) ->
+                                            Akk and (NextPortIdx =< NP)
+                                    end, true, NC), "Invalid port counter") and
+                    test(getSocketCount() =< NP, "Sockets not closed") and
+                    test(array:size(NS) =< NP, "Socket array not resized") and
+                    test(lists:all(fun(Pid) -> testSocket(Pid) end, Rest), "Sockets still available");
+            _   ->
+                test(array:size(NS) == 0, "Socket array not cleaned") and
+                    test(getSocketCount() == 0, "Sockets not closed") and
+                    test(lists:all(fun(Pid) -> testSocket(Pid) end, array:to_list(OS)), "Sockets still available")
+        end.
 
 %% TESTS
 
@@ -217,12 +217,12 @@ send(FUN, Ports, Address) ->
 
 wanna_send(_Config) ->
     lists:map(fun(_) ->
-                        IP = {rand:uniform(100), rand:uniform(100), rand:uniform(100), rand:uniform(100)},
-                        Port = rand:uniform(100),
-                        MetricsInfo = {{undefined, undefined, undefined}, {undefined, undefined, undefined}},
-                        FUN = fun() -> gen_server:call(eradius_client, {wanna_send, {undefined, {IP, Port}}, MetricsInfo}) end,
-                        send(FUN, null, null)
-                end, lists:seq(1, 10)).
+                      IP = {rand:uniform(100), rand:uniform(100), rand:uniform(100), rand:uniform(100)},
+                      Port = rand:uniform(100),
+                      MetricsInfo = {{undefined, undefined, undefined}, {undefined, undefined, undefined}},
+                      FUN = fun() -> gen_server:call(eradius_client, {wanna_send, {undefined, {IP, Port}}, MetricsInfo}) end,
+                      send(FUN, null, null)
+              end, lists:seq(1, 10)).
 
 %% I've catched some data races with `delSocket()' and `getSocketCount()' when
 %% `delSocket()' happens after `getSocketCount()' (because `delSocket()' is sent from another process).

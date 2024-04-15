@@ -19,7 +19,7 @@ start() ->
                                            {two, {localhost(ip), [1813]}}]),
     application:set_env(eradius, unreachable_timeout, 2),
     application:set_env(eradius, servers_pool, [{test_pool, [{localhost(tuple), 1812, "secret"},
-                                                             % fake upstream server for fail-over
+                                                             %% fake upstream server for fail-over
                                                              {localhost(string), 1820, "secret"}]}]),
     application:ensure_all_started(eradius),
     eradius:modules_ready([?MODULE]).
@@ -52,8 +52,8 @@ radius_request(#radius_request{cmd = request}, _Nasprop, _Args) ->
 %% triggers the load balancing in eradius_client.
 localhost(string) ->
     case os:getenv("TRAVIS") of
-	false -> "localhost";
-	_     -> "ip4-loopback"
+        false -> "localhost";
+        _     -> "ip4-loopback"
     end;
 localhost(binary) ->
     list_to_binary(localhost(string));

@@ -14,8 +14,8 @@
 -include("eradius_lib.hrl").
 
 -record(state, {
-         reset :: erlang:timestamp()
-        }).
+                reset :: erlang:timestamp()
+               }).
 
 -type srv_counters() :: [#server_counter{}].
 -type nas_counters() :: {erlang:timestamp(), [#nas_counter{}]}.
@@ -91,9 +91,9 @@ set_boolean_metric(Name, Labels, Value) ->
             try
                 prometheus_boolean:set(Name, Labels, Value)
             catch _:_ ->
-                prometheus_boolean:declare([{name, server_status}, {labels, [server_ip, server_port]},
-                                            {help, "Status of an upstream RADIUS Server"}]),
-                prometheus_boolean:set(Name, Labels, Value)
+                    prometheus_boolean:declare([{name, server_status}, {labels, [server_ip, server_port]},
+                                                {help, "Status of an upstream RADIUS Server"}]),
+                    prometheus_boolean:set(Name, Labels, Value)
             end;
         _ ->
             ok
@@ -270,32 +270,32 @@ counter_idx(accountResponsesUpdate, client) -> #client_counter.accountResponsesU
 
 add_counter(Cnt1 = #nas_counter{}, Cnt2 = #nas_counter{}) ->
     #nas_counter{
-             key                      = Cnt1#nas_counter.key,
-             requests                 = Cnt1#nas_counter.requests                  + Cnt2#nas_counter.requests,
-             replies                  = Cnt1#nas_counter.replies                   + Cnt2#nas_counter.replies,
-             dupRequests              = Cnt1#nas_counter.dupRequests               + Cnt2#nas_counter.dupRequests,
-             malformedRequests        = Cnt1#nas_counter.malformedRequests         + Cnt2#nas_counter.malformedRequests,
-             accessRequests           = Cnt1#nas_counter.accessRequests            + Cnt2#nas_counter.accessRequests,
-             accessAccepts            = Cnt1#nas_counter.accessAccepts             + Cnt2#nas_counter.accessAccepts,
-             accessRejects            = Cnt1#nas_counter.accessRejects             + Cnt2#nas_counter.accessRejects,
-             accessChallenges         = Cnt1#nas_counter.accessChallenges          + Cnt2#nas_counter.accessChallenges,
-             accountRequestsStart     = Cnt1#nas_counter.accountRequestsStart      + Cnt2#nas_counter.accountRequestsStart,
-             accountRequestsStop      = Cnt1#nas_counter.accountRequestsStop       + Cnt2#nas_counter.accountRequestsStop,
-             accountRequestsUpdate    = Cnt1#nas_counter.accountRequestsUpdate     + Cnt2#nas_counter.accountRequestsUpdate,
-             accountResponsesStart    = Cnt1#nas_counter.accountResponsesStart     + Cnt2#nas_counter.accountResponsesStart,
-             accountResponsesStop     = Cnt1#nas_counter.accountResponsesStop      + Cnt2#nas_counter.accountResponsesStop,
-             accountResponsesUpdate   = Cnt1#nas_counter.accountResponsesUpdate    + Cnt2#nas_counter.accountResponsesUpdate,
-             noRecords                = Cnt1#nas_counter.noRecords                 + Cnt2#nas_counter.noRecords,
-             badAuthenticators        = Cnt1#nas_counter.badAuthenticators         + Cnt2#nas_counter.badAuthenticators,
-             packetsDropped           = Cnt1#nas_counter.packetsDropped            + Cnt2#nas_counter.packetsDropped,
-             unknownTypes             = Cnt1#nas_counter.unknownTypes              + Cnt2#nas_counter.unknownTypes,
-             handlerFailure           = Cnt1#nas_counter.handlerFailure            + Cnt2#nas_counter.handlerFailure,
-             coaRequests              = Cnt1#nas_counter.coaRequests               + Cnt2#nas_counter.coaRequests,
-             coaAcks                  = Cnt1#nas_counter.coaAcks                   + Cnt2#nas_counter.coaAcks,
-             coaNaks                  = Cnt1#nas_counter.coaNaks                   + Cnt2#nas_counter.coaNaks,
-             discRequests             = Cnt1#nas_counter.discRequests              + Cnt2#nas_counter.discRequests,
-             discAcks                 = Cnt1#nas_counter.discAcks                  + Cnt2#nas_counter.discAcks,
-             discNaks                 = Cnt1#nas_counter.discNaks                  + Cnt2#nas_counter.discNaks,
-             retransmissions          = Cnt1#nas_counter.retransmissions           + Cnt2#nas_counter.retransmissions,
-             pending                  = Cnt1#nas_counter.pending                   + Cnt2#nas_counter.pending
+       key                      = Cnt1#nas_counter.key,
+       requests                 = Cnt1#nas_counter.requests                  + Cnt2#nas_counter.requests,
+       replies                  = Cnt1#nas_counter.replies                   + Cnt2#nas_counter.replies,
+       dupRequests              = Cnt1#nas_counter.dupRequests               + Cnt2#nas_counter.dupRequests,
+       malformedRequests        = Cnt1#nas_counter.malformedRequests         + Cnt2#nas_counter.malformedRequests,
+       accessRequests           = Cnt1#nas_counter.accessRequests            + Cnt2#nas_counter.accessRequests,
+       accessAccepts            = Cnt1#nas_counter.accessAccepts             + Cnt2#nas_counter.accessAccepts,
+       accessRejects            = Cnt1#nas_counter.accessRejects             + Cnt2#nas_counter.accessRejects,
+       accessChallenges         = Cnt1#nas_counter.accessChallenges          + Cnt2#nas_counter.accessChallenges,
+       accountRequestsStart     = Cnt1#nas_counter.accountRequestsStart      + Cnt2#nas_counter.accountRequestsStart,
+       accountRequestsStop      = Cnt1#nas_counter.accountRequestsStop       + Cnt2#nas_counter.accountRequestsStop,
+       accountRequestsUpdate    = Cnt1#nas_counter.accountRequestsUpdate     + Cnt2#nas_counter.accountRequestsUpdate,
+       accountResponsesStart    = Cnt1#nas_counter.accountResponsesStart     + Cnt2#nas_counter.accountResponsesStart,
+       accountResponsesStop     = Cnt1#nas_counter.accountResponsesStop      + Cnt2#nas_counter.accountResponsesStop,
+       accountResponsesUpdate   = Cnt1#nas_counter.accountResponsesUpdate    + Cnt2#nas_counter.accountResponsesUpdate,
+       noRecords                = Cnt1#nas_counter.noRecords                 + Cnt2#nas_counter.noRecords,
+       badAuthenticators        = Cnt1#nas_counter.badAuthenticators         + Cnt2#nas_counter.badAuthenticators,
+       packetsDropped           = Cnt1#nas_counter.packetsDropped            + Cnt2#nas_counter.packetsDropped,
+       unknownTypes             = Cnt1#nas_counter.unknownTypes              + Cnt2#nas_counter.unknownTypes,
+       handlerFailure           = Cnt1#nas_counter.handlerFailure            + Cnt2#nas_counter.handlerFailure,
+       coaRequests              = Cnt1#nas_counter.coaRequests               + Cnt2#nas_counter.coaRequests,
+       coaAcks                  = Cnt1#nas_counter.coaAcks                   + Cnt2#nas_counter.coaAcks,
+       coaNaks                  = Cnt1#nas_counter.coaNaks                   + Cnt2#nas_counter.coaNaks,
+       discRequests             = Cnt1#nas_counter.discRequests              + Cnt2#nas_counter.discRequests,
+       discAcks                 = Cnt1#nas_counter.discAcks                  + Cnt2#nas_counter.discAcks,
+       discNaks                 = Cnt1#nas_counter.discNaks                  + Cnt2#nas_counter.discNaks,
+       retransmissions          = Cnt1#nas_counter.retransmissions           + Cnt2#nas_counter.retransmissions,
+       pending                  = Cnt1#nas_counter.pending                   + Cnt2#nas_counter.pending
       }.

@@ -1,7 +1,7 @@
 -module(eradius_config).
-% Eradius API's:
+                                                % Eradius API's:
 -export([validate_new_config/0, validate_new_config/2, validate_config/1]).
-% Config validating API functions:
+                                                % Config validating API functions:
 -export([get_app_env/2, validate_ip/1, validate_port/1, validate_ports/1,
          map_helper/3, map_helper/2, ok_error_helper/2, validate_secret/1,
          validate_options/1, validate_socket_options/1, validate_server/1]).
@@ -12,7 +12,7 @@
 -define(pos_int(X), is_integer(X), X >= 0).
 -define(ip4_address_num(X), ?pos_int(X), X < 256).
 -define(ip4_address(T), ?ip4_address_num(element(1, T)), ?ip4_address_num(element(2, T)),
-                        ?ip4_address_num(element(3, T)), ?ip4_address_num(element(4, T))).
+        ?ip4_address_num(element(3, T)), ?ip4_address_num(element(4, T))).
 -define(valid_atom(Value), Value =/= invalid).
 -define(valid(X), is_tuple(X), ?valid_atom(element(1, X))).
 -define(is_io(IO), is_list(IO) orelse is_binary(IO)).
@@ -114,8 +114,8 @@ validate_nas(NasId, _IP, Secret, _Name, _) when ?is_io(Secret) ->
 validate_nas(_NasId, _IP, Secret, _Name, _) ->
     ?invalid("bad RADIUS secret: ~p", [Secret]).
 
-% --------------------------------------------------------------------------------------------------
-% -- direct validation function
+%% --------------------------------------------------------------------------------------------------
+%% -- direct validation function
 
 validate_ip(IP) when is_list(IP) ->
     ok_error_helper(inet_parse:address(IP), {"bad IP address: ~p", [IP]});
@@ -145,8 +145,8 @@ validate_options(Opts) ->
 validate_socket_options(SocketOpts) when is_list(SocketOpts) ->
     BannedOpts = [ip, binary, list, active],
     IsBannedFn = fun(Opt) ->
-        proplists:is_defined(Opt, SocketOpts)
-    end,
+                         proplists:is_defined(Opt, SocketOpts)
+                 end,
     case lists:any(IsBannedFn, BannedOpts) of
         true ->
             ?invalid("bad socket options specified: ~p", [SocketOpts]);
@@ -173,8 +173,8 @@ check_root(Nodes) ->
             {root, Values}
     end.
 
-% --------------------------------------------------------------------------------------------------
-% -- build right format function
+%% --------------------------------------------------------------------------------------------------
+%% -- build right format function
 
 build_nas_behavior_list({Module, Nas, Args}, ListOfNases) ->
     lists:map(fun({undefined, IP, Secret, Nodes}) ->
@@ -351,8 +351,8 @@ plmerge(List1, List2) ->
     M1 = [{K, V} || {K, V} <- List1, not proplists:is_defined(K, List2)],
     lists:keysort(1, M1 ++ List2).
 
-% --------------------------------------------------------------------------------------------------
-% -- helpers
+%% --------------------------------------------------------------------------------------------------
+%% -- helpers
 
 get_app_env(Env) ->
     get_app_env(eradius, Env).

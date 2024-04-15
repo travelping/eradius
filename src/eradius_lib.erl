@@ -4,7 +4,7 @@
 -export([timestamp/0, timestamp/1, printable_peer/2, make_addr_info/1]).
 -export_type([command/0, secret/0, authenticator/0, attribute_list/0]).
 
-% -compile(bin_opt_info).
+%% -compile(bin_opt_info).
 
 -ifdef(TEST).
 -export([encode_value/2, decode_value/2, scramble/3, ascend/3]).
@@ -21,8 +21,8 @@
 
 -define(IS_ATTR(Key, Attr), ?IS_KEY(Key, element(1, Attr))).
 -define(IS_KEY(Key, Attr), ((is_record(Attr, attribute) andalso (element(2, Attr) == Key))
-                           orelse
-                           (Attr == Key)) ).
+                            orelse
+                              (Attr == Key)) ).
 %% ------------------------------------------------------------------------------------------
 %% -- Request Accessors
 -spec random_authenticator() -> authenticator().
@@ -114,8 +114,8 @@ encode_message_authenticator(Req = #radius_request{reqid = ReqID, cmd = Command,
 
 chunk(Bin, Length) ->
     case Bin of
-	<<First:Length/bytes, Rest/binary>> -> {First, Rest};
-	_ -> {Bin, <<>>}
+        <<First:Length/bytes, Rest/binary>> -> {First, Rest};
+        _ -> {Bin, <<>>}
     end.
 
 encode_eap_attribute({<<>>, _}, EncReq) ->
@@ -158,7 +158,7 @@ encode_attribute(_Req, _Attr = #attribute{id = ?REAP_Message}, _) ->
 encode_attribute(Req, Attr = #attribute{id = {Vendor, ID}}, Value) ->
     EncValue = encode_attribute(Req, Attr#attribute{id = ID}, Value),
     if byte_size(EncValue) + 6 > 255 ->
-	    error(badarg, [{Vendor, ID}, Value]);
+            error(badarg, [{Vendor, ID}, Value]);
        true -> ok
     end,
     <<?RVendor_Specific:8, (byte_size(EncValue) + 6):8, Vendor:32, EncValue/binary>>;
@@ -169,14 +169,14 @@ encode_attribute(Req, #attribute{type = {tagged, Type}, id = ID, enc = Enc}, Val
     end,
     EncValue = encrypt_value(Req, encode_value(Type, UntaggedValue), Enc),
     if byte_size(EncValue) + 3 > 255 ->
-	    error(badarg, [ID, Value]);
+            error(badarg, [ID, Value]);
        true -> ok
     end,
     <<ID, (byte_size(EncValue) + 3):8, Tag:8, EncValue/binary>>;
 encode_attribute(Req, #attribute{type = Type, id = ID, enc = Enc}, Value)->
     EncValue = encrypt_value(Req, encode_value(Type, Value), Enc),
     if byte_size(EncValue) + 2 > 255 ->
-	    error(badarg, [ID, Value]);
+            error(badarg, [ID, Value]);
        true -> ok
     end,
     <<ID, (byte_size(EncValue) + 2):8, EncValue/binary>>.
@@ -241,24 +241,24 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, PacketAuthenticator:16/binary, Body0/b
     ActualBodySize = byte_size(Body0),
     GivenBodySize  = Len - 20,
     Body = if
-              ActualBodySize > GivenBodySize ->
-                  throw({bad_pdu, "false packet size"});
-              ActualBodySize == GivenBodySize ->
-                  Body0;
-              true ->
-                  binary:part(Body0, 0, GivenBodySize)
+               ActualBodySize > GivenBodySize ->
+                   throw({bad_pdu, "false packet size"});
+               ActualBodySize == GivenBodySize ->
+                   Body0;
+               true ->
+                   binary:part(Body0, 0, GivenBodySize)
            end,
     Command = decode_command(Cmd),
     PartialRequest = #radius_request{cmd = Command, reqid = ReqId, authenticator = PacketAuthenticator, secret = Secret, msg_hmac = false},
     DecodedState = decode_attributes(PartialRequest, RequestAuthenticator, Body),
     Request = PartialRequest#radius_request{attrs = lists:reverse(DecodedState#decoder_state.attrs),
-					    eap_msg = list_to_binary(lists:reverse(DecodedState#decoder_state.eap_msg))},
+                                            eap_msg = list_to_binary(lists:reverse(DecodedState#decoder_state.eap_msg))},
     validate_authenticator(Command, <<Cmd:8, ReqId:8, Len:16>>, RequestAuthenticator, PacketAuthenticator, Body, Secret),
     if
-	is_integer(DecodedState#decoder_state.hmac_pos) ->
-	    validate_packet_authenticator(Cmd, ReqId, Len, Body, DecodedState#decoder_state.hmac_pos, Secret, PacketAuthenticator, RequestAuthenticator),
-	    Request#radius_request{msg_hmac = true};
-	true -> Request
+        is_integer(DecodedState#decoder_state.hmac_pos) ->
+            validate_packet_authenticator(Cmd, ReqId, Len, Body, DecodedState#decoder_state.hmac_pos, Secret, PacketAuthenticator, RequestAuthenticator),
+            Request#radius_request{msg_hmac = true};
+        true -> Request
     end.
 
 -spec validate_packet_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), binary(), authenticator(), authenticator() | 'undefined') -> ok.
@@ -272,10 +272,10 @@ validate_packet_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
     case Body of
         <<Before:Pos/bytes, Value:16/bytes, After/binary>> ->
             case message_authenticator(Secret, [<<Cmd:8, ReqId:8, Len:16>>, Auth, Before, zero_authenticator(), After]) of
-            Value ->
-                ok;
-            _     ->
-                throw({bad_pdu, "Message-Authenticator Attribute is invalid"})
+                Value ->
+                    ok;
+                _     ->
+                    throw({bad_pdu, "Message-Authenticator Attribute is invalid"})
             end;
         _ ->
             throw({bad_pdu, "Message-Authenticator Attribute is malformed"})
@@ -284,15 +284,15 @@ validate_packet_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
 validate_authenticator(accreq, Head, _RequestAuthenticator, PacketAuthenticator, Body, Secret) ->
     compare_authenticator(crypto:hash(md5, [Head, zero_authenticator(), Body, Secret]), PacketAuthenticator);
 validate_authenticator(Cmd, Head, RequestAuthenticator, PacketAuthenticator, Body, Secret)
-    when
-        (Cmd =:= accept)  orelse
-        (Cmd =:= reject)  orelse
-        (Cmd =:= accresp) orelse
-        (Cmd =:= coaack)  orelse
-        (Cmd =:= coanak)  orelse
-        (Cmd =:= discack) orelse
-        (Cmd =:= discnak) orelse
-        (Cmd =:= challenge) ->
+  when
+      (Cmd =:= accept)  orelse
+      (Cmd =:= reject)  orelse
+      (Cmd =:= accresp) orelse
+      (Cmd =:= coaack)  orelse
+      (Cmd =:= coanak)  orelse
+      (Cmd =:= discack) orelse
+      (Cmd =:= discnak) orelse
+      (Cmd =:= challenge) ->
     compare_authenticator(crypto:hash(md5, [Head, RequestAuthenticator, Body, Secret]), PacketAuthenticator);
 validate_authenticator(_Cmd, _Head, _RequestAuthenticator, _PacketAuthenticator,
                        _Body, _Secret) ->
@@ -332,11 +332,11 @@ decode_attributes(Req, <<Type:8, ChunkLength:8, ChunkRest/binary>>, Pos, State) 
     ValueLength = ChunkLength - 2,
     <<Value:ValueLength/binary, PacketRest/binary>> = ChunkRest,
     NewState = case eradius_dict:lookup(attribute, Type) of
-		   AttrRec = #attribute{} ->
-		       decode_attribute(Value, Req, AttrRec, Pos + 2, State);
-		   _ ->
-		       append_attr({Type, Value}, State)
-    end,
+                   AttrRec = #attribute{} ->
+                       decode_attribute(Value, Req, AttrRec, Pos + 2, State);
+                   _ ->
+                       append_attr({Type, Value}, State)
+               end,
     decode_attributes(Req, PacketRest, Pos + ChunkLength, NewState).
 
 %% gotcha: the function returns a LIST of attribute-value pairs because
@@ -354,12 +354,12 @@ decode_attribute(<<EncValue/binary>>, Req, Attr = #attribute{type = Type, enc = 
 decode_attribute(WholeBin = <<Tag:8, Bin/binary>>, Req, Attr = #attribute{type = {tagged, Type}}, _Pos, State) ->
     case {decode_tag_value(Tag), Attr#attribute.enc} of
         {0, no} ->
-            % decode including tag byte if tag is out of range
+            %% decode including tag byte if tag is out of range
             append_attr({Attr, {0, decode_value(WholeBin, Type)}}, State);
         {TagV, no} ->
             append_attr({Attr, {TagV, decode_value(Bin, Type)}}, State);
         {TagV, Encryption} ->
-            % for encrypted attributes, tag byte is never part of the value
+            %% for encrypted attributes, tag byte is never part of the value
             append_attr({Attr, {TagV, decode_value(decrypt_value(Req, State, Bin, Encryption), Type)}}, State)
     end.
 
@@ -412,17 +412,17 @@ decode_integer(Bin) ->
     end.
 
 -spec decrypt_value(#radius_request{}, #decoder_state{}, binary(),
-		    eradius_dict:attribute_encryption()) -> eradius_dict:attr_value().
+                    eradius_dict:attribute_encryption()) -> eradius_dict:attr_value().
 decrypt_value(#radius_request{secret = Secret, authenticator = Authenticator},
-	      _, <<Val/binary>>, scramble) ->
+              _, <<Val/binary>>, scramble) ->
     scramble(Secret, Authenticator, Val);
 decrypt_value(#radius_request{secret = Secret},
-	      #decoder_state{request_authenticator = RequestAuthenticator},
-	      <<Val/binary>>, salt_crypt)
-when is_binary(RequestAuthenticator) ->
+              #decoder_state{request_authenticator = RequestAuthenticator},
+              <<Val/binary>>, salt_crypt)
+  when is_binary(RequestAuthenticator) ->
     salt_decrypt(Secret, RequestAuthenticator, Val);
 decrypt_value(#radius_request{secret = Secret, authenticator = Authenticator},
-	      _, <<Val/binary>>, ascend) ->
+              _, <<Val/binary>>, ascend) ->
     ascend(Secret, Authenticator, Val);
 decrypt_value(_Req, _State, <<Val/binary>>, _Type) ->
     Val.
@@ -435,11 +435,11 @@ decode_vendor_specific_attribute(Req, VendorID, <<Type:8, ChunkLength:8, ChunkRe
     <<Value:ValueLength/binary, PacketRest/binary>> = ChunkRest,
     VendorAttrKey = {VendorID, Type},
     NewState = case eradius_dict:lookup(attribute, VendorAttrKey) of
-		   Attr = #attribute{} ->
-		       decode_attribute(Value, Req, Attr, Pos + 2, State);
-		   _ ->
-		       append_attr({VendorAttrKey, Value}, State)
-    end,
+                   Attr = #attribute{} ->
+                       decode_attribute(Value, Req, Attr, Pos + 2, State);
+                   _ ->
+                       append_attr({VendorAttrKey, Value}, State)
+               end,
     decode_vendor_specific_attribute(Req, VendorID, PacketRest, Pos + ChunkLength, NewState).
 
 %% ------------------------------------------------------------------------------------------
@@ -484,9 +484,9 @@ do_salt_crypt(Op, Salt, SharedSecret, RequestAuthenticator, <<CipherText/binary>
 salt_crypt(Op, SharedSecret, B, <<PlainText:16/binary, Remaining/binary>>, CipherText) ->
     NewCipherText = crypto:exor(PlainText, B),
     Bnext = case Op of
-		decrypt -> crypto:hash(md5, [SharedSecret, PlainText]);
-		encrypt -> crypto:hash(md5, [SharedSecret, NewCipherText])
-	    end,
+                decrypt -> crypto:hash(md5, [SharedSecret, PlainText]);
+                encrypt -> crypto:hash(md5, [SharedSecret, NewCipherText])
+            end,
     salt_crypt(Op, SharedSecret, Bnext, Remaining, <<CipherText/binary, NewCipherText/binary>>);
 
 salt_crypt(_Op, _SharedSecret, _B, << >>, CipherText) ->
@@ -503,10 +503,10 @@ ascend(SharedSecret, RequestAuthenticator, <<PlainText/binary>>) ->
 %%       </a>
 -compile({inline, pad_to/2}).
 pad_to(Width, Binary) ->
-     case (Width - byte_size(Binary) rem Width) rem Width of
-         0 -> Binary;
-         N -> <<Binary/binary, 0:(N*8)>>
-     end.
+    case (Width - byte_size(Binary) rem Width) rem Width of
+        0 -> Binary;
+        N -> <<Binary/binary, 0:(N*8)>>
+    end.
 
 -spec timestamp() -> erlang:timestamp().
 timestamp() ->

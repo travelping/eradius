@@ -1,24 +1,24 @@
-% Copyright (c) 2010-2011 by Travelping GmbH <info@travelping.com>
+%% Copyright (c) 2010-2011 by Travelping GmbH <info@travelping.com>
 
-% Permission is hereby granted, free of charge, to any person obtaining a
-% copy of this software and associated documentation files (the "Software"),
-% to deal in the Software without restriction, including without limitation
-% the rights to use, copy, modify, merge, publish, distribute, sublicense,
-% and/or sell copies of the Software, and to permit persons to whom the
-% Software is furnished to do so, subject to the following conditions:
+%% Permission is hereby granted, free of charge, to any person obtaining a
+%% copy of this software and associated documentation files (the "Software"),
+%% to deal in the Software without restriction, including without limitation
+%% the rights to use, copy, modify, merge, publish, distribute, sublicense,
+%% and/or sell copies of the Software, and to permit persons to whom the
+%% Software is furnished to do so, subject to the following conditions:
 
-% The above copyright notice and this permission notice shall be included in
-% all copies or substantial portions of the Software.
+%% The above copyright notice and this permission notice shall be included in
+%% all copies or substantial portions of the Software.
 
-% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-% DEALINGS IN THE SOFTWARE.
+%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+%% DEALINGS IN THE SOFTWARE.
 
-% @private
+%% @private
 -module(eradius_log).
 
 -behaviour(gen_server).
@@ -81,7 +81,7 @@ handle_call(reconfigure, _From, State) ->
     file:close(State),
     {reply, ok, init_logger()};
 
-% for tests
+%% for tests
 handle_call(get_state, _From, State) ->
     {reply, State, State};
 
@@ -99,7 +99,7 @@ handle_cast({write_request, Time, Sender, Request}, State) ->
     catch
         _:Error ->
             ?LOG(error, "Failed to log RADIUS request: error: ~p, request: ~p, sender: ~p, "
-                        "logging will be disabled", [Error, Request, Sender]),
+                 "logging will be disabled", [Error, Request, Sender]),
             {noreply, logger_disabled}
     end.
 
@@ -245,8 +245,8 @@ collectable_attr_value(_Attr, Val) ->
 radius_date({{YYYY,MM,DD},{Hour,Min,Sec}}) ->
     DayNumber = calendar:day_of_the_week(YYYY, MM, DD),
     list_to_binary(
-        io_lib:format("~s ~3.s ~2.2.0w ~2.2.0w:~2.2.0w:~2.2.0w ~4.4.0w",
-            [day(DayNumber), month(MM), DD, Hour, Min, Sec, YYYY])).
+      io_lib:format("~s ~3.s ~2.2.0w ~2.2.0w:~2.2.0w:~2.2.0w ~4.4.0w",
+                    [day(DayNumber), month(MM), DD, Hour, Min, Sec, YYYY])).
 
 format_unknown({VendId, Id}) ->
     case eradius_dict:lookup(vendor, VendId) of
@@ -299,16 +299,16 @@ bin_to_hexstr(Bin) ->
 format_acct_status_type(Request) ->
     StatusType = eradius_lib:get_attr(Request, ?Acct_Status_Type),
     case StatusType of
-	undefined ->
-	    "";
-	1 ->
-	    "Start";
-	2 ->
-	    "Stop";
-	3 ->
-	    "Interim Update";
-	7 ->
-	    "Accounting-On";
-	8 ->
-	    "Accounting-Off"
+        undefined ->
+            "";
+        1 ->
+            "Start";
+        2 ->
+            "Stop";
+        3 ->
+            "Interim Update";
+        7 ->
+            "Accounting-On";
+        8 ->
+            "Accounting-Off"
     end.

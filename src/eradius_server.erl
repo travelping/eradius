@@ -28,7 +28,9 @@
 %%   ```
 %%   -record(radius_request, {
 %%       reqid         :: byte(),
-%%       cmd           :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp' | 'coareq' | 'coaack' | 'coanak' | 'discreq' | 'discack' | 'discnak'm
+%%       cmd           :: 'request' | 'accept' | 'challenge' | 'reject' |
+%%                        'accreq' | 'accresp' | 'coareq' | 'coaack' | 'coanak' |
+%%                        'discreq' | 'discack' | 'discnak'
 %%       attrs         :: eradius_lib:attribute_list(),
 %%       secret        :: eradius_lib:secret(),
 %%       authenticator :: eradius_lib:authenticator(),
@@ -77,13 +79,13 @@
 -type udp_packet()  :: {udp, udp_socket(), inet:ip_address(), port_number(), binary()}.
 
 -record(state, {
-    socket         :: udp_socket(),      % Socket Reference of opened UDP port
-    ip = {0,0,0,0} :: inet:ip_address(), % IP to which this socket is bound
-    port = 0       :: port_number(),     % Port number we are listening on
-    transacts      :: ets:tid(),         % ETS table containing current transactions
-    counter        :: #server_counter{}, % statistics counter,
-    name           :: atom()             % server name
-}).
+                socket         :: udp_socket(),      % Socket Reference of opened UDP port
+                ip = {0,0,0,0} :: inet:ip_address(), % IP to which this socket is bound
+                port = 0       :: port_number(),     % Port number we are listening on
+                transacts      :: ets:tid(),         % ETS table containing current transactions
+                counter        :: #server_counter{}, % statistics counter,
+                name           :: atom()             % server name
+               }).
 
 -optional_callbacks([validate_arguments/1]).
 
@@ -143,7 +145,7 @@ handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet},
                 [{_ReqKey, {handling, HandlerPid}}] ->
                     %% handler process is still working on the request
                     ?LOG(debug, "~s From: ~s INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
+                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
                     eradius_counter:inc_counter(dupRequests, NasProp);
                 [{_ReqKey, {replied, HandlerPid}}] ->
                     %% handler process waiting for resend message
@@ -221,23 +223,23 @@ do_radius(ServerPid, ServerName, ReqKey, Handler = {HandlerMod, _}, NasProp, {ud
     case run_handler(Nodes, NasProp, Handler, EncRequest) of
         {reply, EncReply, {ReqCmd, RespCmd}, Request} ->
             ?LOG(debug, "~s From: ~s INF: Sending response for request ~p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), ReqKey]),
+                 [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), ReqKey]),
             TS2 = erlang:monotonic_time(),
             inc_counter({ReqCmd, RespCmd}, ServerName, NasProp, TS2 - TS1, Request),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
             case application:get_env(eradius, resend_timeout, 2000) of
                 ResendTimeout when ResendTimeout > 0, is_integer(ResendTimeout) ->
-                   ServerPid ! {replied, ReqKey, self()},
-                   wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES);
+                    ServerPid ! {replied, ReqKey, self()},
+                    wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES);
                 _ -> ok
             end;
         {discard, Reason} ->
             ?LOG(debug, "~s From: ~s INF: Handler discarded the request ~p for reason ~1000.p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
+                 [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
             inc_discard_counter(Reason, NasProp);
         {exit, Reason} ->
             ?LOG(debug, "~s From: ~s INF: Handler exited for reason ~p, discarding request ~p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
+                 [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
             inc_discard_counter(packetsDropped, NasProp)
     end,
     eradius_counter:dec_counter(pending, NasProp).
@@ -342,7 +344,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             {reply, EncReply, {Request#radius_request.cmd, ReplyCmd}, Request};
         noreply ->
             ?LOG(error, "~s INF: Noreply for request ~p from handler ~p: returned value: ~p",
-                        [printable_peer(ServerIP, Port), Request, HandlerArg, noreply]),
+                 [printable_peer(ServerIP, Port), Request, HandlerArg, noreply]),
             {discard, handler_returned_noreply};
         {error, timeout} ->
             ReqType = eradius_log:format_cmd(Request#radius_request.cmd),
@@ -356,12 +358,12 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             {discard, {bad_return, {error, timeout}}};
         OtherReturn ->
             ?LOG(error, "~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",
-                        [printable_peer(ServerIP, Port), Request, HandlerArg, OtherReturn]),
+                 [printable_peer(ServerIP, Port), Request, HandlerArg, OtherReturn]),
             {discard, {bad_return, OtherReturn}}
     catch
         Class:Reason:S ->
             ?LOG(error, "~s INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
-                        [printable_peer(ServerIP, Port), Request, Class, Reason, S]),
+                 [printable_peer(ServerIP, Port), Request, Class, Reason, S]),
             {exit, {Class, Reason}}
     end.
 
@@ -449,10 +451,16 @@ inc_discard_counter(_Reason, NasProp) ->
 server_request_counter_account_match_spec_compile() ->
     case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
-            MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
+            MatchSpecCompile =
+                ets:match_spec_compile(
+                  ets:fun2ms(
+                    fun ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start}) ->
+                            accountRequestsStart;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop}) ->
+                            accountRequestsStop;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) ->
+                            accountRequestsUpdate
+                    end)),
             persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
@@ -462,10 +470,16 @@ server_request_counter_account_match_spec_compile() ->
 server_response_counter_account_match_spec_compile() ->
     case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
-            MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
+            MatchSpecCompile =
+                ets:match_spec_compile(
+                  ets:fun2ms(
+                    fun ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start}) ->
+                            accountResponsesStart;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop}) ->
+                            accountResponsesStop;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) ->
+                            accountResponsesUpdate
+                    end)),
             persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
