@@ -20,7 +20,7 @@ init([SocketIP, Client, PortIdx]) ->
     end,
     RecBuf = application:get_env(eradius, recbuf, 8192),
     SndBuf = application:get_env(eradius, sndbuf, 131072),
-    {ok, Socket} = gen_udp:open(0, [{active, once}, binary , {recbuf, RecBuf}, {sndbuf, SndBuf} | ExtraOptions]),
+    {ok, Socket} = gen_udp:open(0, [{active, once}, binary, {recbuf, RecBuf}, {sndbuf, SndBuf} | ExtraOptions]),
     {ok, #state{client = Client, socket = Socket, pending = maps:new(), mode = active, counter = 0}}.
 
 handle_call(_Request, _From, State) ->
@@ -30,7 +30,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({SenderPid, send_request, {IP, Port}, ReqId, EncRequest},
-        State = #state{socket = Socket, pending = Pending, counter = Counter}) ->
+            State = #state{socket = Socket, pending = Pending, counter = Counter}) ->
     case gen_udp:send(Socket, IP, Port, EncRequest) of
         ok ->
             ReqKey = {IP, Port, ReqId},
@@ -42,7 +42,7 @@ handle_info({SenderPid, send_request, {IP, Port}, ReqId, EncRequest},
     end;
 
 handle_info({udp, Socket, FromIP, FromPort, EncRequest},
-        State = #state{socket = Socket, pending = Pending, mode = Mode, counter = Counter}) ->
+            State = #state{socket = Socket, pending = Pending, mode = Mode, counter = Counter}) ->
     case eradius_lib:decode_request_id(EncRequest) of
         {ReqId, EncRequest} ->
             case maps:find({FromIP, FromPort, ReqId}, Pending) of

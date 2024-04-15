@@ -1,31 +1,31 @@
 %% vim: ft=erlang
 {application, eradius, [
-   {description, "Erlang RADIUS server"},
-   {vsn, semver},
-   {registered, [eradius_dict, eradius_sup, eradius_server_top_sup, eradius_server_sup, eradius_server_mon]},
-   {applications, [kernel, stdlib, crypto]},
-   {mod, {eradius, []}},
-   {env, [
-      {servers, []},
-      {tables, [dictionary]},
-      {client_ip, undefined},
-      {client_ports, 100},
-      {resend_timeout, 30000},
-      {logging, false},
-      {counter_aggregator, false},
-      {server_status_metrics_enabled, false},
-      {logfile, "./radius.log"},
-      {recbuf, 8192},
-      {sndbuf, 131072}
-   ]},
-   {maintainers, ["Andreas Schultz", "Vladimir Tarasenko", "Yury Gargay"]},
-   {licenses, ["MIT"]},
-   {links, [{"Github", "https://github.com/travelping/eradius"}]},
-   %% List copied from rebar3_hex.hrl ?DEFAULT_FILES, adding "Makefile"
-   {files, ["applications", "src", "c_src", "include/eradius_*.hrl", "rebar.config.script"
-            ,"priv/dictionaries", "rebar.config", "rebar.lock"
-            ,"README*", "readme*"
-            ,"LICENSE*", "license*"
-            ,"NOTICE"
-            ,"dicts_compiler.erl"]}
-]}.
+                        {description, "Erlang RADIUS server"},
+                        {vsn, semver},
+                        {registered, [eradius_dict, eradius_sup, eradius_server_top_sup, eradius_server_sup, eradius_server_mon]},
+                        {applications, [kernel, stdlib, crypto]},
+                        {mod, {eradius, []}},
+                        {env, [
+                               {servers, []},
+                               {tables, [dictionary]},
+                               {client_ip, undefined},
+                               {client_ports, 100},
+                               {resend_timeout, 30000},
+                               {logging, false},
+                               {counter_aggregator, false},
+                               {server_status_metrics_enabled, false},
+                               {logfile, "./radius.log"},
+                               {recbuf, 8192},
+                               {sndbuf, 131072}
+                              ]},
+                        {maintainers, ["Andreas Schultz", "Vladimir Tarasenko", "Yury Gargay"]},
+                        {licenses, ["MIT"]},
+                        {links, [{"Github", "https://github.com/travelping/eradius"}]},
+                        %% List copied from rebar3_hex.hrl ?DEFAULT_FILES, adding "Makefile"
+                        {files, ["applications", "src", "c_src", "include/eradius_*.hrl", "rebar.config.script"
+                                ,"priv/dictionaries", "rebar.config", "rebar.lock"
+                                ,"README*", "readme*"
+                                ,"LICENSE*", "license*"
+                                ,"NOTICE"
+                                ,"dicts_compiler.erl"]}
+                       ]}.

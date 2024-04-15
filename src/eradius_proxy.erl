@@ -35,7 +35,7 @@
 
 -behaviour(eradius_server).
 -export([radius_request/3, validate_arguments/1, get_routes_info/1,
-        put_default_route_to_pool/2, put_routes_to_pool/2]).
+         put_default_route_to_pool/2, put_routes_to_pool/2]).
 
 -ifdef(TEST).
 -export([resolve_routes/4, validate_options/1, new_request/3,
@@ -90,18 +90,18 @@ validate_arguments(Args) ->
 compile_routes(undefined) -> [];
 compile_routes(Routes) ->
     RoutesOpts = lists:map(fun (Route) ->
-        {Name, Relay, RouteOptions} = route(Route),
-        case re:compile(Name) of
-            {ok, R} ->
-                case validate_route({Relay, RouteOptions}) of
-                    false ->
-			false;
-                    _ -> {R, Relay, RouteOptions}
-                end;
-            {error, {Error, Position}} ->
-                throw("Error during regexp compilation - " ++ Error ++ " at position " ++ integer_to_list(Position))
-        end
-    end, Routes),
+                                   {Name, Relay, RouteOptions} = route(Route),
+                                   case re:compile(Name) of
+                                       {ok, R} ->
+                                           case validate_route({Relay, RouteOptions}) of
+                                               false ->
+                                                   false;
+                                               _ -> {R, Relay, RouteOptions}
+                                           end;
+                                       {error, {Error, Position}} ->
+                                           throw("Error during regexp compilation - " ++ Error ++ " at position " ++ integer_to_list(Position))
+                                   end
+                           end, Routes),
     RelaysRegexps = lists:any(fun(Route) -> Route == false end, RoutesOpts),
     if RelaysRegexps == false ->
             RoutesOpts;
@@ -109,11 +109,11 @@ compile_routes(Routes) ->
             false
     end.
 
-% @private
+                                                % @private
 -spec send_to_server(Request :: #radius_request{}, 
                      Route :: undefined_route() | route(), 
                      Options :: eradius_client:options()) ->
-    {reply, Reply :: #radius_request{}} | term().
+          {reply, Reply :: #radius_request{}} | term().
 send_to_server(_Request, {undefined, 0, []}, _) ->
     {error, no_route};
 
@@ -123,8 +123,8 @@ send_to_server(#radius_request{reqid = ReqID} = Request, {{Server, Port, Secret}
         {ok, Result, Auth} ->
             decode_request(Result, ReqID, Secret, Auth);
         no_active_servers ->
-            % If all RADIUS servers are marked as inactive for now just use
-            % just skip fail-over mechanism and use default given Peer
+                                                % If all RADIUS servers are marked as inactive for now just use
+                                                % just skip fail-over mechanism and use default given Peer
             send_to_server(Request, {Server, Port, Secret}, Options);
         Error ->
             ?LOG(error, "~p: error during send_request (~p)", [?MODULE, Error]),
@@ -138,7 +138,7 @@ send_to_server(#radius_request{reqid = ReqID} = Request, {Server, Port, Secret},
             Error
     end.
 
-% @private
+                                                % @private
 decode_request(Result, ReqID, Secret, Auth) ->
     case eradius_lib:decode_request(Result, Secret, Auth) of
         Reply = #radius_request{} ->
@@ -148,7 +148,7 @@ decode_request(Result, ReqID, Secret, Auth) ->
             Error
     end.
 
-% @private
+                                                % @private
 -spec validate_route(Route :: route()) -> boolean().
 validate_route({{Host, Port, Secret}, RouteOpts}) ->
     validate_route_options(RouteOpts) and validate_route({Host, Port, Secret});
@@ -163,7 +163,7 @@ validate_route({Host, Port, Secret}) when is_tuple(Host) ->
 validate_route({Host, _Port, _Secret}) when is_binary(Host) -> true;
 validate_route(_) -> false.
 
-% @private
+                                                % @private
 -spec validate_route_options(Options :: [proplists:property()] | pool_name()) -> boolean().
 validate_route_options(PoolName) when is_atom(PoolName) ->
     true;
@@ -173,7 +173,7 @@ validate_route_options(Options) ->
     Keys = proplists:get_keys(Options),
     lists:all(fun(Key) -> validate_route_option(Key, proplists:get_value(Key, Options)) end, Keys).
 
-% @private
+                                                % @private
 -spec validate_route_option(Key :: atom(), Value :: term()) -> boolean().
 validate_route_option(timeout, Value) when is_integer(Value) ->
     true;
@@ -184,13 +184,13 @@ validate_route_option(pool, Value) when is_atom(Value) ->
 validate_route_option(_, _) ->
     false.
 
-% @private
+                                                % @private
 -spec validate_options(Options :: [proplists:property()]) -> boolean().
 validate_options(Options) ->
     Keys = proplists:get_keys(Options),
     lists:all(fun(Key) -> validate_option(Key, proplists:get_value(Key, Options)) end, Keys).
 
-% @private
+                                                % @private
 -spec validate_option(Key :: atom(), Value :: term()) -> boolean().
 validate_option(type, Value) when Value =:= realm; Value =:= prefix -> true;
 validate_option(type, _Value) -> false;
@@ -202,21 +202,21 @@ validate_option(retries, Value) when is_integer(Value) -> true;
 validate_option(_, _) -> false.
 
 
-% @private
+                                                % @private
 -spec new_request(Request :: #radius_request{},
                   Username :: undefined | binary(),
                   NewUsername :: string()) ->
-    NewRequest :: #radius_request{}.
+          NewRequest :: #radius_request{}.
 new_request(Request, Username, Username) -> Request;
 new_request(Request, _Username, NewUsername) ->
     eradius_lib:set_attr(eradius_lib:del_attr(Request, ?User_Name),
                          ?User_Name, NewUsername).
 
-% @private
+                                                % @private
 -spec resolve_routes(Username :: undefined | binary(),
                      DefaultRoute :: undefined_route() | route(),
                      Routes :: routes(), Options :: [proplists:property()]) ->
-                     {NewUsername :: string(), Route :: route()}.
+          {NewUsername :: string(), Route :: route()}.
 resolve_routes( undefined, DefaultRoute, _Routes, _Options) ->
     {undefined, DefaultRoute};
 resolve_routes(Username, DefaultRoute, Routes, Options) ->
@@ -242,9 +242,9 @@ find_suitable_relay(Key, [{Regexp, Relay, RelayOpts} | Routes], DefaultRoute) ->
         _ -> {Relay, RelayOpts}
     end.
 
-% @private
+                                                % @private
 -spec get_key(Username :: binary() | string() | [], Type :: atom(), Strip :: boolean(), Separator :: list()) ->
-    {Key :: not_found | string(), NewUsername :: string()}.
+          {Key :: not_found | string(), NewUsername :: string()}.
 get_key([], _, _, _) -> {not_found, []};
 get_key(Username, Type, Strip, Separator) when is_binary(Username) ->
     get_key(binary_to_list(Username), Type, Strip, Separator);
@@ -256,9 +256,9 @@ get_key(Username, prefix, Strip, Separator) ->
     {Prefix, strip(Username, prefix, Strip, Separator)};
 get_key(Username, _, _, _) -> {not_found, Username}.
 
-% @private
+                                                % @private
 -spec strip(Username :: string(), Type :: atom(), Strip :: boolean(), Separator :: list()) ->
-    NewUsername :: string().
+          NewUsername :: string().
 strip(Username, _, false, _) -> Username;
 strip(Username, realm, true, Separator) ->
     case string:tokens(Username, Separator) of
@@ -298,16 +298,16 @@ put_default_route_to_pool(_, _) -> ok.
 put_routes_to_pool(false, _Retries) -> ok;
 put_routes_to_pool({routes, Routes}, Retries) ->
     lists:foreach(fun (Route) ->
-        case Route of
-            {_RouteName, {Host, Port, _Secret}} ->
-                eradius_client:store_radius_server_from_pool(Host, Port, Retries);
-            {_RouteName, {Host, Port, _Secret}, _Pool} ->
-                eradius_client:store_radius_server_from_pool(Host, Port, Retries);
-            {Host, Port, _Secret, _Opts} ->
-                eradius_client:store_radius_server_from_pool(Host, Port, Retries);
-            _ -> ok
-        end
-    end, Routes).
+                          case Route of
+                              {_RouteName, {Host, Port, _Secret}} ->
+                                  eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+                              {_RouteName, {Host, Port, _Secret}, _Pool} ->
+                                  eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+                              {Host, Port, _Secret, _Opts} ->
+                                  eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+                              _ -> ok
+                          end
+                  end, Routes).
 
 get_proxy_opt(_, [], Default)                            -> Default;
 get_proxy_opt(OptName, [{OptName, AddrOrRoutes} | _], _) -> AddrOrRoutes;

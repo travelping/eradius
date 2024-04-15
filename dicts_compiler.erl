@@ -21,10 +21,10 @@ compile() ->
             {ok, Basedir} = file:get_cwd(),
             IncludeDir = filename:join([Basedir, "include"]),
             ok = filelib:ensure_dir(IncludeDir),
-            % sort dictionaries in alphabetical order to be sure that
-            % basic `priv/dictionaries/dictionary` builds first
-            % because it contains some attributes which may be needed 
-            % for vendor's dictionaries
+                                                % sort dictionaries in alphabetical order to be sure that
+                                                % basic `priv/dictionaries/dictionary` builds first
+                                                % because it contains some attributes which may be needed 
+                                                % for vendor's dictionaries
             Dictionaries = lists:sort(Dictionaries0),
             Targets = [{Dictionary, out_files(Dictionary)} || Dictionary <- Dictionaries],
             compile_each(Targets)
@@ -87,12 +87,12 @@ clean_each([{_Dictionary, {Headerfile, Mapfile}}|Rest]) ->
 %%% --------------------------------------------------------------------
 emit([A|T], {HrlPid, _} = Hrl, Map) when is_record(A, attribute) ->
     io:format(HrlPid, "-define( '~s' , ~w ).~n",
-        [d2u(A#attribute.name), A#attribute.id]),
+              [d2u(A#attribute.name), A#attribute.id]),
     io:format(Map, "~110p.~n", [A]),
     emit(T, Hrl, Map);
 emit([V|T], {HrlPid, _} = Hrl, Map) when is_record(V, vendor) ->
     io:format(HrlPid, "-define( '~s' , ~w ).~n",
-        [d2u(V#vendor.name), V#vendor.type]),
+              [d2u(V#vendor.name), V#vendor.type]),
     io:format(Map, "~p.~n", [V]),
     emit(T, Hrl, Map);
 emit([V|T], Hrl, Map) when is_record(V, value) ->
@@ -101,8 +101,8 @@ emit([V|T], Hrl, Map) when is_record(V, value) ->
 emit([{include, Include}|T], {HrlPid, _} = Hrl, Map) ->
     EscapedInclude = re:replace(Include, "\\.", "_", [global, {return, list}]),
     io:format(HrlPid, "-include( \"~s.hrl\" ).~n", [EscapedInclude]),
-    % No need to add ".map" extension here. It will be added by eradius_dict
-    % server automatically.
+                                                % No need to add ".map" extension here. It will be added by eradius_dict
+                                                % server automatically.
     io:format(Map, "{include, ~p}.~n", [EscapedInclude]),
     emit(T, Hrl, Map);
 emit([header|T], {HrlPid, HrlName} = Hrl, Map) ->
@@ -122,20 +122,20 @@ emit([], _, _) ->
 parse_dict(File) when is_list(File) ->
     {ok,B} = file:read_file(File),
     F = fun(Line,{undefined = Vendor, AccList}) ->
-        case pd(string:tokens(Line,"\s\t\r")) of
-            {ok,E} -> {Vendor, [E|AccList]};
-            {include,Hrl} -> {Vendor, [{include, Hrl}|AccList]};
-            {begin_vendor, VendId} -> {{vendor, VendId}, AccList};
-            _      -> {Vendor, AccList}
-        end;
-        (Line, {{vendor, VendId} = Vendor, AccList}) ->
-            case pd(string:tokens(Line, "\s\t\r"), VendId) of
-                {end_vendor} -> {undefined, AccList};
-                {include,Hrl} -> {Vendor, [{include, Hrl}|AccList]};
-                {ok,E} -> {Vendor, [E|AccList]};
-                _ -> {Vendor, AccList}
-            end
-    end,
+                case pd(string:tokens(Line,"\s\t\r")) of
+                    {ok,E} -> {Vendor, [E|AccList]};
+                    {include,Hrl} -> {Vendor, [{include, Hrl}|AccList]};
+                    {begin_vendor, VendId} -> {{vendor, VendId}, AccList};
+                    _      -> {Vendor, AccList}
+                end;
+           (Line, {{vendor, VendId} = Vendor, AccList}) ->
+                case pd(string:tokens(Line, "\s\t\r"), VendId) of
+                    {end_vendor} -> {undefined, AccList};
+                    {include,Hrl} -> {Vendor, [{include, Hrl}|AccList]};
+                    {ok,E} -> {Vendor, [E|AccList]};
+                    _ -> {Vendor, AccList}
+                end
+        end,
     {_, L} = lists:foldl(F,{undefined, []},string:tokens(b2l(B),"\n")),
     [header|L] ++ [footer].
 
@@ -170,7 +170,7 @@ parse_attribute_attrs(Attr, [Attribute|Tail]) ->
     parse_attribute_attrs(NewAttr, Rest ++ Tail).
 
 pd(["$INCLUDE", Name]) ->
-   {include, Name};
+    {include, Name};
 
 pd(["BEGIN-VENDOR", Name]) ->
     case get({vendor, Name}) of
@@ -240,6 +240,6 @@ d2u(L) when is_list(L) ->
 
 repl(L,X,Y) when is_list(L) ->
     F = fun(Z) when Z == X -> Y;
-        (C) -> C
-    end,
+           (C) -> C
+        end,
     lists:map(F,L).

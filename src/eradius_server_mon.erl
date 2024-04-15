@@ -22,11 +22,11 @@
 -import(eradius_lib, [printable_peer/2]).
 
 -record(nas, {
-    key :: {server(), inet:ip_address()},
-    server_name :: server_name(),
-    handler :: handler(),
-    prop :: #nas_prop{}
-}).
+              key :: {server(), inet:ip_address()},
+              server_name :: server_name(),
+              handler :: handler(),
+              prop :: #nas_prop{}
+             }).
 
 %% ------------------------------------------------------------------------------------------
 %% -- API
@@ -65,7 +65,7 @@ lookup_pid(ServerIP, ServerPort) ->
 %% @doc returns the list of all currently configured NASs
 -spec all_nas_keys() -> [term()].
 all_nas_keys() ->
-        ets:select(?NAS_TAB, [{#nas{key = '$1', _ = '_'}, [], ['$1']}]).
+    ets:select(?NAS_TAB, [{#nas{key = '$1', _ = '_'}, [], ['$1']}]).
 
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
@@ -130,11 +130,11 @@ server_naslist({ServerName, {IP, Port, _Opts}, HandlerList}) ->
     server_naslist({ServerName, {IP, Port}, HandlerList});
 server_naslist({ServerName, {IP, Port}, HandlerList}) ->
     lists:map(fun({NasId, NasIP, Secret, HandlerNodes, HandlerMod, HandlerArgs}) ->
-                ServerInfo = eradius_lib:make_addr_info({ServerName, {IP, Port}}),
-                NasInfo = eradius_lib:make_addr_info({NasId, {NasIP, undefined}}),
-                #nas{key = {{IP, Port}, NasIP}, server_name = ServerName, handler = {HandlerMod, HandlerArgs},
-                prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret,
-                                 metrics_info = {ServerInfo, NasInfo}}}
+                      ServerInfo = eradius_lib:make_addr_info({ServerName, {IP, Port}}),
+                      NasInfo = eradius_lib:make_addr_info({NasId, {NasIP, undefined}}),
+                      #nas{key = {{IP, Port}, NasIP}, server_name = ServerName, handler = {HandlerMod, HandlerArgs},
+                           prop = #nas_prop{handler_nodes = HandlerNodes, nas_id = NasId, nas_ip = NasIP, secret = Secret,
+                                            metrics_info = {ServerInfo, NasInfo}}}
               end, HandlerList).
 
 config_nodes(NasHandler) ->
@@ -142,26 +142,26 @@ config_nodes(NasHandler) ->
 
 update_server(Running, ToStop, ToStart) ->
     Stopped = lists:map(fun(ServerAddr = {_ServerName, Addr}) ->
-                                 StoppedServer = {_, _, Pid} = lists:keyfind(Addr, 2, Running),
-                                 eradius_server_sup:stop_instance(ServerAddr, Pid),
-                                 StoppedServer
+                                StoppedServer = {_, _, Pid} = lists:keyfind(Addr, 2, Running),
+                                eradius_server_sup:stop_instance(ServerAddr, Pid),
+                                StoppedServer
                         end, ToStop),
     StartFn = fun({ServerName, Addr = {IP, Port, _Opts}}=ServerAddr) ->
-        case eradius_server_sup:start_instance(ServerAddr) of
-            {ok, Pid} ->
-                {ServerName, Addr, Pid};
-            {error, Error} ->
-                ?LOG(error, "Could not start listener on host: ~s, occurring error: ~p",
-                [printable_peer(IP, Port), Error])
-        end
-    end,
+                      case eradius_server_sup:start_instance(ServerAddr) of
+                          {ok, Pid} ->
+                              {ServerName, Addr, Pid};
+                          {error, Error} ->
+                              ?LOG(error, "Could not start listener on host: ~s, occurring error: ~p",
+                                   [printable_peer(IP, Port), Error])
+                      end
+              end,
     NewStarted = lists:map(fun
-        ({ServerName, {IP, Port}}) ->
-            StartFn({ServerName, {IP, Port, []}});
-        (ServerAddr) ->
-            StartFn(ServerAddr)
-        end,
-        ToStart),
+                               ({ServerName, {IP, Port}}) ->
+                                  StartFn({ServerName, {IP, Port, []}});
+                               (ServerAddr) ->
+                                  StartFn(ServerAddr)
+                          end,
+                           ToStart),
     (Running -- Stopped) ++ NewStarted.
 
 update_nases(ToDelete, ToInsert) ->

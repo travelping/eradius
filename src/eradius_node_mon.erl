@@ -52,11 +52,11 @@ get_remote_version(Node) ->
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
 -record(state, {
-    live_registrar_nodes = sets:new() :: sets:set(),
-    dead_registrar_nodes = sets:new() :: sets:set(),
-    app_masters = maps:new()          :: map(),
-    ping_timer                        :: reference()
-}).
+                live_registrar_nodes = sets:new() :: sets:set(),
+                dead_registrar_nodes = sets:new() :: sets:set(),
+                app_masters = maps:new()          :: map(),
+                ping_timer                        :: reference()
+               }).
 
 init([]) ->
     ets:new(?NODE_TAB, [bag, named_table, protected, {read_concurrency, true}]),
@@ -80,8 +80,8 @@ handle_cast({remote_modules_ready_v1, ApplicationMaster, Modules}, State) ->
 handle_cast({modules_ready, ApplicationMaster, Modules}, State) ->
     NewState = State#state{app_masters = register_locally({ApplicationMaster, Modules}, State#state.app_masters)},
     lists:foreach(fun (Node) ->
-                      check_eradius_version(Node),
-                      gen_server:cast({?SERVER, Node}, {remote_modules_ready_v1, ApplicationMaster, Modules})
+                          check_eradius_version(Node),
+                          gen_server:cast({?SERVER, Node}, {remote_modules_ready_v1, ApplicationMaster, Modules})
                   end, nodes()),
     {noreply, NewState}.
 
@@ -136,9 +136,9 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 dict_prepend(Key, List, Map) ->
     update_with(Key, fun (Old) -> List ++ Old end, List, Map).
 
-% NOTE:
-% copy-pasted from maps.erl to have backward compatability with OTP 18
-% it can be rewmoved if minimal version of OTP will be set to 19.
+%% NOTE:
+%% copy-pasted from maps.erl to have backward compatability with OTP 18
+%% it can be rewmoved if minimal version of OTP will be set to 19.
 update_with(Key,Fun,Init,Map) when is_function(Fun,1), is_map(Map) ->
     case maps:find(Key,Map) of
         {ok,Val} -> maps:update(Key,Fun(Val),Map);

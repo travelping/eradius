@@ -50,19 +50,19 @@
 
 %% ------------------------------------------------------------------------------------------
 %% -- API
-% @private
+%% @private
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-% @equiv send_request(NAS, Request, [])
+%% @equiv send_request(NAS, Request, [])
 -spec send_request(nas_address(), #radius_request{}) -> {ok, binary()} | {error, 'timeout' | 'socket_down'}.
 send_request(NAS, Request) ->
     send_request(NAS, Request, []).
 
-% @doc Send a radius request to the given NAS.
-%   If no answer is received within the specified timeout, the request will be sent again.
+%% @doc Send a radius request to the given NAS.
+%%   If no answer is received within the specified timeout, the request will be sent again.
 -spec send_request(nas_address(), #radius_request{}, options()) ->
-    {ok, binary(), eradius_lib:authenticator()} | {error, 'timeout' | 'socket_down'}.
+          {ok, binary(), eradius_lib:authenticator()} | {error, 'timeout' | 'socket_down'}.
 send_request({Host, Port, Secret}, Request, Options)
   when ?GOOD_CMD(Request) andalso is_binary(Host) ->
     send_request({erlang:binary_to_list(Host), Port, Secret}, Request, Options);
@@ -77,17 +77,17 @@ send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andal
     Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
     SendReqFn = fun () ->
-        Peer = {ServerName, {IP, Port}},
-        update_client_requests(MetricsInfo),
-        {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, Peer, MetricsInfo}),
-        Response = send_request_loop(Socket, ReqId, Peer,
-                                     Request#radius_request{reqid = ReqId, secret = Secret},
-                                     Retries, Timeout, MetricsInfo),
-        proceed_response(Request, Response, Peer, TS1, MetricsInfo, Options)
-    end,
-    % If we have other RADIUS upstream servers check current one,
-    % maybe it is already marked as inactive and try to find another
-    % one
+                        Peer = {ServerName, {IP, Port}},
+                        update_client_requests(MetricsInfo),
+                        {Socket, ReqId} = gen_server:call(?SERVER, {wanna_send, Peer, MetricsInfo}),
+                        Response = send_request_loop(Socket, ReqId, Peer,
+                                                     Request#radius_request{reqid = ReqId, secret = Secret},
+                                                     Retries, Timeout, MetricsInfo),
+                        proceed_response(Request, Response, Peer, TS1, MetricsInfo, Options)
+                end,
+    %% If we have other RADIUS upstream servers check current one,
+    %% maybe it is already marked as inactive and try to find another
+    %% one
     case proplists:get_value(failover, Options, []) of
         [] ->
             SendReqFn();
@@ -98,13 +98,13 @@ send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andal
                 {{IP, Port, Secret}, _NewPool} ->
                     SendReqFn();
                 {NewPeer, []} ->
-                    % Special case, we don't have servers in the pool anymore, but we need
-                    % to preserve `failover` option to mark current server as inactive if
-                    % it will fail
+                    %% Special case, we don't have servers in the pool anymore, but we need
+                    %% to preserve `failover` option to mark current server as inactive if
+                    %% it will fail
                     NewOptions = lists:keyreplace(failover, 1, Options, {failover, undefined}),
                     send_request(NewPeer, Request, NewOptions);
                 {NewPeer, NewPool} ->
-                    % current server is not in list of active servers, so use another one
+                    %% current server is not in list of active servers, so use another one
                     NewOptions = lists:keyreplace(failover, 1, Options, {failover, NewPool}),
                     send_request(NewPeer, Request, NewOptions)
             end
@@ -112,14 +112,14 @@ send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andal
 send_request({_IP, _Port, _Secret}, _Request, _Options) ->
     error(badarg).
 
-% @equiv send_remote_request(Node, NAS, Request, [])
+%% @equiv send_remote_request(Node, NAS, Request, [])
 -spec send_remote_request(node(), nas_address(), #radius_request{}) -> {ok, binary()} | {error, 'timeout' | 'node_down' | 'socket_down'}.
 send_remote_request(Node, NAS, Request) ->
     send_remote_request(Node, NAS, Request, []).
 
-% @doc Send a radius request to the given NAS through a socket on the specified node.
-%   If no answer is received within the specified timeout, the request will be sent again.
-%   The request will not be sent again if the remote node is unreachable.
+%% @doc Send a radius request to the given NAS through a socket on the specified node.
+%%   If no answer is received within the specified timeout, the request will be sent again.
+%%   The request will not be sent again if the remote node is unreachable.
 -spec send_remote_request(node(), nas_address(), #radius_request{}, options()) -> {ok, binary()} | {error, 'timeout' | 'node_down' | 'socket_down'}.
 send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) ->
     TS1 = erlang:monotonic_time(),
@@ -139,15 +139,15 @@ send_remote_request(Node, {IP, Port, Secret}, Request, Options) when ?GOOD_CMD(R
             Retries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
             Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
             SenderPid = spawn(Node, ?MODULE, send_remote_request_loop,
-                             [self(), Socket, ReqId, Peer, Request1, Retries, Timeout, MetricsInfo]),
+                              [self(), Socket, ReqId, Peer, Request1, Retries, Timeout, MetricsInfo]),
             SenderMonitor = monitor(process, SenderPid),
             Response = receive
-                       {SenderPid, Result} ->
-                            erlang:demonitor(SenderMonitor, [flush]),
-                            Result;
-                        {'DOWN', SenderMonitor, process, SenderPid, _Reason} ->
-                            {error, socket_down}
-                    end,
+                           {SenderPid, Result} ->
+                               erlang:demonitor(SenderMonitor, [flush]),
+                               Result;
+                           {'DOWN', SenderMonitor, process, SenderPid, _Reason} ->
+                               {error, socket_down}
+                       end,
             proceed_response(Request, Response, Peer, TS1, MetricsInfo, Options)
     catch
         exit:{{nodedown, Node}, _} ->
@@ -203,18 +203,18 @@ handle_failed_request(Request, {ServerIP, Port} = _FailedServer, UpstreamServers
     case ets:lookup(?MODULE, {ServerIP, Port}) of
         [{{ServerIP, Port}, Retries, InitialRetries}] ->
             FailedTries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
-            % Mark the given RADIUS server as 'non-active' if there were more tries
-            % than possible
+            %% Mark the given RADIUS server as 'non-active' if there were more tries
+            %% than possible
             if FailedTries >= Retries ->
                     ets:delete(?MODULE, {ServerIP, Port}),
                     Timeout = application:get_env(eradius, unreachable_timeout, 60),
                     timer:apply_after(Timeout * 1000, ?MODULE, restore_upstream_server,
                                       [{ServerIP, Port, InitialRetries, InitialRetries}]);
                true ->
-                    % RADIUS client tried to send a request to the {ServierIP, Port} RADIUS
-                    % server. There were done FailedTries tries and all of them failed.
-                    % So decrease amount of tries for the given RADIUS server that
-                    % that will be used for next RADIUS requests towards this RADIUS server.
+                    %% RADIUS client tried to send a request to the {ServierIP, Port} RADIUS
+                    %% server. There were done FailedTries tries and all of them failed.
+                    %% So decrease amount of tries for the given RADIUS server that
+                    %% that will be used for next RADIUS requests towards this RADIUS server.
                     ets:update_counter(?MODULE, {ServerIP, Port}, -FailedTries)
             end;
         [] ->
@@ -224,12 +224,12 @@ handle_failed_request(Request, {ServerIP, Port} = _FailedServer, UpstreamServers
         [] ->
             Response;
         {NewPeer, NewPool} ->
-            % leave only active upstream servers
+            %% leave only active upstream servers
             NewOptions = lists:keyreplace(failover, 1, Options, {failover, NewPool}),
             send_request(NewPeer, Request, NewOptions)
     end.
 
-% @private
+%% @private
 send_remote_request_loop(ReplyPid, Socket, ReqId, Peer, EncRequest, Retries, Timeout, MetricsInfo) ->
     ReplyPid ! {self(), send_request_loop(Socket, ReqId, Peer, EncRequest, Retries, Timeout, MetricsInfo)}.
 
@@ -263,11 +263,11 @@ send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authent
             send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, RetryN - 1, MetricsInfo, Secret, Request)
     end.
 
-% @private
+%% @private
 update_client_requests(MetricsInfo) ->
     eradius_counter:inc_counter(requests, MetricsInfo).
 
-% @private
+%% @private
 update_client_request(pending, MetricsInfo, Pending, _) ->
     if Pending =< 0 -> eradius_counter:dec_counter(pending, MetricsInfo);
        true -> eradius_counter:inc_counter(pending, MetricsInfo)
@@ -276,7 +276,7 @@ update_client_request(Cmd, MetricsInfo, Ms, Request) ->
     eradius_counter:observe(eradius_client_request_duration_milliseconds, MetricsInfo, Ms, "Execution time of a RADIUS request"),
     update_client_request_by_type(Cmd, MetricsInfo, Ms, Request).
 
-% @private
+%% @private
 update_client_request_by_type(request, MetricsInfo, Ms, _) ->
     eradius_counter:observe(eradius_client_access_request_duration_milliseconds, MetricsInfo, Ms, "Access-Request execution time"),
     eradius_counter:inc_counter(accessRequests, MetricsInfo);
@@ -319,13 +319,13 @@ reconfigure() ->
 %% ------------------------------------------------------------------------------------------
 %% -- socket process manager
 -record(state, {
-    socket_ip :: null | inet:ip_address(),
-    no_ports = 1 :: pos_integer(),
-    idcounters = maps:new() :: map(),
-    sockets = array:new() :: array:array(),
-    sup :: pid(),
-    clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
-}).
+                socket_ip :: null | inet:ip_address(),
+                no_ports = 1 :: pos_integer(),
+                idcounters = maps:new() :: map(),
+                sockets = array:new() :: array:array(),
+                sup :: pid(),
+                clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
+               }).
 
 %% @private
 init([]) ->
@@ -386,9 +386,9 @@ configure(State) ->
         undefined ->
             prepare_pools();
         _ ->
-            % if ets table is already exists - which could be in a case of
-            % reconfigure, just re-create the table and fill it with newly
-            % configured pools of RADIUS upstream servers
+            %% if ets table is already exists - which could be in a case of
+            %% reconfigure, just re-create the table and fill it with newly
+            %% configured pools of RADIUS upstream servers
             ets:delete(?MODULE),
             prepare_pools()
     end,
@@ -425,20 +425,20 @@ store_upstream_servers({Server, _, _}) ->
 store_upstream_servers(Server) ->
     HandlerDefinitions = application:get_env(eradius, Server, []),
     UpdatePoolFn = fun (HandlerOpts) ->
-        {DefaultRoute, Routes, Retries} = eradius_proxy:get_routes_info(HandlerOpts),
-        eradius_proxy:put_default_route_to_pool(DefaultRoute, Retries),
-        eradius_proxy:put_routes_to_pool(Routes, Retries)
-    end,
+                           {DefaultRoute, Routes, Retries} = eradius_proxy:get_routes_info(HandlerOpts),
+                           eradius_proxy:put_default_route_to_pool(DefaultRoute, Retries),
+                           eradius_proxy:put_routes_to_pool(Routes, Retries)
+                   end,
     lists:foreach(fun (HandlerDefinition) ->
-        case HandlerDefinition of
-            {{_, []}, _} ->             ok;
-            {{_, _, []}, _} ->          ok;
-            {{_, HandlerOpts}, _} ->    UpdatePoolFn(HandlerOpts);
-            {{_, _, HandlerOpts}, _} -> UpdatePoolFn(HandlerOpts);
-            _HandlerDefinition ->       ok
-        end
-    end,
-    HandlerDefinitions).
+                          case HandlerDefinition of
+                              {{_, []}, _} ->             ok;
+                              {{_, _, []}, _} ->          ok;
+                              {{_, HandlerOpts}, _} ->    UpdatePoolFn(HandlerOpts);
+                              {{_, _, HandlerOpts}, _} -> UpdatePoolFn(HandlerOpts);
+                              _HandlerDefinition ->       ok
+                          end
+                  end,
+                  HandlerDefinitions).
 
 %% private
 store_radius_server_from_pool(Addr, Port, Retries) when is_tuple(Addr) and is_integer(Port) and is_integer(Retries) ->
@@ -463,7 +463,7 @@ configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NA
                                     undefined   -> done;
                                     _           -> Pid ! close
                                 end
-                         end, Sockts),
+                        end, Sockts),
             {ok, State#state{sockets = array:new(), socket_ip = NAdd, no_ports = NPorts}}
     end.
 
@@ -489,12 +489,13 @@ close_sockets(NPorts, Sockets) ->
         false   ->
             List = array:to_list(Sockets),
             {_, Rest} = lists:split(NPorts, List),
-            lists:map(  fun(Pid) ->
-                                case Pid of
-                                    undefined   -> done;
-                                    _           -> Pid ! close
-                                end
-                        end, Rest),
+            lists:map(
+              fun(Pid) ->
+                      case Pid of
+                          undefined   -> done;
+                          _           -> Pid ! close
+                      end
+              end, Rest),
             array:resize(NPorts, Sockets)
     end.
 
@@ -516,14 +517,14 @@ find_socket_process(PortIdx, Sockets, SocketIP, Sup) ->
     case array:get(PortIdx, Sockets) of
         undefined ->
             Res = supervisor:start_child(Sup, {PortIdx,
-                {eradius_client_socket, start, [SocketIP, self(), PortIdx]},
-                transient, brutal_kill, worker, [eradius_client_socket]}),
+                                               {eradius_client_socket, start, [SocketIP, self(), PortIdx]},
+                                               transient, brutal_kill, worker, [eradius_client_socket]}),
             Pid = case Res of
-                {ok, P} -> P;
-                {error, already_present} ->
-                    {ok, P} = supervisor:restart_child(Sup, PortIdx),
-                    P
-            end,
+                      {ok, P} -> P;
+                      {error, already_present} ->
+                          {ok, P} = supervisor:restart_child(Sup, PortIdx),
+                          P
+                  end,
             {Pid, array:set(PortIdx, Pid, Sockets)};
         Pid when is_pid(Pid) ->
             {Pid, Sockets}
@@ -546,12 +547,12 @@ init_server_status_metrics() ->
         false ->
             ok;
         true ->
-            % That will be called at eradius startup and we must be sure that prometheus
-            % application already started if server status metrics supposed to be used
+            %% That will be called at eradius startup and we must be sure that prometheus
+            %% application already started if server status metrics supposed to be used
             application:ensure_all_started(prometheus),
             ets:foldl(fun ({{Addr, Port}, _, _}, _Acc) ->
-                eradius_counter:set_boolean_metric(server_status, [Addr, Port], false)
-            end, [], ?MODULE)
+                              eradius_counter:set_boolean_metric(server_status, [Addr, Port], false)
+                      end, [], ?MODULE)
     end.
 
 make_metrics_info(Options, {ServerIP, ServerPort}) ->
@@ -581,35 +582,38 @@ update_server_status_metric(IP, Port, false, _Options) ->
     eradius_counter:set_boolean_metric(server_status, [IP, Port], false);
 update_server_status_metric(IP, Port, true, Options) ->
     UpstreamServers = proplists:get_value(failover, Options, []),
-    % set all servesr from pool as inactive
+    %% set all servesr from pool as inactive
     if is_list(UpstreamServers) ->
-        lists:foreach(fun (Server) ->
-            case Server of
-                {ServerIP, ServerPort, _} ->
-                    eradius_counter:set_boolean_metric(server_status, [ServerIP, ServerPort], false);
-                {ServerIP, ServerPort, _, _} ->
-                    eradius_counter:set_boolean_metric(server_status, [ServerIP, ServerPort], false);
-                _ ->
-                    ok
-            end
+            lists:foreach(
+              fun (Server) ->
+                      case Server of
+                          {ServerIP, ServerPort, _} ->
+                              eradius_counter:set_boolean_metric(server_status, [ServerIP, ServerPort], false);
+                          {ServerIP, ServerPort, _, _} ->
+                              eradius_counter:set_boolean_metric(server_status, [ServerIP, ServerPort], false);
+                          _ ->
+                              ok
+                      end
 
-        end, UpstreamServers);
-    true ->
-        ok
+              end, UpstreamServers);
+       true ->
+            ok
     end,
-    % set current service as active
+    %% set current service as active
     eradius_counter:set_boolean_metric(server_status, [IP, Port], true).
 
 client_request_counter_account_match_spec_compile() ->
     case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
-            MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
-                ({?RStatus_Type, ?RStatus_Type_Start})  -> accountRequestsStart;
-                ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountRequestsStop;
-                ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
+            MatchSpecCompile =
+                ets:match_spec_compile(
+                  ets:fun2ms(
+                    fun ({?RStatus_Type, ?RStatus_Type_Start})  -> accountRequestsStart;
+                        ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountRequestsStop;
+                        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountRequestsUpdate;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
             persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
@@ -619,13 +623,15 @@ client_request_counter_account_match_spec_compile() ->
 client_response_counter_account_match_spec_compile() ->
     case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
         undefined ->
-            MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
-                ({?RStatus_Type, ?RStatus_Type_Start})  -> accountResponsesStart;
-                ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountResponsesStop;
-                ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
+            MatchSpecCompile =
+                ets:match_spec_compile(
+                  ets:fun2ms(
+                    fun ({?RStatus_Type, ?RStatus_Type_Start})  -> accountResponsesStart;
+                        ({?RStatus_Type, ?RStatus_Type_Stop})   -> accountResponsesStop;
+                        ({?RStatus_Type, ?RStatus_Type_Update}) -> accountResponsesUpdate;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
+                        ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
             persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
             MatchSpecCompile;
         MatchSpecCompile ->
@@ -638,11 +644,11 @@ find_suitable_peer([]) ->
     [];
 find_suitable_peer([{Host, Port, Secret} | Pool]) when is_list(Host) ->
     try
-	IP = get_ip(Host),
-	find_suitable_peer([{IP, Port, Secret} | Pool])
+        IP = get_ip(Host),
+        find_suitable_peer([{IP, Port, Secret} | Pool])
     catch _:_ ->
-	% can't resolve ip by some reasons, just ignore it
-	find_suitable_peer(Pool)
+            %% can't resolve ip by some reasons, just ignore it
+            find_suitable_peer(Pool)
     end;
 find_suitable_peer([{IP, Port, Secret} | Pool]) ->
     case ets:lookup(?MODULE, {IP, Port}) of
