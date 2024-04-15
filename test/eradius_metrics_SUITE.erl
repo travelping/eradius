@@ -1,22 +1,22 @@
-% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
+%% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
 
-% Permission is hereby granted, free of charge, to any person obtaining a
-% copy of this software and associated documentation files (the "Software"),
-% to deal in the Software without restriction, including without limitation
-% the rights to use, copy, modify, merge, publish, distribute, sublicense,
-% and/or sell copies of the Software, and to permit persons to whom the
-% Software is furnished to do so, subject to the following conditions:
+%% Permission is hereby granted, free of charge, to any person obtaining a
+%% copy of this software and associated documentation files (the "Software"),
+%% to deal in the Software without restriction, including without limitation
+%% the rights to use, copy, modify, merge, publish, distribute, sublicense,
+%% and/or sell copies of the Software, and to permit persons to whom the
+%% Software is furnished to do so, subject to the following conditions:
 
-% The above copyright notice and this permission notice shall be included in
-% all copies or substantial portions of the Software.
+%% The above copyright notice and this permission notice shall be included in
+%% all copies or substantial portions of the Software.
 
-% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-% DEALINGS IN THE SOFTWARE.
+%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+%% DEALINGS IN THE SOFTWARE.
 
 -module(eradius_metrics_SUITE).
 -compile(export_all).
@@ -53,8 +53,8 @@ init_per_suite(Config) ->
                              { {"good", [] }, [{"127.0.0.2", ?SECRET, [{nas_id, <<"good_nas">>}]}] }
                             ]},
                      {bad, [
-                              { {"bad", [] }, [{"127.0.0.2", ?SECRET, [{nas_id, <<"bad_nas">>}]}] }
-                             ]},
+                            { {"bad", [] }, [{"127.0.0.2", ?SECRET, [{nas_id, <<"bad_nas">>}]}] }
+                           ]},
                      {error, [
                               { {"error", [] }, [{"127.0.0.2", ?SECRET, [{nas_id, <<"error_nas">>}]}] }
                              ]},
@@ -66,8 +66,8 @@ init_per_suite(Config) ->
                     ],
     [application:set_env(eradius, Key, Value) || {Key, Value} <- EradiusConfig],
     application:set_env(prometheus, collectors, [eradius_prometheus_collector]),
-    % prometheus is not included directly to eradius but prometheus_eradius_collector
-    % should include it
+    %% prometheus is not included directly to eradius but prometheus_eradius_collector
+    %% should include it
     application:ensure_all_started(prometheus),
     {ok, _} = application:ensure_all_started(eradius),
     spawn(fun() ->
@@ -92,7 +92,7 @@ good_requests(_Config) ->
                 {coareq, coa, coa_ack},
                 {discreq, disconnect, disconnect_ack}],
     [check_single_request(good, EradiusRequestType, RequestType, ResponseType) ||
-     {EradiusRequestType, RequestType, ResponseType} <- Requests ],
+        {EradiusRequestType, RequestType, ResponseType} <- Requests ],
     check_total_requests(good, length(Requests)).
 
 bad_requests(_Config) ->
@@ -100,7 +100,7 @@ bad_requests(_Config) ->
                 {coareq, coa, coa_nak},
                 {discreq, disconnect, disconnect_nak}],
     [check_single_request(bad, EradiusRequestType, RequestType, ResponseType) ||
-     {EradiusRequestType, RequestType, ResponseType} <- Requests ],
+        {EradiusRequestType, RequestType, ResponseType} <- Requests ],
     check_total_requests(bad, length(Requests)).
 
 error_requests(_Config) ->

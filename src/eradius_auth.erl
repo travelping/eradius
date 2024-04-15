@@ -22,7 +22,7 @@
 %% @doc check the request password using all available authentication mechanisms.
 %%    Tries CHAP, then MS-CHAP, then MS-CHAPv2, finally PAP.
 -spec check_password(binary(), #radius_request{}) -> 
-    false | {boolean(), eradius_lib:attribute_list()}.
+          false | {boolean(), eradius_lib:attribute_list()}.
 check_password(Password, Req = #radius_request{authenticator = Authenticator, attrs = AVPs}) ->
     case lookup_auth_attrs(AVPs) of
         {false, Chap_pass, false, false, false, false} ->
@@ -191,7 +191,7 @@ ms_chap(Passwd, Challenge, <<_Ident:1/binary, Flags:1/integer-unit:8, LMResponse
                     NTResponse =:= challenge_response(Challenge, NtPasswdHash);
                 true ->
                     false
-             end,
+            end,
     Resp2 = if
                 Resp1 == false ->
                     LMResponse =:= challenge_response(Challenge, LmPasswdHash);
@@ -282,9 +282,9 @@ v2_magic2() ->
 %% ------------------------------------------------------------------------------------------
 %% -- MPPE magic constants when used with MS-CHAP-V2
 mppe_magic1() ->
-   <<16#54, 16#68, 16#69, 16#73, 16#20, 16#69, 16#73, 16#20, 16#74,
-     16#68, 16#65, 16#20, 16#4d, 16#50, 16#50, 16#45, 16#20, 16#4d,
-     16#61, 16#73, 16#74, 16#65, 16#72, 16#20, 16#4b, 16#65, 16#79>>.
+    <<16#54, 16#68, 16#69, 16#73, 16#20, 16#69, 16#73, 16#20, 16#74,
+      16#68, 16#65, 16#20, 16#4d, 16#50, 16#50, 16#45, 16#20, 16#4d,
+      16#61, 16#73, 16#74, 16#65, 16#72, 16#20, 16#4b, 16#65, 16#79>>.
 
 mppe_magic2() ->
     <<16#4F, 16#6E, 16#20, 16#74, 16#68, 16#65, 16#20, 16#63, 16#6C, 16#69,

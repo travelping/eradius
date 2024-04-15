@@ -9,4 +9,4 @@
   {env,[]},
   {modules, [eradius_prometheus_collector]},
   {licenses, ["MIT"]}
-]}.
+ ]}.

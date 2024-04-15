@@ -61,10 +61,10 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 decode(<<Code:8, Id:8, Len:16, Rest/binary>>) ->
     DataLen = Len - 4,
     case Rest of
-	<<Data:DataLen/bytes, _/binary>> ->
-	    do_decode_payload(code(Code), Id, Data);
-	_ ->
-	    {error, invalid_length}
+        <<Data:DataLen/bytes, _/binary>> ->
+            do_decode_payload(code(Code), Id, Data);
+        _ ->
+            {error, invalid_length}
     end.
 
 %% @doc endecode a EPA message
@@ -75,9 +75,9 @@ encode(Code, Id, Msg) ->
 
 do_decode_payload(Code, Id, Data) ->
     try
-	decode_payload(Code, Id, Data)
+        decode_payload(Code, Id, Data)
     catch
-	_ -> {error, invalid_payload}
+        _ -> {error, invalid_payload}
     end.
 
 decode_payload(Code, Id, <<Type:8, TypeData/binary>>)
@@ -87,9 +87,9 @@ decode_payload(Code, Id, <<Type:8, TypeData/binary>>)
 decode_payload(Code, Id, Data)
   when Code == success; Code == failure ->
     case Data of
-	<<>> -> {ok, {Code, Id}};
-	_ ->    {error, invalid_length}
-	  end.
+        <<>> -> {ok, {Code, Id}};
+        _ ->    {error, invalid_length}
+    end.
 
 %% @doc EAP decoder functions for RFC-3784 types
 
@@ -130,11 +130,11 @@ decode_eap_type({0, 3}, Data) ->
     {nak_ext, [{Vendor,Type} || <<_T:8, Vendor:24, Type:32>> <= Data]};
 
 decode_eap_type(Type, Data) ->
-	case lookup_type(Type) of
-	    [Module] ->
-		Module:decode_eap_type(Type, Data);
-	    _ -> {Type, Data}
-	end.
+    case lookup_type(Type) of
+        [Module] ->
+            Module:decode_eap_type(Type, Data);
+        _ -> {Type, Data}
+    end.
 
 encode_payload(Code, Msg)
   when Code == request; Code == response ->

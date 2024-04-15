@@ -3,7 +3,7 @@
 -module(eradius_dict).
 -export([start_link/0, lookup/2, load_tables/1, load_tables/2, unload_tables/1, unload_tables/2]).
 -export_type([attribute/0, attr_value/0, table_name/0, attribute_id/0, attribute_type/0,
-	      attribute_prim_type/0, attribute_encryption/0, vendor_id/0, value_id/0]).
+              attribute_prim_type/0, attribute_encryption/0, vendor_id/0, value_id/0]).
 
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -18,7 +18,7 @@
 -type attribute_encryption() :: 'no' | 'scramble' | 'salt_crypt' | 'ascend'.
 -type attribute_type() :: attribute_prim_type() | {tagged, attribute_prim_type()}.
 -type attribute_prim_type() :: 'string' | 'integer' | 'integer64' | 'ipaddr' | 'ipv6addr'
-			     | 'ipv6prefix' | 'date' | 'abinary' | 'binary' | 'octets'.
+                             | 'ipv6prefix' | 'date' | 'abinary' | 'binary' | 'octets'.
 
 -type value_id() :: {attribute_id(), pos_integer()}.
 -type vendor_id() :: pos_integer().
@@ -98,9 +98,9 @@ do_unload_tables(_Dir, []) ->
     ok;
 do_unload_tables(Dir, Tables) ->
     try
-        % Unlike of what we do in do_load_tables, we don't treat includes here.
-        % Usually when you want to purge some tables you want to do exactly
-        % this, and you don't want to purge some extra tables.
+        %% Unlike of what we do in do_load_tables, we don't treat includes here.
+        %% Usually when you want to purge some tables you want to do exactly
+        %% this, and you don't want to purge some extra tables.
         {_, Defs} = prepare_tables(Dir, Tables),
         dict_delete(Defs),
         ?LOG(info, "Unloaded RADIUS tables: ~p", [Tables])
@@ -113,12 +113,12 @@ do_unload_tables(Dir, Tables) ->
 -spec prepare_tables(file:filename(), [table_name()]) -> {list(), list()}.
 prepare_tables(Dir, Tables) ->
     All = lists:flatmap(fun (Tab) ->
-    TabFile = filename:join(Dir, mapfile(Tab)),
-        case file:consult(TabFile) of
-            {ok, Res}       -> Res;
-            {error, _Error} -> throw({consult, TabFile})
-        end
-    end, Tables),
+                                TabFile = filename:join(Dir, mapfile(Tab)),
+                                case file:consult(TabFile) of
+                                    {ok, Res}       -> Res;
+                                    {error, _Error} -> throw({consult, TabFile})
+                                end
+                        end, Tables),
     lists:partition(fun({include, _}) -> true; (_) -> false end, All).
 
 dict_insert(Value) when is_list(Value) ->
@@ -135,8 +135,8 @@ dict_delete(Value) when is_tuple(Value) ->
 
 dict_lookup(Type, Id) ->
     try
-	persistent_term:get({?MODULE, Type, Id})
+        persistent_term:get({?MODULE, Type, Id})
     catch
-	error:badarg ->
-	    false
+        error:badarg ->
+            false
     end.

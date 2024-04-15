@@ -1,22 +1,22 @@
-% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
+%% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
 
-% Permission is hereby granted, free of charge, to any person obtaining a
-% copy of this software and associated documentation files (the "Software"),
-% to deal in the Software without restriction, including without limitation
-% the rights to use, copy, modify, merge, publish, distribute, sublicense,
-% and/or sell copies of the Software, and to permit persons to whom the
-% Software is furnished to do so, subject to the following conditions:
+%% Permission is hereby granted, free of charge, to any person obtaining a
+%% copy of this software and associated documentation files (the "Software"),
+%% to deal in the Software without restriction, including without limitation
+%% the rights to use, copy, modify, merge, publish, distribute, sublicense,
+%% and/or sell copies of the Software, and to permit persons to whom the
+%% Software is furnished to do so, subject to the following conditions:
 
-% The above copyright notice and this permission notice shall be included in
-% all copies or substantial portions of the Software.
+%% The above copyright notice and this permission notice shall be included in
+%% all copies or substantial portions of the Software.
 
-% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-% DEALINGS IN THE SOFTWARE.
+%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+%% DEALINGS IN THE SOFTWARE.
 
 -module(eradius_proxy_SUITE).
 -compile(export_all).
@@ -25,13 +25,13 @@
 -include("eradius_test.hrl").
 
 all() -> [
-    resolve_routes_test,
-    validate_arguments_test,
-    validate_options_test,
-    new_request_test,
-    get_key_test,
-    strip_test
-    ].
+          resolve_routes_test,
+          validate_arguments_test,
+          validate_options_test,
+          new_request_test,
+          get_key_test,
+          strip_test
+         ].
 
 resolve_routes_test(_) ->
     DefaultRoute = {eradius_test_handler:localhost(tuple), 1813, <<"secret">>},
@@ -42,12 +42,12 @@ resolve_routes_test(_) ->
     {ok, R2} = re:compile("test"),
     {ok, R3} = re:compile("^dev_.*"),
     Routes = [{R1, Prod}, {R2, Test, [{pool, test_pool}]}, {R3, Dev}],
-    % default
+    %% default
     ?equal({undefined, DefaultRoute}, eradius_proxy:resolve_routes(undefined, DefaultRoute, Routes,[])),
     ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user">>, DefaultRoute, Routes, [])),
     ?equal({"user@prod", Prod}, eradius_proxy:resolve_routes(<<"user@prod">>, DefaultRoute, Routes,[])),
     ?equal({"user@test", {Test, [{pool, test_pool}]}}, eradius_proxy:resolve_routes(<<"user@test">>, DefaultRoute, Routes,[])),
-    % strip
+    %% strip
     Opts = [{strip, true}],
     ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user">>, DefaultRoute, Routes, Opts)),
     ?equal({"user", Prod}, eradius_proxy:resolve_routes(<<"user@prod">>, DefaultRoute, Routes, Opts)),
@@ -55,11 +55,11 @@ resolve_routes_test(_) ->
     ?equal({"user", Dev}, eradius_proxy:resolve_routes(<<"user@dev_server">>, DefaultRoute, Routes, Opts)),
     ?equal({"user", DefaultRoute}, eradius_proxy:resolve_routes(<<"user@dev-server">>, DefaultRoute, Routes, Opts)),
 
-    % prefix
+    %% prefix
     Opts1 = [{type, prefix}, {separator, "/"}],
     ?equal({"user/example", DefaultRoute}, eradius_proxy:resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts1)),
     ?equal({"test/user", {Test, [{pool, test_pool}]}}, eradius_proxy:resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts1)),
-    % prefix and strip
+    %% prefix and strip
     Opts2 = Opts ++ Opts1,
     ?equal({"example", DefaultRoute}, eradius_proxy:resolve_routes(<<"user/example">>, DefaultRoute, Routes, Opts2)),
     ?equal({"user", {Test, [{pool, test_pool}]}}, eradius_proxy:resolve_routes(<<"test/user">>, DefaultRoute, Routes, Opts2)),
@@ -73,15 +73,15 @@ validate_arguments_test(_) ->
                            ]}
                  ],
     GoodOldConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}, test_pool},
-		     {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-		     {routes, [{"test_1", {eradius_test_handler:localhost(tuple), 1815, <<"secret1">>}, [{pool, test_pool}]},
-			       {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
-			      ]}
-		    ],
+                     {options, [{type, realm}, {strip, true}, {separator, "@"}]},
+                     {routes, [{"test_1", {eradius_test_handler:localhost(tuple), 1815, <<"secret1">>}, [{pool, test_pool}]},
+                               {"test_2", {<<"localhost">>, 1816, <<"secret2">>}}
+                              ]}
+                    ],
 
     BadConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},
                  {options, [{type, abc}]}
-                 ],
+                ],
     BadConfig1 = [{default_route, {eradius_test_handler:localhost(tuple), 0, <<"secret">>}}],
     BadConfig2 = [{default_route, {abc, 123, <<"secret">>}}],
     BadConfig3 = [{default_route, {eradius_test_handler:localhost(tuple), 1813, <<"secret">>}},

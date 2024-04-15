@@ -80,15 +80,15 @@ collect_metrics(_, {PromMetricType, Fun, Stats}) ->
 fetch_histogram(Name, Labels) ->
     try
         lists:flatten(lists:map(fun ({LabelsFromStat, Buckets, DurationUnit}) ->
-            case compare_labels(Labels, LabelsFromStat) of
-                true ->
-                    {Buckets1, Values} = lists:unzip(Buckets),
-                    Values1 = augment_counters(Values),
-                    Buckets2 = lists:zip(Buckets1, Values1),
-                    {Buckets2, LabelsFromStat, DurationUnit};
-                _ -> []
-            end
-        end, prometheus_histogram:values(default, Name)))
+                                        case compare_labels(Labels, LabelsFromStat) of
+                                            true ->
+                                                {Buckets1, Values} = lists:unzip(Buckets),
+                                                Values1 = augment_counters(Values),
+                                                Buckets2 = lists:zip(Buckets1, Values1),
+                                                {Buckets2, LabelsFromStat, DurationUnit};
+                                            _ -> []
+                                        end
+                                end, prometheus_histogram:values(default, Name)))
     catch _:_ -> [] end.
 
 fetch_counter(Name, Labels) ->
@@ -98,45 +98,45 @@ fetch_counter(Name, Labels) ->
 fetch_counter(uptime_milliseconds, Stat, Labels) ->
     {{ServerMetrics, _}, _, _} = Stat,
     lists:flatten(lists:map(fun (#server_counter{} = Cnt) ->
-        fetch_server_value(Labels, Cnt, fun () -> erlang:system_time(milli_seconds) - Cnt#server_counter.startTime end)
-    end, ServerMetrics));
+                                    fetch_server_value(Labels, Cnt, fun () -> erlang:system_time(milli_seconds) - Cnt#server_counter.startTime end)
+                            end, ServerMetrics));
 fetch_counter(since_last_reset_milliseconds, Stat, Labels) ->
     {{ServerMetrics, _}, _, _} = Stat,
     lists:flatten(lists:map(fun (#server_counter{} = Cnt) ->
-        fetch_server_value(Labels, Cnt, fun () -> erlang:system_time(milli_seconds) - Cnt#server_counter.resetTime end)
-    end, ServerMetrics));
+                                    fetch_server_value(Labels, Cnt, fun () -> erlang:system_time(milli_seconds) - Cnt#server_counter.resetTime end)
+                            end, ServerMetrics));
 fetch_counter(Name, Stat, Labels) ->
     case get_metric_info(Name, Stat) of
         {_, undefined, _} ->
             [];
         {Metrics, MetricIdx, RadiusMetricType} ->
             lists:flatten(lists:map(fun (Cnt) ->
-                  case get_labels_and_val(MetricIdx, {Cnt, RadiusMetricType}, {Name, Labels}) of
-                      {Value, LabelsFromStat} ->
-                          case compare_labels(Labels, LabelsFromStat) of
-                              true -> {Value, LabelsFromStat};
-                              _ -> []
-                          end;
-                      List ->
-                          lists:map(fun ({Value, LabelsFromStat}) ->
-                              case compare_labels(Labels, LabelsFromStat) of
-                                  true -> {Value, LabelsFromStat};
-                                  _ -> []
-                              end
-                          end, List)
-                  end
-            end, Metrics))
+                                            case get_labels_and_val(MetricIdx, {Cnt, RadiusMetricType}, {Name, Labels}) of
+                                                {Value, LabelsFromStat} ->
+                                                    case compare_labels(Labels, LabelsFromStat) of
+                                                        true -> {Value, LabelsFromStat};
+                                                        _ -> []
+                                                    end;
+                                                List ->
+                                                    lists:map(fun ({Value, LabelsFromStat}) ->
+                                                                      case compare_labels(Labels, LabelsFromStat) of
+                                                                          true -> {Value, LabelsFromStat};
+                                                                          _ -> []
+                                                                      end
+                                                              end, List)
+                                            end
+                                    end, Metrics))
     end.
 
 %% from prometheus.erl as prometheus_histogram:values/1 returns
 %% non-cumulative values
 augment_counters([Start | Counters]) ->
-  augment_counters(Counters, [Start], Start).
+    augment_counters(Counters, [Start], Start).
 
 augment_counters([], LAcc, _CAcc) ->
-  LAcc;
+    LAcc;
 augment_counters([Counter | Counters], LAcc, CAcc) ->
-  augment_counters(Counters, LAcc ++ [CAcc + Counter], CAcc + Counter).
+    augment_counters(Counters, LAcc ++ [CAcc + Counter], CAcc + Counter).
 
 build_metric(uptime_milliseconds, Type, Stat) ->
     {{ServerMetrics, _}, _, _} = Stat,
@@ -154,25 +154,25 @@ build_metric(MetricName, Type, Stat)
        MetricName =:= accounting_requests_total;
        MetricName =:= accounting_responses_total ->
     lists:flatten(lists:map(fun (AcctType) ->
-        case get_metric_info(MetricName, Stat) of
-            {_, undefined, _} ->
-                [];
-            {Metrics, MetricIdx, RadiusMetricType} ->
-                lists:map(fun (Cnt) ->
-                    {Value, Labels} = get_labels_and_val(MetricIdx, {Cnt, RadiusMetricType}, {MetricName, [{acct_type, AcctType}]}),
-                    metric(Type, Value, Labels)
-                end, Metrics)
-        end
-    end, [start, stop, update]));
+                                    case get_metric_info(MetricName, Stat) of
+                                        {_, undefined, _} ->
+                                            [];
+                                        {Metrics, MetricIdx, RadiusMetricType} ->
+                                            lists:map(fun (Cnt) ->
+                                                              {Value, Labels} = get_labels_and_val(MetricIdx, {Cnt, RadiusMetricType}, {MetricName, [{acct_type, AcctType}]}),
+                                                              metric(Type, Value, Labels)
+                                                      end, Metrics)
+                                    end
+                            end, [start, stop, update]));
 build_metric(MetricName, Type, Stat) ->
     case get_metric_info(MetricName, Stat) of
         {_, undefined, _} ->
             [];
         {Metrics, MetricIdx, RadiusMetricType} ->
             lists:flatten(lists:map(fun (Cnt) ->
-                {Value, Labels} = get_labels_and_val(MetricIdx, {Cnt, RadiusMetricType}, {}),
-                metric(Type, Value, Labels)
-            end, Metrics))
+                                            {Value, Labels} = get_labels_and_val(MetricIdx, {Cnt, RadiusMetricType}, {}),
+                                            metric(Type, Value, Labels)
+                                    end, Metrics))
     end.
 
 metric(_, [], []) -> undefined;
@@ -281,9 +281,9 @@ get_labels_and_val(_, {#nas_counter{} = Cnt, server}, {Name, Labels})
     case get_value(Name, Type, Cnt) of
         undefined ->
             lists:map(fun (AcctType) ->
-                ResLabels = get_labels(Cnt, ServerIP, ServerPort, NasId, NasIP),
-                {get_value(Name, AcctType, Cnt), [{acct_type, AcctType} | ResLabels]}
-            end, ?ACCT_TYPES);
+                              ResLabels = get_labels(Cnt, ServerIP, ServerPort, NasId, NasIP),
+                              {get_value(Name, AcctType, Cnt), [{acct_type, AcctType} | ResLabels]}
+                      end, ?ACCT_TYPES);
         Value ->
             ResLabels = get_labels(Cnt, ServerIP, ServerPort, NasId, NasIP),
             {Value, [{acct_type, Type} | ResLabels]}
@@ -299,16 +299,16 @@ get_labels_and_val(_, {#client_counter{} = Cnt, client}, {Name, Labels})
     case get_value(Name, Type, Cnt) of
         undefined ->
             lists:map(fun (AcctType) ->
-                ResLabels = get_labels(Cnt, ServerIP, ServerPort, ClientName, ClientIP),
-                {get_value(Name, AcctType, Cnt), [{acct_type, AcctType} | ResLabels]}
-            end, ?ACCT_TYPES);
+                              ResLabels = get_labels(Cnt, ServerIP, ServerPort, ClientName, ClientIP),
+                              {get_value(Name, AcctType, Cnt), [{acct_type, AcctType} | ResLabels]}
+                      end, ?ACCT_TYPES);
         Value ->
             ResLabels = get_labels(Cnt, ServerIP, ServerPort, ClientName, ClientIP),
             {Value, [{acct_type, Type} | ResLabels]}
     end;
 get_labels_and_val(MetricIdx, {#client_counter{} = Cnt, client}, _) ->
-   {{ClientName, ClientIP, _ClientPort}, {_, ServerIP, ServerPort}} = Cnt#client_counter.key,
-   {element(MetricIdx + 1, Cnt), get_labels(Cnt, ServerIP, ServerPort, ClientName, ClientIP)};
+    {{ClientName, ClientIP, _ClientPort}, {_, ServerIP, ServerPort}} = Cnt#client_counter.key,
+    {element(MetricIdx + 1, Cnt), get_labels(Cnt, ServerIP, ServerPort, ClientName, ClientIP)};
 get_labels_and_val(_, _, _) ->
     {[], []}.
 

@@ -1,22 +1,22 @@
-% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
+%% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
 
-% Permission is hereby granted, free of charge, to any person obtaining a
-% copy of this software and associated documentation files (the "Software"),
-% to deal in the Software without restriction, including without limitation
-% the rights to use, copy, modify, merge, publish, distribute, sublicense,
-% and/or sell copies of the Software, and to permit persons to whom the
-% Software is furnished to do so, subject to the following conditions:
+%% Permission is hereby granted, free of charge, to any person obtaining a
+%% copy of this software and associated documentation files (the "Software"),
+%% to deal in the Software without restriction, including without limitation
+%% the rights to use, copy, modify, merge, publish, distribute, sublicense,
+%% and/or sell copies of the Software, and to permit persons to whom the
+%% Software is furnished to do so, subject to the following conditions:
 
-% The above copyright notice and this permission notice shall be included in
-% all copies or substantial portions of the Software.
+%% The above copyright notice and this permission notice shall be included in
+%% all copies or substantial portions of the Software.
 
-% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-% DEALINGS IN THE SOFTWARE.
+%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+%% DEALINGS IN THE SOFTWARE.
 
 -module(eradius_logtest).
 
@@ -53,14 +53,14 @@ start() ->
                         ]},
               {session_nodes, [node()]},
               {root, [
-                       { {eradius_logtest, "root", [] }, [{"127.0.0.1/24", ?SECRET, [{nas_id, <<"Test_Nas_Id">>}]}] }
-              ]},
+                      { {eradius_logtest, "root", [] }, [{"127.0.0.1/24", ?SECRET, [{nas_id, <<"Test_Nas_Id">>}]}] }
+                     ]},
               {test, [
-                       { {eradius_logtest, "test", [] }, [{eradius_test_handler:localhost(ip), ?SECRET3, [{nas_id, <<"Test_Nas_Id_test">>}]}] }
-              ]},
+                      { {eradius_logtest, "test", [] }, [{eradius_test_handler:localhost(ip), ?SECRET3, [{nas_id, <<"Test_Nas_Id_test">>}]}] }
+                     ]},
               {proxy, [
                        { {eradius_proxy, "proxy", ProxyConfig }, [{eradius_test_handler:localhost(ip), ?SECRET2, [{nas_id, <<"Test_Nas_proxy">>}]}] }
-              ]}
+                      ]}
              ],
     [application:set_env(eradius, Key, Value) || {Key, Value} <- Config],
     {ok, _} = application:ensure_all_started(eradius),
@@ -92,7 +92,7 @@ radius_request(#radius_request{cmd = accreq}, _NasProp, _) ->
 validate_arguments(_Args) -> true.
 
 test_client() ->
-  test_client(request).
+    test_client(request).
 
 test_client(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
@@ -100,7 +100,7 @@ test_client(Command) ->
     send_request(eradius_test_handler:localhost(tuple), 1813, ?SECRET, Request).
 
 test_proxy() ->
-  test_proxy(request).
+    test_proxy(request).
 
 test_proxy(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
