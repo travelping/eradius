@@ -1,0 +1,2 @@
+-define(DEFAULT_RETRIES, 3).
+-define(DEFAULT_TIMEOUT, 5000).

@@ -8,7 +8,7 @@
 -behaviour(gen_server).
 
 %% API
--export([new/2, start_link/1, send_request/5, close/1]).
+-export([new/1, start_link/1, send_request/5, close/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -19,11 +19,11 @@
 %%%  API
 %%%=========================================================================
 
-new(Sup, SocketIP) ->
-    eradius_client_sup:new(Sup, SocketIP).
+new(Config) ->
+    eradius_client_socket_sup:new(Config).
 
-start_link(SocketIP) ->
-    gen_server:start_link(?MODULE, [SocketIP], []).
+start_link(Config) ->
+    gen_server:start_link(?MODULE, [Config], []).
 
 send_request(Socket, Peer, ReqId, Request, Timeout) ->
     try
@@ -44,17 +44,17 @@ close(Socket) ->
 %%% gen_server callbacks
 %%%===================================================================
 
-init([SocketIP]) ->
-    case SocketIP of
-        undefined ->
+init([#{family := Family, ip := IP, active_n := ActiveN,
+        recbuf := RecBuf, sndbuf := SndBuf} = _Config]) ->
+    case IP of
+        any ->
             ExtraOptions = [];
-        SocketIP when is_tuple(SocketIP) ->
-            ExtraOptions = [{ip, SocketIP}]
+        _ when is_tuple(IP) ->
+            ExtraOptions = [{ip, IP}]
     end,
-    ActiveN = application:get_env(eradius, active_n, 100),
-    RecBuf = application:get_env(eradius, recbuf, 8192),
-    SndBuf = application:get_env(eradius, sndbuf, 131072),
-    Opts = [{active, ActiveN}, binary, {recbuf, RecBuf}, {sndbuf, SndBuf} | ExtraOptions],
+
+    Opts = [{active, ActiveN}, binary, {recbuf, RecBuf}, {sndbuf, SndBuf},
+            Family | ExtraOptions],
     {ok, Socket} = gen_udp:open(0, Opts),
 
     State = #state{

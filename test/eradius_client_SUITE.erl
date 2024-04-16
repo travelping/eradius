@@ -100,8 +100,7 @@ end_per_testcase(_Test, Config) ->
 %% STUFF
 
 getSocketCount() ->
-    #{sup := Sup} = eradius_client:get_state(),
-    Counts = supervisor:count_children(Sup),
+    Counts = supervisor:count_children(eradius_client_socket_sup),
     proplists:get_value(active, Counts).
 
 testSocket(undefined) ->
@@ -133,6 +132,8 @@ meckStop() ->
 
 parse_ip(undefined) ->
     {ok, undefined};
+parse_ip(any) ->
+    {ok, any};
 parse_ip(Address) when is_list(Address) ->
     inet_parse:address(Address);
 parse_ip(T = {_, _, _, _}) ->
@@ -148,9 +149,9 @@ test(false, Msg) ->
     false.
 
 check(OldState, NewState = #{no_ports := P}, null, A) -> check(OldState, NewState, P, A);
-check(OldState, NewState = #{socket_ip := A}, P, null) -> check(OldState, NewState, P, A);
-check(#{sockets := OS, no_ports := _OP, idcounters := _OC, socket_ip := OA},
-      #{sockets := NS, no_ports := NP, idcounters := NC, socket_ip := NA},
+check(OldState, NewState = #{socket_id := {_, A}}, P, null) -> check(OldState, NewState, P, A);
+check(#{sockets := OS, no_ports := _OP, idcounters := _OC, socket_id := {_, OA}},
+      #{sockets := NS, no_ports := NP, idcounters := NC, socket_id := {_, NA}},
       P, A) ->
     {ok, PA} = parse_ip(A),
     test(PA == NA, "Adress not configured") and
@@ -181,9 +182,9 @@ send_request(_Config) ->
 
 send(FUN, Ports, Address) ->
     meckStart(),
-    OldState = eradius_client:get_state(),
+    OldState = eradius_client_mngr:get_state(),
     FUN(),
-    NewState = eradius_client:get_state(),
+    NewState = eradius_client_mngr:get_state(),
     true = check(OldState, NewState, Ports, Address),
     meckStop().
 
@@ -191,24 +192,23 @@ wanna_send(_Config) ->
     lists:map(fun(_) ->
                       IP = {rand:uniform(100), rand:uniform(100), rand:uniform(100), rand:uniform(100)},
                       Port = rand:uniform(100),
-                      MetricsInfo = {{undefined, undefined, undefined}, {undefined, undefined, undefined}},
-                      FUN = fun() -> gen_server:call(eradius_client, {wanna_send, {undefined, {IP, Port}}, MetricsInfo}) end,
+                      FUN = fun() -> eradius_client_mngr:wanna_send({undefined, {IP, Port}}) end,
                       send(FUN, null, null)
               end, lists:seq(1, 10)).
 
 %% socket shutdown is done asynchronous, the tests need to wait a bit for it to finish.
 reconf_address(_Config) ->
-    FUN = fun() -> eradius_client:reconfigure(), timer:sleep(100) end,
+    FUN = fun() -> eradius_client_mngr:reconfigure(), timer:sleep(100) end,
     application:set_env(eradius, client_ip, "7.13.23.42"),
     send(FUN, null, "7.13.23.42").
 
 reconf_ports_30(_Config) ->
-    FUN = fun() -> gen_server:call(eradius_client, reconfigure), timer:sleep(100) end,
+    FUN = fun() -> eradius_client_mngr:reconfigure(), timer:sleep(100) end,
     application:set_env(eradius, client_ports, 30),
     send(FUN, 30, null).
 
 reconf_ports_10(_Config) ->
-    FUN = fun() -> gen_server:call(eradius_client, reconfigure), timer:sleep(100) end,
+    FUN = fun() -> eradius_client_mngr:reconfigure(), timer:sleep(100) end,
     application:set_env(eradius, client_ports, 10),
     send(FUN, 10, null).
 
@@ -216,9 +216,9 @@ send_request_failover(_Config) ->
     ?equal(accept, eradius_test_handler:send_request_failover(?BAD_SERVER_IP)),
     {ok, Timeout} = application:get_env(eradius, unreachable_timeout),
     timer:sleep(Timeout * 1000),
-    ?equal([?BAD_SERVER_TUPLE], ets:lookup(eradius_client, ?BAD_SERVER_IP_ETS_KEY)),
+    ?equal([?BAD_SERVER_TUPLE], eradius_client_mngr:servers(?BAD_SERVER_IP_ETS_KEY)),
     ok.
 
 check_upstream_servers(_Config) ->
-    ?equal(?RADIUS_SERVERS, ets:tab2list(eradius_client)),
+    ?equal(?RADIUS_SERVERS, eradius_client_mngr:servers()),
     ok.

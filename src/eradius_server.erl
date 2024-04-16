@@ -305,17 +305,21 @@ handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, na
                  maps:from_list(eradius_log:collect_meta(Sender, Request))),
             eradius_log:write_request(Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
-        {bad_pdu, "Message-Authenticator Attribute is invalid" = Reason} ->
-            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
+        {bad_pdu, "Message-Authenticator Attribute is invalid"} ->
+            ?LOG(error, "~s INF: Message-Authenticator Attribute is invalid",
+                 [printable_peer(ServerIP, Port)]),
             {discard, bad_authenticator};
-        {bad_pdu, "Authenticator Attribute is invalid" = Reason} ->
-            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
+        {bad_pdu, "Authenticator Attribute is invalid"} ->
+            ?LOG(error, "~s INF: Authenticator Attribute is invalid",
+                 [printable_peer(ServerIP, Port)]),
             {discard, bad_authenticator};
-        {bad_pdu, "unknown request type" = Reason} ->
-            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
+        {bad_pdu, "unknown request type"} ->
+            ?LOG(error, "~s INF: unknown request type",
+                 [printable_peer(ServerIP, Port)]),
             {discard, unknown_req_type};
         {bad_pdu, Reason} ->
-            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
+            ?LOG(error, "~s INF: Could not decode the request, reason: ~s",
+                 [printable_peer(ServerIP, Port), Reason]),
             {discard, malformed}
     end.
 
