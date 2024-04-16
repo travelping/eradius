@@ -290,9 +290,9 @@ get_routes_info(HandlerOpts) ->
 
 put_default_route_to_pool(false, _) -> ok;
 put_default_route_to_pool({default_route, {Host, Port, _Secret}}, Retries) ->
-    eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+    eradius_client_mngr:store_radius_server_from_pool(Host, Port, Retries);
 put_default_route_to_pool({default_route, {Host, Port, _Secret}, _PoolName}, Retries) ->
-    eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+    eradius_client_mngr:store_radius_server_from_pool(Host, Port, Retries);
 put_default_route_to_pool(_, _) -> ok.
 
 put_routes_to_pool(false, _Retries) -> ok;
@@ -300,11 +300,11 @@ put_routes_to_pool({routes, Routes}, Retries) ->
     lists:foreach(fun (Route) ->
                           case Route of
                               {_RouteName, {Host, Port, _Secret}} ->
-                                  eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+                                  eradius_client_mngr:store_radius_server_from_pool(Host, Port, Retries);
                               {_RouteName, {Host, Port, _Secret}, _Pool} ->
-                                  eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+                                  eradius_client_mngr:store_radius_server_from_pool(Host, Port, Retries);
                               {Host, Port, _Secret, _Opts} ->
-                                  eradius_client:store_radius_server_from_pool(Host, Port, Retries);
+                                  eradius_client_mngr:store_radius_server_from_pool(Host, Port, Retries);
                               _ -> ok
                           end
                   end, Routes).
