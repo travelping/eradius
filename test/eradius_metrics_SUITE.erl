@@ -82,7 +82,7 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(_, Config) ->
-    eradius_client:init_server_status_metrics(),
+    eradius_client_mngr:init_server_status_metrics(),
     Config.
 
 %% tests

@@ -3,7 +3,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, new/2]).
+-export([start_link/1, new/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -14,16 +14,23 @@
 %%% API functions
 %%%===================================================================
 
--spec start_link() -> {ok, Pid :: pid()} |
+-spec start_link(Config :: eradius_client:client_config()) ->
+          {ok, Pid :: pid()} |
           {error, {already_started, Pid :: pid()}} |
           {error, {shutdown, term()}} |
           {error, term()} |
           ignore.
-start_link() ->
-    supervisor:start_link(?MODULE, []).
+start_link(Config) ->
+    supervisor:start_link(?MODULE, [Config]).
 
-new(Sup, SocketId) ->
-    supervisor:start_child(Sup, [SocketId]).
+new(Owner, SocketId) ->
+    Children = supervisor:which_children(Owner),
+    case lists:keyfind(eradius_client_socket_sup, 1, Children) of
+        {eradius_client_socket_sup, SupPid, _, _} when is_pid(SupPid) ->
+            supervisor:start_child(SupPid, [SocketId]);
+        _ ->
+            {error, dead}
+    end.
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -33,19 +40,26 @@ new(Sup, SocketId) ->
           {ok, {SupFlags :: supervisor:sup_flags(),
                 [ChildSpec :: supervisor:child_spec()]}} |
           ignore.
-init([]) ->
-    SupFlags = #{strategy => simple_one_for_one,
+init([Opts]) ->
+    SupFlags = #{strategy => one_for_one,
                  intensity => 5,
                  period => 10},
+    Client =
+        #{id => eradius_client,
+          start => {eradius_client, start_link, [self(), Opts]},
+          restart => permanent,
+          shutdown => 5000,
+          type => worker,
+          modules => [eradius_client]},
+    SocketSup =
+        #{id => eradius_client_socket_sup,
+          start => {eradius_client_socket_sup, start_link, []},
+          restart => permanent,
+          shutdown => 5000,
+          type => supervisor,
+          modules => [eradius_client_socket_sup]},
 
-    Child = #{id => eradius_client_socket,
-              start => {eradius_client_socket, start_link, []},
-              restart => transient,
-              shutdown => 5000,
-              type => worker,
-              modules => [eradius_client_socket]},
-
-    {ok, {SupFlags, [Child]}}.
+    {ok, {SupFlags, [Client, SocketSup]}}.
 
 %%%===================================================================
 %%% Internal functions
