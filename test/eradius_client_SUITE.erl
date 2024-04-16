@@ -23,6 +23,8 @@
 
 -include("test/eradius_test.hrl").
 
+-define(HUT_SOCKET, eradius_client_socket).
+
 -define(BAD_SERVER_IP, {eradius_test_handler:localhost(ip), 1820, "secret"}).
 -define(BAD_SERVER_INITIAL_RETRIES, 3).
 -define(BAD_SERVER_TUPLE_INITIAL, {{eradius_test_handler:localhost(tuple), 1820},
@@ -45,6 +47,7 @@
                          ?BAD_SERVER_TUPLE_INITIAL,
                          ?GOOD_SERVER_2_TUPLE]).
 
+-spec all() -> [ct_suite:ct_test_def(), ...].
 all() -> [
           send_request,
           wanna_send,
@@ -60,11 +63,10 @@ all() -> [
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(eradius),
-    startSocketCounter(),
+    logger:set_primary_config(level, debug),
     Config.
 
 end_per_suite(_Config) ->
-    stopSocketCounter(),
     application:stop(eradius),
     ok.
 
@@ -97,48 +99,15 @@ end_per_testcase(_Test, Config) ->
 
 %% STUFF
 
-socketCounter(Count) ->
-    receive
-        add         -> socketCounter(Count+1);
-        del         -> socketCounter(Count-1);
-        {get, PID}  -> PID ! {ok, Count}, socketCounter(Count);
-        stop        -> done
-    end.
-
-startSocketCounter() ->
-    register(socketCounter, spawn(?MODULE, socketCounter, [0])).
-
-stopSocketCounter() ->
-    socketCounter ! stop,
-    unregister(socketCounter).
-
-addSocket() -> socketCounter ! add.
-delSocket() -> socketCounter ! del.
-
 getSocketCount() ->
-    socketCounter ! {get, self()},
-    receive
-        {ok, Count} -> Count
-    end.
+    #{sup := Sup} = eradius_client:get_state(),
+    Counts = supervisor:count_children(Sup),
+    proplists:get_value(active, Counts).
 
-testSocket(undefined) -> true;
+testSocket(undefined) ->
+    true;
 testSocket(Pid) ->
-    Pid ! {status, self()},
-    receive
-        {ok, active}    -> false;
-        {ok, inactive}  -> true
-    after
-        50 -> true
-    end.
-
--record(state, {
-                socket_ip :: inet:ip_address(),
-                no_ports = 1 :: pos_integer(),
-                idcounters = maps:new() :: map(),
-                sockets = array:new() :: array:array(),
-                sup :: pid(),
-                subscribed_clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
-               }).
+    not is_process_alive(Pid).
 
 split(N, List) -> split2(N, [], List).
 
@@ -147,14 +116,17 @@ split2(_, List1, [])        -> {lists:reverse(List1), []};
 split2(N, List1, [L|List2]) -> split2(N-1, [L|List1], List2).
 
 meckStart() ->
-    ok = meck:new(eradius_client_socket),
-    ok = meck:expect(eradius_client_socket, start, fun(X, Y, Z) -> eradius_client_socket_test:start(X, Y, Z) end),
-    ok = meck:expect(eradius_client_socket, init, fun(X) -> eradius_client_socket_test:init(X) end),
-    ok = meck:expect(eradius_client_socket, handle_call, fun(X, Y, Z) -> eradius_client_socket_test:handle_call(X, Y, Z) end),
-    ok = meck:expect(eradius_client_socket, handle_cast, fun(X, Y) -> eradius_client_socket_test:handle_cast(X, Y) end),
-    ok = meck:expect(eradius_client_socket, handle_info, fun(X, Y) -> eradius_client_socket_test:handle_info(X, Y) end),
-    ok = meck:expect(eradius_client_socket, terminate, fun(X, Y) -> eradius_client_socket_test:terminate(X, Y) end),
-    ok = meck:expect(eradius_client_socket, code_change, fun(X, Y, Z) -> eradius_client_socket_test:code_change(X, Y, Z) end).
+    ok = meck:new(eradius_client_socket, [passthrough]),
+    ok = meck:expect(eradius_client_socket, init,
+                     fun(_) -> {ok, undefined} end),
+    ok = meck:expect(eradius_client_socket, handle_call,
+                     fun(_Request, _From, State) -> {noreply, State} end),
+    ok = meck:expect(eradius_client_socket, handle_cast,
+                     fun(close, State) -> {stop, normal, State};
+                        (_Request, State) -> {noreply, State} end),
+    ok = meck:expect(eradius_client_socket, handle_info,
+                     fun(_Info, State) -> {noreply, State} end),
+    ok.
 
 meckStop() ->
     ok = meck:unload(eradius_client_socket).
@@ -172,13 +144,13 @@ parse_ip(T = {_, _, _, _, _, _}) ->
 
 test(true, _Msg) -> true;
 test(false, Msg) ->
-    io:format(standard_error, "~s~n", [Msg]),
+    ct:pal("~s", [Msg]),
     false.
 
-check(OldState, NewState = #state{no_ports = P}, null, A) -> check(OldState, NewState, P, A);
-check(OldState, NewState = #state{socket_ip = A}, P, null) -> check(OldState, NewState, P, A);
-check(#state{sockets = OS, no_ports = _OP, idcounters = _OC, socket_ip = OA},
-      #state{sockets = NS, no_ports = NP, idcounters = NC, socket_ip = NA},
+check(OldState, NewState = #{no_ports := P}, null, A) -> check(OldState, NewState, P, A);
+check(OldState, NewState = #{socket_ip := A}, P, null) -> check(OldState, NewState, P, A);
+check(#{sockets := OS, no_ports := _OP, idcounters := _OC, socket_ip := OA},
+      #{sockets := NS, no_ports := NP, idcounters := NC, socket_ip := NA},
       P, A) ->
     {ok, PA} = parse_ip(A),
     test(PA == NA, "Adress not configured") and
@@ -209,9 +181,9 @@ send_request(_Config) ->
 
 send(FUN, Ports, Address) ->
     meckStart(),
-    {ok, OldState} = gen_server:call(eradius_client, debug),
+    OldState = eradius_client:get_state(),
     FUN(),
-    {ok, NewState} = gen_server:call(eradius_client, debug),
+    NewState = eradius_client:get_state(),
     true = check(OldState, NewState, Ports, Address),
     meckStop().
 
@@ -224,11 +196,9 @@ wanna_send(_Config) ->
                       send(FUN, null, null)
               end, lists:seq(1, 10)).
 
-%% I've catched some data races with `delSocket()' and `getSocketCount()' when
-%% `delSocket()' happens after `getSocketCount()' (because `delSocket()' is sent from another process).
-%% I don't know a better decision than add some delay before `getSocketCount()'
+%% socket shutdown is done asynchronous, the tests need to wait a bit for it to finish.
 reconf_address(_Config) ->
-    FUN = fun() -> gen_server:call(eradius_client, reconfigure), timer:sleep(100) end,
+    FUN = fun() -> eradius_client:reconfigure(), timer:sleep(100) end,
     application:set_env(eradius, client_ip, "7.13.23.42"),
     send(FUN, null, "7.13.23.42").
 

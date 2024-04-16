@@ -11,7 +11,9 @@
 %%   parameter. Changing it currently requires a restart. It can be given as a string or ip address tuple,
 %%   or the atom ``undefined'' (the default), which uses whatever address the OS selects.
 -module(eradius_client).
+
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
+
 %% internal
 -export([reconfigure/0, send_remote_request_loop/8, find_suitable_peer/1,
          restore_upstream_server/1, store_radius_server_from_pool/3,
@@ -21,6 +23,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -import(eradius_lib, [printable_peer/2]).
+
+-ifdef(TEST).
+-export([get_state/0]).
+-endif.
 
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -230,37 +236,48 @@ handle_failed_request(Request, {ServerIP, Port} = _FailedServer, UpstreamServers
     end.
 
 %% @private
+%% send_remote_request_loop/8
 send_remote_request_loop(ReplyPid, Socket, ReqId, Peer, EncRequest, Retries, Timeout, MetricsInfo) ->
     ReplyPid ! {self(), send_request_loop(Socket, ReqId, Peer, EncRequest, Retries, Timeout, MetricsInfo)}.
 
-send_request_loop(Socket, ReqId, Peer, Request = #radius_request{}, Retries, Timeout, undefined) ->
+%% send_remote_request_loop/7
+send_request_loop(Socket, ReqId, Peer, Request = #radius_request{},
+                  Retries, Timeout, undefined) ->
     send_request_loop(Socket, ReqId, Peer, Request, Retries, Timeout, eradius_lib:make_addr_info(Peer));
-send_request_loop(Socket, ReqId, Peer, Request, Retries, Timeout, MetricsInfo) ->
+send_request_loop(Socket, ReqId, Peer, Request,
+                  Retries, Timeout, MetricsInfo) ->
     {Authenticator, EncRequest} = eradius_lib:encode_request(Request),
-    SMon = erlang:monitor(process, Socket),
-    send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, Retries, MetricsInfo, Request#radius_request.secret, Request).
+    send_request_loop(Socket, Peer, ReqId, Authenticator, EncRequest,
+                      Timeout, Retries, MetricsInfo, Request#radius_request.secret, Request).
 
-send_request_loop(_Socket, SMon, _Peer, _ReqId, _Authenticator, _EncRequest, Timeout, 0, MetricsInfo, _Secret, Request) ->
+%% send_remote_request_loop/10
+send_request_loop(_Socket, _Peer, _ReqId, _Authenticator, _EncRequest,
+                  Timeout, 0, MetricsInfo, _Secret, Request) ->
     TS = erlang:convert_time_unit(Timeout, millisecond, native),
     update_client_request(timeout, MetricsInfo, TS, Request),
-    erlang:demonitor(SMon, [flush]),
     {error, timeout};
-send_request_loop(Socket, SMon, Peer = {_ServerName, {IP, Port}}, ReqId, Authenticator, EncRequest, Timeout, RetryN, MetricsInfo, Secret, Request) ->
-    Socket ! {self(), send_request, {IP, Port}, ReqId, EncRequest},
-    update_client_request(pending, MetricsInfo, 1, Request),
-    receive
-        {Socket, response, ReqId, Response} ->
-            update_client_request(pending, MetricsInfo, -1, Request),
+send_request_loop(Socket, Peer = {_ServerName, {IP, Port}}, ReqId, Authenticator, EncRequest,
+                  Timeout, RetryN, MetricsInfo, Secret, Request) ->
+    Result =
+        try
+            update_client_request(pending, MetricsInfo, 1, Request),
+            eradius_client_socket:send_request(Socket, {IP, Port}, ReqId, EncRequest, Timeout)
+        after
+            update_client_request(pending, MetricsInfo, -1, Request)
+        end,
+
+    case Result of
+        {response, ReqId, Response} ->
             {ok, Response, Secret, Authenticator};
-        {'DOWN', SMon, process, Socket, _} ->
+        {error, close} ->
             {error, socket_down};
-        {Socket, error, Error} ->
-            {error, Error}
-    after
-        Timeout ->
+        {error, timeout} ->
             TS = erlang:convert_time_unit(Timeout, millisecond, native),
             update_client_request(retransmission, MetricsInfo, TS, Request),
-            send_request_loop(Socket, SMon, Peer, ReqId, Authenticator, EncRequest, Timeout, RetryN - 1, MetricsInfo, Secret, Request)
+            send_request_loop(Socket, Peer, ReqId, Authenticator, EncRequest,
+                              Timeout, RetryN - 1, MetricsInfo, Secret, Request);
+        {error, _} = Error ->
+            Error
     end.
 
 %% @private
@@ -329,7 +346,7 @@ reconfigure() ->
 
 %% @private
 init([]) ->
-    {ok, Sup} = eradius_client_sup:start(),
+    {ok, Sup} = eradius_client_sup:start_link(),
     case configure(#state{socket_ip = null, sup = Sup}) of
         {error, Error}  -> {stop, Error};
         Else            -> Else
@@ -354,10 +371,6 @@ handle_call(reconfigure, _From, State) ->
         {error, Error}  -> {reply, Error, State};
         {ok, NState}    -> {reply, ok, NState}
     end;
-
-%% @private
-handle_call(debug, _From, State) ->
-    {reply, {ok, State}, State};
 
 %% @private
 handle_call(_OtherCall, _From, State) ->
@@ -401,6 +414,16 @@ configure(State) ->
             ?LOG(error, "Invalid RADIUS client IP (parsing failed): ~p", [ClientIP]),
             {error, {bad_client_ip, ClientIP}}
     end.
+
+-ifdef(TEST).
+
+get_state() ->
+    State = sys:get_state(?SERVER),
+    Keys = record_info(fields, state),
+    Values = tl(tuple_to_list(State)),
+    maps:from_list(lists:zip(Keys, Values)).
+
+-endif.
 
 %% private
 prepare_pools() ->
@@ -456,14 +479,14 @@ configure_address(State = #state{socket_ip = OAdd, sockets = Sockts}, NPorts, NA
             {ok, State#state{socket_ip = NAdd, no_ports = NPorts}};
         NAdd    ->
             configure_ports(State, NPorts);
-        _       ->
+        _ ->
             ?LOG(info, "Reopening RADIUS client sockets (client_ip changed to ~s)", [inet:ntoa(NAdd)]),
-            array:map(  fun(_PortIdx, Pid) ->
-                                case Pid of
-                                    undefined   -> done;
-                                    _           -> Pid ! close
-                                end
-                        end, Sockts),
+            array:map(
+              fun(_PortIdx, undefined) ->
+                      ok;
+                 (_PortIdx, Socket) ->
+                      eradius_client_socket:close(Socket)
+              end, Sockts),
             {ok, State#state{sockets = array:new(), socket_ip = NAdd, no_ports = NPorts}}
     end.
 
@@ -490,11 +513,8 @@ close_sockets(NPorts, Sockets) ->
             List = array:to_list(Sockets),
             {_, Rest} = lists:split(NPorts, List),
             lists:map(
-              fun(Pid) ->
-                      case Pid of
-                          undefined   -> done;
-                          _           -> Pid ! close
-                      end
+              fun(undefined) -> ok;
+                 (Socket) -> eradius_client_socket:close(Socket)
               end, Rest),
             array:resize(NPorts, Sockets)
     end.
@@ -516,18 +536,10 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
 find_socket_process(PortIdx, Sockets, SocketIP, Sup) ->
     case array:get(PortIdx, Sockets) of
         undefined ->
-            Res = supervisor:start_child(Sup, {PortIdx,
-                                               {eradius_client_socket, start, [SocketIP, self(), PortIdx]},
-                                               transient, brutal_kill, worker, [eradius_client_socket]}),
-            Pid = case Res of
-                      {ok, P} -> P;
-                      {error, already_present} ->
-                          {ok, P} = supervisor:restart_child(Sup, PortIdx),
-                          P
-                  end,
-            {Pid, array:set(PortIdx, Pid, Sockets)};
-        Pid when is_pid(Pid) ->
-            {Pid, Sockets}
+            {ok, Socket} = eradius_client_socket:new(Sup, SocketIP),
+            {Socket, array:set(PortIdx, Socket, Sockets)};
+        Socket ->
+            {Socket, Sockets}
     end.
 
 update_socket_process(PortIdx, Sockets, Pid) ->
