@@ -248,7 +248,7 @@ send_request_loop(Socket, Peer = {_ServerName, {IP, Port}}, ReqId, Authenticator
         end,
 
     case Result of
-        {response, ReqId, Response} ->
+        {ok, Response} ->
             {ok, Response, Secret, Authenticator};
         {error, close} ->
             {error, socket_down};
