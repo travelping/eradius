@@ -41,25 +41,25 @@
 
 start() ->
     application:load(eradius),
-    ProxyConfig = [{default_route, {eradius_test_handler:localhost(tuple), 1813, ?SECRET}},
+    ProxyConfig = [{default_route, {eradius_test_lib:localhost(tuple), 1813, ?SECRET}},
                    {options, [{type, realm}, {strip, true}, {separator, "@"}]},
-                   {routes, [{"test", {eradius_test_handler:localhost(tuple), 1815, ?SECRET3}}
+                   {routes, [{"test", {eradius_test_lib:localhost(tuple), 1815, ?SECRET3}}
                             ]}
                   ],
     Config = [{radius_callback, eradius_logtest},
-              {servers, [{root,  {eradius_test_handler:localhost(ip), [1812, 1813]}},
-                         {test,  {eradius_test_handler:localhost(ip), [1815]}},
-                         {proxy, {eradius_test_handler:localhost(ip), [11812, 11813]}}
+              {servers, [{root,  {eradius_test_lib:localhost(ip), [1812, 1813]}},
+                         {test,  {eradius_test_lib:localhost(ip), [1815]}},
+                         {proxy, {eradius_test_lib:localhost(ip), [11812, 11813]}}
                         ]},
               {session_nodes, [node()]},
               {root, [
                       { {eradius_logtest, "root", [] }, [{"127.0.0.1/24", ?SECRET, [{nas_id, <<"Test_Nas_Id">>}]}] }
                      ]},
               {test, [
-                      { {eradius_logtest, "test", [] }, [{eradius_test_handler:localhost(ip), ?SECRET3, [{nas_id, <<"Test_Nas_Id_test">>}]}] }
+                      { {eradius_logtest, "test", [] }, [{eradius_test_lib:localhost(ip), ?SECRET3, [{nas_id, <<"Test_Nas_Id_test">>}]}] }
                      ]},
               {proxy, [
-                       { {eradius_proxy, "proxy", ProxyConfig }, [{eradius_test_handler:localhost(ip), ?SECRET2, [{nas_id, <<"Test_Nas_proxy">>}]}] }
+                       { {eradius_proxy, "proxy", ProxyConfig }, [{eradius_test_lib:localhost(ip), ?SECRET2, [{nas_id, <<"Test_Nas_proxy">>}]}] }
                       ]}
              ],
     [application:set_env(eradius, Key, Value) || {Key, Value} <- Config],
@@ -97,20 +97,20 @@ test_client() ->
 test_client(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
     Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user")),
-    send_request(eradius_test_handler:localhost(tuple), 1813, ?SECRET, Request).
+    send_request(eradius_test_lib:localhost(tuple), 1813, ?SECRET, Request).
 
 test_proxy() ->
     test_proxy(request).
 
 test_proxy(Command) ->
     eradius_dict:load_tables([dictionary, dictionary_3gpp]),
-    send_request(eradius_test_handler:localhost(tuple), 11813, ?SECRET2, #radius_request{cmd = Command}),
+    send_request(eradius_test_lib:localhost(tuple), 11813, ?SECRET2, #radius_request{cmd = Command}),
     Request = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("proxy_test")),
-    send_request(eradius_test_handler:localhost(tuple), 11813, ?SECRET2, Request),
+    send_request(eradius_test_lib:localhost(tuple), 11813, ?SECRET2, Request),
     Request2 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@test")),
-    send_request(eradius_test_handler:localhost(tuple), 11813, ?SECRET2, Request2),
+    send_request(eradius_test_lib:localhost(tuple), 11813, ?SECRET2, Request2),
     Request3 = eradius_lib:set_attributes(#radius_request{cmd = Command, msg_hmac = true}, attrs("user@domain@test")),
-    send_request(eradius_test_handler:localhost(tuple), 11813, ?SECRET2, Request3).
+    send_request(eradius_test_lib:localhost(tuple), 11813, ?SECRET2, Request3).
 
 send_request(Ip, Port, Secret, Request) ->
     case eradius_client:send_request({Ip, Port, Secret}, Request) of
