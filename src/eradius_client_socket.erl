@@ -42,17 +42,8 @@ close(Socket) ->
 %%% gen_server callbacks
 %%%===================================================================
 
-init([#{family := Family, ip := IP, active_n := ActiveN,
-        recbuf := RecBuf, sndbuf := SndBuf} = _Config]) ->
-    case IP of
-        any ->
-            ExtraOptions = [];
-        _ when is_tuple(IP) ->
-            ExtraOptions = [{ip, IP}]
-    end,
-
-    Opts = [{active, ActiveN}, binary, {recbuf, RecBuf}, {sndbuf, SndBuf},
-            Family | ExtraOptions],
+init([#{family := Family, active_n := ActiveN} = Config]) ->
+    Opts = inet_opts(Config, [{active, ActiveN}, binary, Family]),
     {ok, Socket} = gen_udp:open(0, Opts),
 
     State = #state{
@@ -165,3 +156,15 @@ send_ip(inet6, {_, _, _, _,_, _, _, _} = IP) ->
     {ok, IP};
 send_ip(_, _) ->
     {error, eafnosupport}.
+
+inet_opts(Config, Opts0) ->
+    Opts =
+        maps:to_list(
+          maps:with([recbuf, sndbuf, ip,
+                     ipv6_v6only, netns, bind_to_device, read_packets], Config)) ++ Opts0,
+    case Config of
+        #{inet_backend := Backend} when Backend =:= inet; Backend =:= socket ->
+            [{inet_backend, Backend} | Opts];
+        _ ->
+            Opts
+    end.
