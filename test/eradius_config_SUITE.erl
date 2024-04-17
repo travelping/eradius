@@ -40,7 +40,7 @@ config_1(_Config) ->
     Conf = [{session_nodes, ['node1@host1', 'node2@host2']},
             {radius_callback, ?MODULE},
             {servers, [
-                       {root, {eradius_test_handler:localhost(ip), [1812, 1813]}}
+                       {root, {eradius_test_lib:localhost(ip), [1812, 1813]}}
                       ]},
             {root, [
                     { {"NAS1", [arg1, arg2]},
@@ -49,7 +49,7 @@ config_1(_Config) ->
                       [{{10, 18, 14, 3}, <<"secret2">>, [{nas_id, <<"name">>}]}]}
                    ]}],
     ok = apply_conf(Conf),
-    LocalHost = eradius_test_handler:localhost(tuple),
+    LocalHost = eradius_test_lib:localhost(tuple),
     ?match({ok, {?MODULE,[arg1,arg2]},
             #nas_prop{
                server_ip = LocalHost,
@@ -83,7 +83,7 @@ config_2(_Config) ->
                             ]
             },
             {servers, [
-                       {root, {eradius_test_handler:localhost(ip), [1812, 1813]}}
+                       {root, {eradius_test_lib:localhost(ip), [1812, 1813]}}
                       ]},
             {root, [
                     { {handler1, "NAS1", [arg1, arg2]},
@@ -93,7 +93,7 @@ config_2(_Config) ->
                       [ {"10.18.14.2", <<"secret2">>, [{group, "NodeGroup2"}]} ] }
                    ]}],
     ok = apply_conf(Conf),
-    LocalHost = eradius_test_handler:localhost(tuple),
+    LocalHost = eradius_test_lib:localhost(tuple),
     ?match({ok, {handler1,[arg1,arg2]},
             #nas_prop{
                server_ip = LocalHost,
@@ -146,7 +146,7 @@ test_validate_server(_Config) ->
     ok.
 
 config_nas_removing(_Config) ->
-    Conf = [{servers, [ {root, {eradius_test_handler:localhost(ip), [1812, 1813]}} ]},
+    Conf = [{servers, [ {root, {eradius_test_lib:localhost(ip), [1812, 1813]}} ]},
             {root, [ ]}],
     ok = apply_conf(Conf),
     ?match([], ets:tab2list(eradius_nas_tab)),
@@ -159,14 +159,14 @@ config_with_ranges(_Config) ->
                             ]
             },
             {servers, [
-                       {root, {eradius_test_handler:localhost(ip), [1812, 1813]}}
+                       {root, {eradius_test_lib:localhost(ip), [1812, 1813]}}
                       ]},
             {root, [
                     { {handler, "NAS", []},
                       [ {"10.18.14.2/30", <<"secret2">>, [{group, "NodeGroup"}]} ] }
                    ]}],
     ok = apply_conf(Conf),
-    LocalHost = eradius_test_handler:localhost(tuple),
+    LocalHost = eradius_test_lib:localhost(tuple),
     ?match({ok, {handler,[]},
             #nas_prop{
                server_ip = LocalHost,
