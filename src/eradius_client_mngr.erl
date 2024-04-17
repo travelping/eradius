@@ -31,6 +31,7 @@
         #{family => inet | inet6,
           ip => any | inet:ip_address(),
           active_n => once | non_neg_integer(),
+          no_ports => non_neg_integer(),
           recbuf => non_neg_integer(),
           sndbuf => non_neg_integer(),
           server_pool => [term()],
@@ -39,6 +40,7 @@
         #{family := inet | inet6,
           ip := any | inet:ip_address(),
           active_n := once | non_neg_integer(),
+          no_ports := non_neg_integer(),
           recbuf := non_neg_integer(),
           sndbuf := non_neg_integer(),
           servers_pool => [term()],
@@ -77,14 +79,12 @@ wanna_send(Node, Peer) ->
 
 %% @private
 reconfigure() ->
-    case client_config(default_client_opts()) of
-        {ok, Config} -> reconfigure(Config);
-        {error, _} = Error -> Error
-    end.
+    %% backward compatibility wrapper
+    (catch reconfigure(#{})).
 
 %% @doc reconfigure the Radius client
-reconfigure(Config) ->
-    catch gen_server:call(?SERVER, {reconfigure, Config}, ?RECONFIGURE_TIMEOUT).
+reconfigure(Opts) ->
+    gen_server:call(?SERVER, {reconfigure, Opts}, ?RECONFIGURE_TIMEOUT).
 
 request_failed(ServerIP, Port, Options) ->
     case ets:lookup(?MODULE, {ServerIP, Port}) of
@@ -154,7 +154,7 @@ servers(Key) ->
 %%%===================================================================
 
 init([#{no_ports := NPorts} = Config]) ->
-    ets:new(?MODULE, [public, named_table, ordered_set, {keypos, 1}, {write_concurrency,true}]),
+    ets:new(?MODULE, [public, named_table, ordered_set, {keypos, 1}, {write_concurrency, true}]),
     prepare_pools(Config),
 
     State = #state{
@@ -179,12 +179,18 @@ handle_call({wanna_send, Peer = {_PeerName, PeerSocket}}, _From,
     {reply, {SocketProcess, ReqId}, State};
 
 %% @private
-handle_call({reconfigure, Config}, _From, State0) ->
-    ets:delete_all_objects(?MODULE),
-    prepare_pools(Config),
+handle_call({reconfigure, Opts}, _From, #state{config = OConfig} = State0) ->
+    case client_config(maps:merge(OConfig, Opts)) of
+        {ok, Config} ->
+            ets:delete_all_objects(?MODULE),
+            prepare_pools(Config),
 
-    State = reconfigure_address(Config, State0),
-    {reply, ok, State};
+            State = reconfigure_address(Config, State0#state{config = Config}),
+            {reply, ok, State};
+
+        {error, _} = Error ->
+            {reply, Error, State0}
+    end;
 
 %% @private
 handle_call(_OtherCall, _From, State) ->
@@ -208,6 +214,11 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 socket_id(#{family := Family, ip := IP}) ->
     {Family, IP}.
+
+socket_id_str({_, IP}) when is_tuple(IP) ->
+    inet:ntoa(IP);
+socket_id_str({_, IP}) when is_atom(IP) ->
+    atom_to_list(IP).
 
 get_ip(Host) ->
     case inet:gethostbyname(Host) of
@@ -306,19 +317,22 @@ reconfigure_address(#{no_ports := NPorts} = Config,
     NAdd = socket_id(Config),
     case OAdd of
         NAdd    ->
-            reconfigure_ports(State, NPorts);
+            reconfigure_ports(NPorts, State);
         _ ->
-            ?LOG(info, "Reopening RADIUS client sockets (client_ip changed to ~s)", [inet:ntoa(NAdd)]),
+            ?LOG(info, "Reopening RADIUS client sockets (client_ip changed to ~s)",
+                 [socket_id_str(NAdd)]),
             array:map(
               fun(_PortIdx, undefined) ->
                       ok;
                  (_PortIdx, Socket) ->
                       eradius_client_socket:close(Socket)
               end, Sockts),
-            State#state{sockets = array:new(), socket_id = NAdd, no_ports = NPorts}
+            Counters = fix_counters(NPorts, State#state.idcounters),
+            State#state{sockets = array:new(), socket_id = NAdd,
+                        no_ports = NPorts, idcounters = Counters}
     end.
 
-reconfigure_ports(State = #state{no_ports = OPorts, sockets = Sockets}, NPorts) ->
+reconfigure_ports(NPorts, #state{no_ports = OPorts, sockets = Sockets} = State) ->
     if
         OPorts =< NPorts ->
             State#state{no_ports = NPorts};
