@@ -1,11 +1,14 @@
 %% @private
 %% @doc Supervisor for RADIUS server processes.
 -module(eradius_server_sup).
--export([start_link/0, start_instance/1, stop_instance/2, all/0]).
-
 -behaviour(supervisor).
+
+-export([start_link/0, start_instance/1, all/0]).
+
 -export([init/1]).
 -import(eradius_lib, [printable_peer/2]).
+
+-ignore_xref([start_link/0, all/0]).
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -16,20 +19,8 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_instance(_ServerAddr = {ServerName, {IP, Port}}) ->
-    ?LOG(info, "Starting RADIUS Listener at ~s", [printable_peer(IP, Port)]),
-    supervisor:start_child(?SERVER, [ServerName, IP, Port]);
-
-start_instance(_ServerAddr = {ServerName, {IP, Port, Opts}}) ->
-    ?LOG(info, "Starting RADIUS Listener at ~s", [printable_peer(IP, Port)]),
-    supervisor:start_child(?SERVER, [ServerName, IP, Port, Opts]).
-
-stop_instance(_ServerAddr = {_ServerName, {IP, Port}}, Pid) ->
-    ?LOG(info, "Stopping RADIUS Listener at ~s", [printable_peer(IP, Port)]),
-    supervisor:terminate_child(?SERVER, Pid);
-
-stop_instance(ServerAddr = {_ServerName, {_IP, _Port, _Opts}}, Pid) ->
-    stop_instance(ServerAddr, Pid).
+start_instance(Opts) ->
+    supervisor:start_child(?SERVER, Opts).
 
 all() ->
     lists:map(fun({_, Child, _, _}) -> Child end, supervisor:which_children(?SERVER)).

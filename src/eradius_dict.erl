@@ -1,11 +1,18 @@
-%% @private
+%% Copyright (c) 2002-2007, Martin Björklund and Torbjörn Törnkvist
+%% Copyright (c) 2011, Travelping GmbH <info@travelping.com>
+%%
+%% SPDX-License-Identifier: MIT
+%%
 %% @doc Dictionary server
 -module(eradius_dict).
--export([start_link/0, lookup/2, load_tables/1, load_tables/2, unload_tables/1, unload_tables/2]).
--export_type([attribute/0, attr_value/0, table_name/0, attribute_id/0, attribute_type/0,
-              attribute_prim_type/0, attribute_encryption/0, vendor_id/0, value_id/0]).
 
 -behaviour(gen_server).
+
+%% API
+-export([start_link/0, lookup/2, load_tables/1, load_tables/2, unload_tables/1, unload_tables/2]).
+-ignore_xref([start_link/0, unload_tables/1, unload_tables/2]).
+
+%% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include_lib("kernel/include/logger.hrl").
@@ -17,8 +24,9 @@
 -type attribute_id() :: pos_integer() | {vendor_id(), pos_integer()}.
 -type attribute_encryption() :: 'no' | 'scramble' | 'salt_crypt' | 'ascend'.
 -type attribute_type() :: attribute_prim_type() | {tagged, attribute_prim_type()}.
--type attribute_prim_type() :: 'string' | 'integer' | 'integer64' | 'ipaddr' | 'ipv6addr'
-                             | 'ipv6prefix' | 'date' | 'abinary' | 'binary' | 'octets'.
+-type attribute_prim_type() :: 'string' | 'integer' | 'integer24' | 'integer64' |
+                               'ipaddr' | 'ipv6addr' | 'ipv6prefix' |
+                               'date' | 'abinary' | 'binary' | 'octets'.
 
 -type value_id() :: {attribute_id(), pos_integer()}.
 -type vendor_id() :: pos_integer().
@@ -26,15 +34,23 @@
 -type attribute()  :: #attribute{} | attribute_id().
 -type attr_value() :: term().
 
+-export_type([attribute/0, attr_value/0, table_name/0, attribute_id/0, attribute_type/0,
+              attribute_prim_type/0, attribute_encryption/0, vendor_id/0, value_id/0]).
+
+
 -record(state, {}).
 
-%% ------------------------------------------------------------------------------------------
-%% -- API
+%%%=========================================================================
+%%%  API
+%%%=========================================================================
+
+%% @private
 -spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec lookup(attribute | vendor | value, attribute_id() | value_id() | vendor_id()) -> false | #attribute{} | #value{} | #vendor{}.
+-spec lookup(attribute | vendor | value, attribute_id() | value_id() | vendor_id()) ->
+          false | #attribute{} | #value{} | #vendor{}.
 lookup(Type, Id) ->
     dict_lookup(Type, Id).
 
@@ -54,13 +70,17 @@ unload_tables(Tables) when is_list(Tables) ->
 unload_tables(Dir, Tables) when is_list(Tables) ->
     gen_server:call(?SERVER, {unload_tables, Dir, Tables}, infinity).
 
-%% ------------------------------------------------------------------------------------------
-%% -- gen_server callbacks
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+
+%% @private
 init([]) ->
     {ok, InitialLoadTables} = application:get_env(eradius, tables),
     do_load_tables(code:priv_dir(eradius), InitialLoadTables),
     {ok, #state{}}.
 
+%% @private
 handle_call({load_tables, Dir, Tables}, _From, State) ->
     {reply, do_load_tables(Dir, Tables), State};
 
@@ -68,13 +88,23 @@ handle_call({unload_tables, Dir, Tables}, _From, State) ->
     {reply, do_unload_tables(Dir, Tables), State}.
 
 %% unused callbacks
+
+%% @private
 handle_cast(_Msg, State)   -> {noreply, State}.
+
+%% @private
 handle_info(_Info, State)  -> {noreply, State}.
+
+%% @private
 terminate(_Reason, _State) -> ok.
+
+%% @private
 code_change(_OldVsn, _NewVsn, _State) -> {ok, state}.
 
-%% ------------------------------------------------------------------------------------------
-%% -- gen_server callbacks
+%%%=========================================================================
+%%%  internal functions
+%%%=========================================================================
+
 mapfile(A) when is_atom(A) -> mapfile(atom_to_list(A));
 mapfile(A) when is_list(A) -> A ++ ".map".
 

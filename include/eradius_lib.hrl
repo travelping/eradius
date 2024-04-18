@@ -1,6 +1,6 @@
 -define(BYTE, integer-unit:8).    % Nice syntactic sugar...
 
--type server()  :: {inet:ip_address(), eradius_server:port_number()}.
+-type server()  :: {inet:ip_address(), inet:port_number()}.
 -type handler() :: {module(), term()}.
 -type server_name() :: atom().
 -type atom_name() :: atom().
@@ -125,32 +125,3 @@
                          invalidRequests   = 0 :: non_neg_integer(),
                          discardNoHandler  = 0 :: non_neg_integer()
                         }).
-
--record(nas_prop, {
-                   server_ip     :: inet:ip_address(),
-                   server_port   :: eradius_server:port_number(),
-                   nas_id        :: term(),
-                   nas_ip        :: inet:ip_address(),
-                   nas_port      :: eradius_server:port_number(),
-                   metrics_info  :: {atom_address(), atom_address()},
-                   secret        :: eradius_lib:secret(),
-                   handler_nodes = local :: list(atom()) | local
-                  }).
-
--record(radius_request, {
-                         reqid = 0        :: byte(),
-                         cmd = request    :: eradius_lib:command(),
-                         attrs = []       :: eradius_lib:attribute_list(),
-                         secret           :: eradius_lib:secret(),
-                         authenticator    :: eradius_lib:authenticator(),
-                         msg_hmac = false :: boolean(),
-                         eap_msg = <<>>   :: binary()
-                        }).
-
-
--record(decoder_state, {
-                        request_authenticator :: 'undefined' | binary(),
-                        attrs = []       :: eradius_lib:attribute_list(),
-                        hmac_pos         :: 'undefined' | non_neg_integer(),
-                        eap_msg = []     :: [binary()]
-                       }).
