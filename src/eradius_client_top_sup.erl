@@ -3,12 +3,12 @@
 %% SPDX-License-Identifier: MIT
 %%
 %% @private
--module(eradius_client_socket_sup).
+-module(eradius_client_top_sup).
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, new/2]).
+-export([start_link/0, start_client/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -27,10 +27,10 @@
           {error, term()} |
           ignore.
 start_link() ->
-    supervisor:start_link(?MODULE, []).
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-new(Supervisor, Config) ->
-    supervisor:start_child(Supervisor, [Config]).
+start_client(Opts) ->
+    supervisor:start_child(?SERVER, [Opts]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -42,17 +42,18 @@ new(Supervisor, Config) ->
           ignore.
 init([]) ->
     SupFlags = #{strategy => simple_one_for_one,
-                 intensity => 5,
-                 period => 10},
+                 intensity => 1,
+                 period => 5},
 
-    Child = #{id => eradius_client_socket,
-              start => {eradius_client_socket, start_link, []},
-              restart => transient,
-              shutdown => 5000,
-              type => worker,
-              modules => [eradius_client_socket]},
+    ClientSup =
+        #{id => eradius_client_sup,
+          start => {eradius_client_sup, start_link, []},
+          restart => permanent,
+          shutdown => 5000,
+          type => supervisor,
+          modules => [eradius_client_sup]},
 
-    {ok, {SupFlags, [Child]}}.
+    {ok, {SupFlags, [ClientSup]}}.
 
 %%%===================================================================
 %%% Internal functions

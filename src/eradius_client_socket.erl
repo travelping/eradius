@@ -3,15 +3,18 @@
 %%
 %% SPDX-License-Identifier: MIT
 %%
+%% @private
 -module(eradius_client_socket).
 
 -behaviour(gen_server).
 
 %% API
--export([new/1, start_link/1, send_request/5, close/1]).
+-export([new/2, start_link/1, send_request/5, close/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+
+-ignore_xref([start_link/1]).
 
 -record(state, {family, socket, active_n, pending, mode, counter}).
 
@@ -19,8 +22,8 @@
 %%%  API
 %%%=========================================================================
 
-new(Config) ->
-    eradius_client_socket_sup:new(Config).
+new(Supervisor, Config) ->
+    eradius_client_socket_sup:new(Supervisor, Config).
 
 start_link(Config) ->
     gen_server:start_link(?MODULE, [Config], []).
@@ -88,21 +91,17 @@ handle_info({udp_passive, _Socket}, #state{socket = Socket, active_n = ActiveN} 
 
 handle_info({udp, Socket, FromIP, FromPort, Response},
             State = #state{socket = Socket, mode = Mode}) ->
-    case eradius_lib:decode_request_id(Response) of
-        {ReqId, Response} ->
-            NState = request_done({FromIP, FromPort, ReqId}, {ok, Response}, State),
-            case Mode of
-                inactive when map_size(State#state.pending) =:= 0 ->
-                    {stop, normal, NState};
-                _ ->
-                    flow_control(NState),
-                    {noreply, NState}
-            end;
-        {bad_pdu, _} ->
-            %% discard reply because it was malformed
-            flow_control(State),
-            {noreply, State}
-    end;
+    flow_control(State),
+    NState =
+        case Response of
+            <<Header:20/binary, Body/binary>> ->
+                <<_, ReqId:8, _/binary>> = Header,
+                request_done({FromIP, FromPort, ReqId}, {ok, Header, Body}, State);
+            _ ->
+                %% discard reply because it was malformed
+                State
+        end,
+    noreply_or_stop(NState);
 
 handle_info({timeout, TRef, ReqKey}, #state{pending = Pending} = State) ->
     NState =
@@ -113,7 +112,7 @@ handle_info({timeout, TRef, ReqKey}, #state{pending = Pending} = State) ->
             _ ->
                 State
         end,
-    {noreply, NState};
+    noreply_or_stop(NState);
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -132,6 +131,12 @@ flow_control(#state{socket = Socket, active_n = once}) ->
     inet:setopts(Socket, [{active, once}]);
 flow_control(_) ->
     ok.
+
+noreply_or_stop(#state{pending = Pending, mode = inactive} = State)
+  when map_size(Pending) =:= 0 ->
+    {stop, normal, State};
+noreply_or_stop(State) ->
+    {noreply, State}.
 
 pending_request(ReqKey, From, Timeout,
                 #state{pending = Pending} = State) ->

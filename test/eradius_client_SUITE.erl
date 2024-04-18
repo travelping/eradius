@@ -14,31 +14,24 @@
 %%% Defines
 %%%===================================================================
 
+-define(SERVER, eradius_test_handler).
 -define(HUT_SOCKET, eradius_client_socket).
 
--define(BAD_SERVER_IP(Family),
-        {eradius_test_lib:localhost(Family, ip), 1820, "secret"}).
 -define(BAD_SERVER_INITIAL_RETRIES, 3).
 -define(BAD_SERVER_TUPLE_INITIAL(Family),
-        {{eradius_test_lib:localhost(Family, tuple), 1820},
-         ?BAD_SERVER_INITIAL_RETRIES,
-         ?BAD_SERVER_INITIAL_RETRIES}).
+        {{eradius_test_lib:localhost(Family, mapped), 1920},
+         ?BAD_SERVER_INITIAL_RETRIES, 0}).
 -define(BAD_SERVER_TUPLE(Family),
-        {{eradius_test_lib:localhost(Family, tuple), 1820},
-         ?BAD_SERVER_INITIAL_RETRIES - 1,
-         ?BAD_SERVER_INITIAL_RETRIES}).
--define(BAD_SERVER_IP_ETS_KEY(Family),
-        {eradius_test_lib:localhost(Family, tuple), 1820}).
+        {{eradius_test_lib:localhost(Family, mapped), 1920},
+         ?BAD_SERVER_INITIAL_RETRIES, 1}).
 
 -define(GOOD_SERVER_INITIAL_RETRIES, 3).
 -define(GOOD_SERVER_TUPLE(Family),
-        {{eradius_test_lib:localhost(Family, tuple), 1812},
-         ?GOOD_SERVER_INITIAL_RETRIES,
-         ?GOOD_SERVER_INITIAL_RETRIES}).
+        {{eradius_test_lib:localhost(Family, mapped), 1812},
+         ?GOOD_SERVER_INITIAL_RETRIES, 0}).
 -define(GOOD_SERVER_2_TUPLE(Family),
-        {{eradius_test_lib:badhost(Family), 1813},
-         ?GOOD_SERVER_INITIAL_RETRIES,
-         ?GOOD_SERVER_INITIAL_RETRIES}).
+        {{eradius_test_lib:localhost(Family, mapped), 1813},
+         ?GOOD_SERVER_INITIAL_RETRIES, 0}).
 
 -define(RADIUS_SERVERS(Family),
         [?GOOD_SERVER_TUPLE(Family),
@@ -91,13 +84,13 @@ init_per_group(inet, Config) ->
 init_per_group(socket, Config) ->
     [{inet_backend, socket} | Config];
 init_per_group(ipv6 = Group, Config) ->
-    {skip, "no IPv6 server support (yet)"};
-    %% case eradius_test_lib:has_ipv6_test_config() of
-    %%     true ->
-    %%         [{family, Group} | Config];
-    %%     _ ->
-    %%         {skip, "IPv6 test IPs not configured"}
-    %% end;
+    %% {skip, "no IPv6 server support (yet)"};
+    case eradius_test_lib:has_ipv6_test_config() of
+        true ->
+            [{family, Group} | Config];
+        _ ->
+            {skip, "IPv6 test IPs not configured"}
+    end;
 init_per_group(ipv4_mapped_ipv6 = Group, Config) ->
     case eradius_test_lib:has_ipv6_test_config() of
         true ->
@@ -117,17 +110,22 @@ start_handler(Config) ->
     Family = proplists:get_value(family, Config),
     eradius_test_handler:start(Backend, Family).
 
+start_client(Config) ->
+    Backend = proplists:get_value(inet_backend, Config, inet),
+    Family = proplists:get_value(family, Config),
+    eradius_test_handler:start_client(Backend, Family).
+
 init_per_testcase(send_request, Config) ->
-    application:stop(eradius),
     start_handler(Config),
     Config;
 init_per_testcase(send_request_failover, Config) ->
-    application:stop(eradius),
     start_handler(Config),
     Config;
 init_per_testcase(check_upstream_servers, Config) ->
-    application:stop(eradius),
     start_handler(Config),
+    Config;
+init_per_testcase(wanna_send, Config) ->
+    start_client(Config),
     Config;
 init_per_testcase(_Test, Config) ->
     Config.
@@ -147,8 +145,7 @@ end_per_testcase(_Test, Config) ->
 %% STUFF
 
 getSocketCount() ->
-    Counts = supervisor:count_children(eradius_client_socket_sup),
-    proplists:get_value(active, Counts).
+    eradius_client_mngr:get_socket_count(?SERVER).
 
 testSocket(undefined) ->
     true;
@@ -185,7 +182,7 @@ parse_ip(Address) when is_list(Address) ->
     inet_parse:address(Address);
 parse_ip(T = {_, _, _, _}) ->
     {ok, T};
-parse_ip(T = {_, _, _, _, _, _}) ->
+parse_ip(T = {_, _, _, _, _, _, _, _}) ->
     {ok, T}.
 
 %% CHECK
@@ -221,66 +218,73 @@ check(#{sockets := OS, no_ports := _OP, idcounters := _OC, socket_id := {_, OA}}
 
 %% TESTS
 
-send_request(Config) ->
-    Family = proplists:get_value(family, Config),
-    ?equal(accept,
-           eradius_test_handler:send_request(eradius_test_lib:localhost(Family, tuple))),
-    ?equal(accept,
-           eradius_test_handler:send_request(eradius_test_lib:localhost(Family, ip))),
-    ?equal(accept,
-           eradius_test_handler:send_request(eradius_test_lib:localhost(Family, string))),
-    ?equal(accept,
-           eradius_test_handler:send_request(eradius_test_lib:localhost(Family, binary))),
+send_request(_Config) ->
+    ?equal(accept, eradius_test_handler:send_request(one)),
     ok.
 
 send(FUN, Ports, Address) ->
     meckStart(),
-    OldState = eradius_client_mngr:get_state(),
+    OldState = eradius_client_mngr:get_state(?SERVER),
     FUN(),
-    NewState = eradius_client_mngr:get_state(),
+    NewState = eradius_client_mngr:get_state(?SERVER),
     true = check(OldState, NewState, Ports, Address),
     meckStop().
 
 wanna_send(_Config) ->
-    lists:map(fun(_) ->
-                      IP = {rand:uniform(100), rand:uniform(100), rand:uniform(100), rand:uniform(100)},
-                      Port = rand:uniform(100),
-                      FUN = fun() -> eradius_client_mngr:wanna_send({undefined, {IP, Port}}) end,
+    lists:map(fun(X) ->
+                      Server = binary_to_atom(<<(X+$A)>>),
+                      FUN = fun() -> eradius_client_mngr:wanna_send(?SERVER, [Server], []) end,
                       send(FUN, null, null)
-              end, lists:seq(1, 10)).
+              end, lists:seq(0, 9)).
 
-%% socket shutdown is done asynchronous, the tests need to wait a bit for it to finish.
-reconf_address(_Config) ->
+reconf_address(Config) ->
+    IP = case proplists:get_value(family, Config) of
+             ipv4 ->
+                 {7, 13, 23, 42};
+             ipv4_mapped_ipv6 ->
+                 inet:ipv4_mapped_ipv6_address({7, 13, 23, 42});
+             ipv6 ->
+                 {16#fd96, 16#dcd2, 16#efdb, 16#41c3, 0, 0, 16#100, 1}
+         end,
     FUN = fun() ->
-                  eradius_client_mngr:reconfigure(#{ip => "7.13.23.42"}),
+                  eradius_client_mngr:reconfigure(?SERVER, #{ip => IP}),
+                  %% socket shutdown is done asynchronous,
+                  %% the tests need to wait a bit for it to finish.
                   timer:sleep(100)
           end,
-    send(FUN, null, "7.13.23.42").
+    send(FUN, null, inet:ntoa(IP)).
 
 reconf_ports_30(_Config) ->
     FUN = fun() ->
-                  eradius_client_mngr:reconfigure(#{no_ports => 30}),
+                  eradius_client_mngr:reconfigure(?SERVER, #{no_ports => 30}),
+                  %% socket shutdown is done asynchronous,
+                  %% the tests need to wait a bit for it to finish.
                   timer:sleep(100)
           end,
     send(FUN, 30, null).
 
 reconf_ports_10(_Config) ->
     FUN = fun() ->
-                  eradius_client_mngr:reconfigure(#{no_ports => 10}),
+                  eradius_client_mngr:reconfigure(?SERVER, #{no_ports => 10}),
+                  %% socket shutdown is done asynchronous,
+                  %% the tests need to wait a bit for it to finish.
                   timer:sleep(100)
           end,
     send(FUN, 10, null).
 
 send_request_failover(Config) ->
     Family = proplists:get_value(family, Config),
-    ?equal(accept, eradius_test_handler:send_request_failover(?BAD_SERVER_IP(Family))),
+    ?equal(accept, eradius_test_handler:send_request_failover(bad)),
     {ok, Timeout} = application:get_env(eradius, unreachable_timeout),
     timer:sleep(Timeout * 1000),
-    ?equal([?BAD_SERVER_TUPLE(Family)],
-           eradius_client_mngr:servers(?BAD_SERVER_IP_ETS_KEY(Family))),
+    ?equal(?BAD_SERVER_TUPLE(Family), eradius_client_mngr:server(?SERVER, bad)),
     ok.
 
 check_upstream_servers(Config) ->
     Family = proplists:get_value(family, Config),
-    ?equal(lists:keysort(1, ?RADIUS_SERVERS(Family)), eradius_client_mngr:servers()),
+    Servers = eradius_client_mngr:servers(?SERVER),
+    ct:pal("Servers: ~p~nExpected: ~p", [Servers, ?RADIUS_SERVERS(Family)]),
+    ?equal(true,
+           sets:is_subset(sets:from_list(?RADIUS_SERVERS(Family)),
+                          sets:from_list(Servers))),
     ok.

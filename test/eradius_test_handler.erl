@@ -1,67 +1,81 @@
 -module(eradius_test_handler).
+-compile([export_all, nowarn_export_all]).
 
 -behaviour(eradius_server).
 
--export([start/0, start/2, stop/0, send_request/1, send_request_failover/1, radius_request/3]).
-
 -include("include/eradius_lib.hrl").
+
+-define(SERVER, ?MODULE).
 
 start() ->
     start(inet, ipv4).
 
 start(Backend, Family) ->
+    application:stop(eradius),
+
     application:load(eradius),
-    application:set_env(eradius, radius_callback, ?MODULE),
-    %% application:set_env(eradius, client_ip, eradius_test_lib:localhost(tuple)),
-    application:set_env(eradius, session_nodes, local),
-    application:set_env(eradius, one,
-                        [{{"ONE", []}, [{eradius_test_lib:localhost(ip), "secret"}]}]),
-    application:set_env(eradius, two,
-                        [{{"TWO", [{default_route, {{127, 0, 0, 2}, 1813, <<"secret">>}}]},
-                          [{eradius_test_lib:localhost(ip), "secret"}]}]),
-    application:set_env(eradius, servers,
-                        [{one, {eradius_test_lib:localhost(ip), [1812]}},
-                         {two, {eradius_test_lib:localhost(ip), [1813]}}]),
     application:set_env(eradius, unreachable_timeout, 2),
-    application:set_env(eradius, servers_pool,
-                        [{test_pool,
-                          [{eradius_test_lib:localhost(tuple), 1812, "secret"},
-                           %% fake upstream server for fail-over
-                           {eradius_test_lib:localhost(string), 1820, "secret"}]}]),
     application:ensure_all_started(eradius),
 
-    ClientConfig =
-        #{inet_backend => Backend,
-          family => eradius_test_lib:inet_family(Family),
-          ip => eradius_test_lib:localhost(Family, tuple),
-          servers => [{one, {eradius_test_lib:localhost(Family, ip), [1812]}},
-                      {two, {eradius_test_lib:localhost(Family, ip), [1813]}}],
-          servers_pool =>
-              [{test_pool, [{eradius_test_lib:localhost(Family, tuple), 1812, "secret"},
-                            %% fake upstream server for fail-over
-                            {eradius_test_lib:localhost(Family, string), 1820, "secret"}]}]
-         },
-    eradius_client_mngr:reconfigure(ClientConfig),
-    eradius:modules_ready([?MODULE]).
+    ok = start_client(Backend, Family),
+
+    SrvOpts = #{handler => {?MODULE, []},
+                clients => #{eradius_test_lib:localhost(Family, native) =>
+                                #{secret => "secret", client => <<"ONE">>}}},
+    {ok, _} = eradius:start_server(
+                eradius_test_lib:localhost(Family, native), 1812, SrvOpts#{server_name => one}),
+    {ok, _} = eradius:start_server(
+                eradius_test_lib:localhost(Family, native), 1813, SrvOpts#{server_name => two}),
+    ok.
 
 stop() ->
     application:stop(eradius),
-    application:unload(eradius),
-    application:start(eradius).
+    application:unload(eradius).
 
-send_request(IP) ->
-    {ok, R, A} = eradius_client:send_request({IP, 1812, "secret"}, #radius_request{cmd = request}, []),
-    #radius_request{cmd = Cmd} = eradius_lib:decode_request(R, <<"secret">>, A),
+start_client(Backend, Family) ->
+    application:ensure_all_started(eradius),
+
+    Clients =
+        maps:from_list(
+          [{binary_to_atom(<<(X+$A)>>), #{ip => eradius_test_lib:localhost(Family, native),
+                                          port => 1820 + X, secret => "secret"}}
+           || X <- lists:seq(0, 9)]),
+    ClientConfig =
+        #{inet_backend => Backend,
+          family => eradius_test_lib:inet_family(Family),
+          ip => eradius_test_lib:localhost(Family, native),
+          servers => Clients#{one => #{ip => eradius_test_lib:localhost(Family, native),
+                                       port => 1812,
+                                       secret => "secret",
+                                       retries => 3},
+                              two => #{ip => eradius_test_lib:localhost(Family, native),
+                                       port => 1813,
+                                       secret => "secret",
+                                       retries => 3},
+                              bad => #{ip => eradius_test_lib:localhost(Family, native),
+                                       port => 1920,
+                                       secret => "secret",
+                                       retries => 3},
+                              test_pool => [one, two]}
+         },
+    case eradius_client_mngr:start_client({local, ?SERVER}, ClientConfig) of
+        {ok, _} -> ok;
+        {error, {already_started, _}} -> ok
+    end.
+
+send_request(ServerName) ->
+    ct:pal("about to send"),
+    {{ok, Resp}, _Req} =
+        eradius_client:send_request(?SERVER, ServerName, eradius_req:new(request), #{}),
+    {_, #{cmd := Cmd}} = eradius_req:attrs(Resp),
     Cmd.
 
 send_request_failover(Server) ->
-    {ok, Pools} = application:get_env(eradius, servers_pool),
-    SecondaryServers = proplists:get_value(test_pool, Pools),
-    {ok, R, A} = eradius_client:send_request(Server, #radius_request{cmd = request}, [{retries, 1},
-                                                                                      {timeout, 2000},
-                                                                                      {failover, SecondaryServers}]),
-    #radius_request{cmd = Cmd} = eradius_lib:decode_request(R, <<"secret">>, A),
+    Opts = #{retries => 1, timeout => 2000, failover => [test_pool]},
+    {{ok, Resp}, _Req} =
+        eradius_client:send_request(?SERVER, Server, eradius_req:new(request), Opts),
+    {_, #{cmd := Cmd}} = eradius_req:attrs(Resp),
     Cmd.
 
-radius_request(#radius_request{cmd = request}, _Nasprop, _Args) ->
-    {reply, #radius_request{cmd = accept}}.
+radius_request(Req = #{cmd := request}, _Args) ->
+    {reply, eradius_req:set_attrs([], Req#{cmd := accept})}.

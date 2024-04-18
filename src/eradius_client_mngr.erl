@@ -3,149 +3,198 @@
 %%
 %% SPDX-License-Identifier: MIT
 %%
+%% @doc This module contains the management logic for the RADIUS client instances.
+%%   A counter is kept for every client instance in order to determine the next request id and sender port
+%%   for each outgoing request.
+%%
+%%   The client uses OS-assigned ports. The maximum number of open ports can be specified through the
+%%   ``client_ports'' option, it defaults to ``20''. The number of ports should not
+%%   be set too low. If ``N'' ports are opened, the maximum number of concurrent requests is ``N * 256''.
+%%
+%%   The IP address used to send requests is configured through the ``ip'' option.
+%%   Changing it currently requires a restart. It can be given as a string or ip address tuple,
+%%   or the atom ``any'' (the default), which uses whatever address the OS selects.
 -module(eradius_client_mngr).
+-feature(maybe_expr, enable).
 
 -behaviour(gen_server).
 
 %% external API
--export([start_link/0, wanna_send/1, wanna_send/2, reconfigure/0, reconfigure/1]).
+-export([start_client/1, start_client/2]).
 
 %% internal API
--export([store_radius_server_from_pool/3,
-         request_failed/3,
-         restore_upstream_server/1,
-         find_suitable_peer/1]).
+-export([start_link/2, start_link/3]).
+-export([wanna_send/3, reconfigure/2]).
+-export([request_failed/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -ifdef(TEST).
--export([get_state/0, servers/0, servers/1, init_server_status_metrics/0]).
+-export([get_state/1, servers/1, server/2, get_socket_count/1]).
+-ignore_xref([get_state/1, servers/1, server/2, get_socket_count/1]).
 -endif.
+
+-ignore_xref([start_client/1, start_client/2]).
+-ignore_xref([start_link/2, start_link/3]).
+-ignore_xref([reconfigure/2]).
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/inet.hrl").
 -include("eradius_internal.hrl").
 
+-type server_name() :: atom() | binary().
+%% Name of RADIUS server (or client).
+
+-type server_opts() :: #{ip := inet:ip_address(),
+                         port := inet:port_number(),
+                         secret := binary,
+                         retries => non_neg_integer(),
+                         timeout => non_neg_integer()}.
+%% Options to describe a RADIUS server.
+
+-type server() :: #{ip := inet:ip_address(),
+                    port := inet:port_number(),
+                    secret := binary,
+                    retries := non_neg_integer(),
+                    timeout := non_neg_integer(),
+                    failed := non_neg_integer()}.
+%% Options to describe a RADIUS server.
+%% Conceptually the same as `t:server_opts/0', except that may fields are mandatory.
+
+-type server_pool() :: [server_name()].
+%% List of server names that form a pool.
+
+-type servers() :: #{server_name() := server() | server_pool()}.
+%% Map of server and pool definition. Key is the name of the entry.
+
 -type client_opts() ::
-        #{family => inet | inet6,
+        #{name => server_name(),
+          servers :=  #{server_name() := server_opts() | server_pool()},
+          family => inet | inet6,
           ip => any | inet:ip_address(),
           active_n => once | non_neg_integer(),
           no_ports => non_neg_integer(),
           recbuf => non_neg_integer(),
           sndbuf => non_neg_integer(),
-          server_pool => [term()],
-          servers => [term()]}.
+          metrics_callback => eradius_req:metrics_callback()
+         }.
+%% Options to configure the RADIUS client.
+
 -type client_config() ::
-        #{family := inet | inet6,
+        #{name := server_name(),
+          servers := servers(),
+          family := inet | inet6,
           ip := any | inet:ip_address(),
           active_n := once | non_neg_integer(),
           no_ports := non_neg_integer(),
           recbuf := non_neg_integer(),
           sndbuf := non_neg_integer(),
-          servers_pool => [term()],
-          servers => [term()]}.
+          metrics_callback := 'undefined' | eradius_req:metrics_callback()
+         }.
+%% Options to configure the RADIUS client.
+%% Conceptually the same as `t:client_opts/0', except that may fields are mandatory.
 
--export_type([client_config/0]).
+-export_type([server_name/0, server_pool/0, servers/0, client_opts/0]).
 
 -record(state, {
+                owner :: pid(),
                 config :: client_config(),
+                client_name :: server_name(),
+                client_addr :: any | inet:ip_address(),
+                servers :: servers(),
                 socket_id :: {Family :: inet | inet6, IP :: any | inet:ip_address()},
                 no_ports = 1 :: pos_integer(),
                 idcounters = maps:new() :: map(),
                 sockets = array:new() :: array:array(),
-                clients = [] :: [{{integer(),integer(),integer(),integer()}, integer()}]
+                metrics_callback :: undefined | eradius_req:metrics_callback()
                }).
 
--define(SERVER, ?MODULE).
-
 -define(RECONFIGURE_TIMEOUT, 15000).
+-define(DEFAULT_MAX_RETRIES, 20).
+-define(DEFAULT_DOWN_TIME, 1000).
 
 %%%=========================================================================
 %%%  API
 %%%=========================================================================
 
-start_link() ->
-    case client_config(default_client_opts()) of
-        {ok, Config} -> gen_server:start_link({local, ?SERVER}, ?MODULE, [Config], []);
-        {error, _} = Error -> Error
+%% @doc Start a new RADIUS client that is managed by the eradius applications supervisor tree.
+-spec start_client(client_opts()) ->
+          {ok, pid()} | {error, supervisor:startchild_err()}.
+start_client(Opts) ->
+    eradius_client_top_sup:start_client([Opts]).
+
+%% @doc Start a new, named RADIUS client that is managed by the eradius applications supervisor tree.
+-spec start_client(server_name(), client_opts()) ->
+          {ok, pid()} | {error, supervisor:startchild_err()}.
+start_client(ServerName, Opts) ->
+    maybe
+        ok ?= check_already_started(ServerName),
+        eradius_client_top_sup:start_client([ServerName, Opts])
     end.
-
-wanna_send(Peer) ->
-    gen_server:call(?SERVER, {wanna_send, Peer}).
-
-wanna_send(Node, Peer) ->
-    gen_server:call({?SERVER, Node}, {wanna_send, Peer}).
 
 %% @private
-reconfigure() ->
-    %% backward compatibility wrapper
-    (catch reconfigure(#{})).
-
-%% @doc reconfigure the Radius client
-reconfigure(Opts) ->
-    gen_server:call(?SERVER, {reconfigure, Opts}, ?RECONFIGURE_TIMEOUT).
-
-request_failed(ServerIP, Port, Options) ->
-    case ets:lookup(?MODULE, {ServerIP, Port}) of
-        [{{ServerIP, Port}, Retries, InitialRetries}] ->
-            FailedTries = proplists:get_value(retries, Options, ?DEFAULT_RETRIES),
-            %% Mark the given RADIUS server as 'non-active' if there were more tries
-            %% than possible
-            if FailedTries >= Retries ->
-                    ets:delete(?MODULE, {ServerIP, Port}),
-                    Timeout = application:get_env(eradius, unreachable_timeout, 60),
-                    timer:apply_after(Timeout * 1000, ?MODULE, restore_upstream_server,
-                                      [{ServerIP, Port, InitialRetries, InitialRetries}]);
-               true ->
-                    %% RADIUS client tried to send a request to the {ServierIP, Port} RADIUS
-                    %% server. There were done FailedTries tries and all of them failed.
-                    %% So decrease amount of tries for the given RADIUS server that
-                    %% that will be used for next RADIUS requests towards this RADIUS server.
-                    ets:update_counter(?MODULE, {ServerIP, Port}, -FailedTries)
-            end;
-        [] ->
-            ok
+-spec start_link(pid(), client_opts()) ->
+          {ok, pid()} | {error, supervisor:startchild_err()}.
+start_link(Owner, Opts) ->
+    maybe
+        {ok, Config} ?= client_config(maps:merge(default_client_opts(), Opts)),
+        gen_server:start_link(?MODULE, [Owner, Config], [])
     end.
 
-restore_upstream_server({ServerIP, Port, Retries, InitialRetries}) ->
-    ets:insert(?MODULE, {{ServerIP, Port}, Retries, InitialRetries}).
+%% @private
+-spec start_link(pid(), server_name(), client_opts()) ->
+          {ok, pid()} | {error, supervisor:startchild_err()}.
+start_link(Owner, ServerName, Opts) ->
+    maybe
+        ok ?= check_already_started(ServerName),
+        {ok, Config} ?= client_config(maps:merge(default_client_opts(), Opts)),
+        gen_server:start_link(ServerName, ?MODULE, [Owner, Config], [])
+    end.
 
-find_suitable_peer(undefined) ->
-    [];
-find_suitable_peer([]) ->
-    [];
-find_suitable_peer([{Host, Port, Secret} | Pool]) when is_list(Host) ->
-    try
-        IP = get_ip(Host),
-        find_suitable_peer([{IP, Port, Secret} | Pool])
-    catch _:_ ->
-            %% can't resolve ip by some reasons, just ignore it
-            find_suitable_peer(Pool)
-    end;
-find_suitable_peer([{IP, Port, Secret} | Pool]) ->
-    case ets:lookup(?MODULE, {IP, Port}) of
-        [] ->
-            find_suitable_peer(Pool);
-        [{{IP, Port}, _Retries, _InitialRetries}] ->
-            {{IP, Port, Secret}, Pool}
-    end;
-find_suitable_peer([{IP, Port, Secret, _Opts} | Pool]) ->
-    find_suitable_peer([{IP, Port, Secret} | Pool]).
+%% @private
+wanna_send(Server, Peer, Tried) ->
+    gen_server:call(Server, {wanna_send, Peer, Tried}).
+
+%% @private
+request_failed(Server, Peer) ->
+    gen_server:call(Server, {failed, Peer}).
+
+%% @doc reconfigure the Radius client
+reconfigure(ServerRef, Opts) ->
+    gen_server:call(ServerRef, {reconfigure, Opts}, ?RECONFIGURE_TIMEOUT).
 
 -ifdef(TEST).
 
-get_state() ->
-    State = sys:get_state(?SERVER),
+get_state(ServerRef) ->
+    State = sys:get_state(ServerRef),
     Keys = record_info(fields, state),
     Values = tl(tuple_to_list(State)),
     maps:from_list(lists:zip(Keys, Values)).
 
-servers() ->
-    ets:tab2list(?MODULE).
+get_socket_count(ServerRef) ->
+    #state{owner = Owner} = sys:get_state(ServerRef),
+    {ok, SockSup} = eradius_client_sup:socket_supervisor(Owner),
+    Counts = supervisor:count_children(SockSup),
+    proplists:get_value(active, Counts).
 
-servers(Key) ->
-    ets:lookup(?MODULE, Key).
+servers(ServerRef) ->
+    #state{servers = Servers} = sys:get_state(ServerRef),
+    maps:fold(
+      fun(_, #{ip := IP, port := Port, retries := Retries, failed := Failed} = _, M)
+            when Failed < Retries ->
+              [{{IP, Port}, Retries, Failed} | M];
+         (_, _, M) -> M
+      end, [], Servers).
+
+server(ServerRef, Key) ->
+    #state{servers = Servers} = sys:get_state(ServerRef),
+    case Servers of
+        #{Key := #{ip := IP, port := Port, retries := Retries, failed := Failed}} ->
+            {{IP, Port}, Retries, Failed};
+        _ ->
+            undefined
+    end.
 
 -endif.
 
@@ -153,38 +202,70 @@ servers(Key) ->
 %%% gen_server callbacks
 %%%===================================================================
 
-init([#{no_ports := NPorts} = Config]) ->
-    ets:new(?MODULE, [public, named_table, ordered_set, {keypos, 1}, {write_concurrency, true}]),
-    prepare_pools(Config),
-
+%% @private
+init([Owner, #{name := ClientName, servers := Servers,
+               ip := IP, no_ports := NPorts,
+               metrics_callback := MetricsCallback} = Config]) ->
+    process_flag(trap_exit, true),
+    ?LOG(info, "Starting RADIUS client"),
     State = #state{
+               client_name = ClientName,
+               client_addr = IP,
+               owner = Owner,
                config = Config,
+               servers = Servers,
                socket_id = socket_id(Config),
-               no_ports = NPorts},
+               no_ports = NPorts,
+               metrics_callback = MetricsCallback
+              },
     {ok, State}.
 
 %% @private
-handle_call({wanna_send, Peer = {_PeerName, PeerSocket}}, _From,
-            #state{config = Config,
-                   no_ports = NoPorts, idcounters = IdCounters,
-                   sockets = Sockets, clients = Clients} = State0) ->
-    {PortIdx, ReqId, NewIdCounters} = next_port_and_req_id(PeerSocket, NoPorts, IdCounters),
-    {SocketProcess, NewSockets} = find_socket_process(PortIdx, Sockets, Config),
-    State1 = State0#state{idcounters = NewIdCounters, sockets = NewSockets},
-    State =
-        case lists:member(Peer, Clients) of
-            false -> State1#state{clients = [Peer | Clients]};
-            true  -> State1
+handle_call({wanna_send, Candidates, Tried}, _From,
+            #state{
+               client_name = ClientName,
+               client_addr = ClientAddr,
+               servers = Servers,
+               no_ports = NoPorts, idcounters = IdCounters,
+               sockets = Sockets,
+               metrics_callback = MetricsCallback} = State0) ->
+    case select_server(Candidates, Tried, Servers) of
+        {ok, {ServerName, #{ip := IP, port := Port} = Server}} ->
+            ServerAddr = {IP, Port},
+            {PortIdx, ReqId, NewIdCounters} =
+                next_port_and_req_id(ServerAddr, NoPorts, IdCounters),
+            {SocketProcess, NewSockets} = find_socket_process(PortIdx, Sockets, State0),
+            State = State0#state{idcounters = NewIdCounters, sockets = NewSockets},
+            ReqInfo =
+                #{server => ServerName, server_addr => ServerAddr,
+                  client => ClientName, client_addr => ClientAddr,
+                  metrics_callback => MetricsCallback},
+            Reply = {ok, {SocketProcess, ReqId, ServerName, Server, ReqInfo}},
+            {reply, Reply, State};
+        {error, _} = Error ->
+            {reply, Error, State0}
+    end;
+
+handle_call({failed, Peer}, _From, #state{servers = Servers0} = State0) ->
+    Servers =
+        case Servers0 of
+            #{Peer := #{retries := Retries, failed := Failed} = Server}
+              when Failed < Retries ->
+                Servers0#{Peer := Server#{failed := Failed + 1}};
+            #{Peer := #{retries := Retries, failed := Failed} = Server}
+              when Failed =:= Retries ->
+                erlang:start_timer(?DEFAULT_DOWN_TIME, self(), {reset, Peer}),
+                Servers0#{Peer := Server#{failed := Failed + 1}};
+            _ ->
+                Servers0
         end,
-    {reply, {SocketProcess, ReqId}, State};
+    State = State0#state{servers = Servers},
+    {reply, ok, State};
 
 %% @private
 handle_call({reconfigure, Opts}, _From, #state{config = OConfig} = State0) ->
     case client_config(maps:merge(OConfig, Opts)) of
         {ok, Config} ->
-            ets:delete_all_objects(?MODULE),
-            prepare_pools(Config),
-
             State = reconfigure_address(Config, State0#state{config = Config}),
             {reply, ok, State};
 
@@ -199,11 +280,25 @@ handle_call(_OtherCall, _From, State) ->
 %% @private
 handle_cast(_Msg, State) -> {noreply, State}.
 
+%% @private
+handle_info({timeout, _, {reset, Peer}}, #state{servers = Servers0} = State0) ->
+    Servers =
+        case Servers0 of
+            #{Peer := Server} ->
+                Servers0#{Peer := Server#{failed := 0}};
+            _ ->
+                Servers0
+        end,
+    State = State0#state{servers = Servers},
+    {noreply, State};
+
 handle_info(_Info, State) ->
-    {noreply, State}.
+   {noreply, State}.
 
 %% @private
-terminate(_Reason, _State) -> ok.
+terminate(Reason, _State) ->
+    ?LOG(info, "RADIUS client stopped with ~p", [Reason]),
+    ok.
 
 %% @private
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
@@ -211,6 +306,20 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%%=========================================================================
 %%%  internal functions
 %%%=========================================================================
+
+check_already_started(Name) ->
+    case where(Name) of
+        Pid when is_pid(Pid) ->
+            {error, {already_started, Pid}};
+        undefined ->
+            ok
+    end.
+
+where({global, Name}) -> global:whereis_name(Name);
+where({via, Module, Name}) -> Module:whereis_name(Name);
+where({local, Name})  -> whereis(Name);
+where(ServerName) ->
+    error(badarg, [ServerName]).
 
 socket_id(#{family := Family, ip := IP}) ->
     {Family, IP}.
@@ -220,97 +329,117 @@ socket_id_str({_, IP}) when is_tuple(IP) ->
 socket_id_str({_, IP}) when is_atom(IP) ->
     atom_to_list(IP).
 
-get_ip(Host) ->
-    case inet:gethostbyname(Host) of
-        {ok, #hostent{h_addrtype = inet, h_addr_list = [IP]}} ->
-            IP;
-        {ok, #hostent{h_addrtype = inet, h_addr_list = [_ | _] = IPs}} ->
-            Index = rand:uniform(length(IPs)),
-            lists:nth(Index, IPs);
-        _ -> error(badarg)
-    end.
-
 %% @private
--spec default_client_opts() -> client_opts().
 default_client_opts() ->
-    #{ip => application:get_env(eradius, client_ip, any),
-      no_ports => application:get_env(eradius, client_ports, 10),
-      active_n => application:get_env(eradius, active_n, 100),
-      recbuf => application:get_env(eradius, recbuf, 8192),
-      sndbuf => application:get_env(eradius, sndbuf, 131072),
-      servers_pool => application:get_env(eradius, servers_pool, []),
-      servers => application:get_env(eradius, servers, [])
+    #{family => inet6,
+      ip => any,
+      no_ports => 10,
+      active_n => 100,
+      recbuf => 8192,
+      sndbuf => 131072,
+      metrics_callback => undefined
      }.
 
+socket_ip(inet, {_, _, _, _} = IP) ->
+    IP;
+socket_ip(inet6, {_, _, _, _} = IP) ->
+    inet:ipv4_mapped_ipv6_address(IP);
+socket_ip(inet6, {_, _, _, _,_, _, _, _} = IP) ->
+    IP.
+
+select_server(Candidates, Tried, Servers) ->
+    case select_servers(Candidates, Servers, []) -- Tried of
+        [] ->
+            {error, no_active_servers};
+        PL ->
+            N = rand:uniform(length(PL)),
+            ServerName =  lists:nth(N, PL),
+            {ok, {ServerName, maps:get(ServerName, Servers)}}
+    end.
+
+select_servers([], _Servers, Selected) ->
+    Selected;
+select_servers([Candidate|More], Servers, Selected) ->
+    case Servers of
+        #{Candidate := [_|_] = Pool} ->
+            select_servers(More, Servers, select_servers(Pool, Servers, Selected));
+        #{Candidate := #{retries := Retries, failed := Failed}}
+          when Failed < Retries ->
+            select_servers(More, Servers, [Candidate | Selected]);
+        _ ->
+            select_servers(More, Servers, Selected)
+    end.
 
 -spec client_config(client_opts()) -> {ok, client_config()} | {error, _}.
-client_config(#{ip := IP} = Opts) when is_atom(IP) ->
-    {ok, Opts#{family => inet6, ip := any}};
-client_config(#{ip := {_, _, _, _}} = Opts)  ->
-    {ok, Opts#{family => inet}};
-client_config(#{ip := {_, _, _, _, _, _, _, _}} = Opts) ->
-    {ok, Opts#{family => inet6}};
-client_config(#{ip := Address} = Opts) when is_list(Address) ->
+client_config_ip(#{ip := IP} = Opts) when is_atom(IP) ->
+    {ok, Opts#{ip := any}};
+client_config_ip(#{family := Family, ip := IP} = Opts) when is_tuple(IP) ->
+    {ok, Opts#{ip := socket_ip(Family, IP)}};
+client_config_ip(#{ip := Address} = Opts) when is_list(Address) ->
     case inet_parse:address(Address) of
-        {ok, {_, _, _, _} = IP} ->
-            {ok, Opts#{family => inet, ip => IP}};
-        {ok, {_, _, _, _, _, _, _, _} = IP} ->
-            {ok, Opts#{family => inet6, ip => IP}};
+        {ok, IP} ->
+            client_config_ip(Opts#{ip => IP});
         _ ->
             ?LOG(error, "Invalid RADIUS client IP (parsing failed): ~p", [Address]),
             {error, {bad_client_ip, Address}}
     end.
 
-%% private
-prepare_pools(#{servers_pool := PoolList, servers := ServerList}) ->
-    lists:foreach(fun({_PoolName, Servers}) -> prepare_pool(Servers) end, PoolList),
-    lists:foreach(fun(Server) -> store_upstream_servers(Server) end, ServerList),
-    init_server_status_metrics().
+client_config_servers(none, _, Servers) ->
+    {ok, Servers};
+client_config_servers({ServerName, #{ip := IP, port := _, secret := _} = SIn, Next},
+                      #{family := Family} = Opts, Servers) ->
+    Server = SIn#{ip := socket_ip(Family, IP),
+                  retries => maps:get(retries, SIn, ?DEFAULT_MAX_RETRIES),
+                  failed => 0},
+    client_config_servers(maps:next(Next), Opts, Servers#{ServerName => Server});
+client_config_servers({ServerPoolName, [_|_] = Pool, Next},
+                      #{servers := CfgServers} = Opts, Servers) ->
+    HasAll = lists:all(fun(SrvId) -> is_map_key(SrvId, CfgServers) end, Pool),
+    case HasAll of
+        true -> client_config_servers(maps:next(Next), Opts, Servers#{ServerPoolName => Pool});
+        false -> {error, {server_definition_missing, Pool}}
+    end;
+client_config_servers({ServerName, _, _}, _, _) ->
+    {error, {mandatory_opts_missing, ServerName}}.
 
-prepare_pool([]) -> ok;
-prepare_pool([{Addr, Port, _, Opts} | Servers]) ->
-    Retries = proplists:get_value(retries, Opts, ?DEFAULT_RETRIES),
-    store_radius_server_from_pool(Addr, Port, Retries),
-    prepare_pool(Servers);
-prepare_pool([{Addr, Port, _} | Servers]) ->
-    store_radius_server_from_pool(Addr, Port, ?DEFAULT_RETRIES),
-    prepare_pool(Servers).
+client_config_servers(#{servers := Servers} = Opts) ->
+    maybe
+        {ok, NewServers} ?=
+            client_config_servers(maps:next(maps:iterator(Servers)), Opts, #{}),
+        {ok, Opts#{servers := NewServers}}
+    end.
 
-store_upstream_servers({Server, _}) ->
-    store_upstream_servers(Server);
-store_upstream_servers({Server, _, _}) ->
-    store_upstream_servers(Server);
-store_upstream_servers(Server) ->
-    %% TBD: move proxy config into the proxy logic...
+client_config_name(#{name := _} = Opts) ->
+    {ok, Opts};
+client_config_name(#{netdev := NetDev} = Opts) ->
+    client_config_name([$%, NetDev], Opts);
+client_config_name(#{netns := NetNS} = Opts) ->
+    client_config_name([$@, NetNS], Opts);
+client_config_name(Opts) ->
+    client_config_name([], Opts).
 
-    HandlerDefinitions = application:get_env(eradius, Server, []),
-    UpdatePoolFn = fun (HandlerOpts) ->
-                           {DefaultRoute, Routes, Retries} = eradius_proxy:get_routes_info(HandlerOpts),
-                           eradius_proxy:put_default_route_to_pool(DefaultRoute, Retries),
-                           eradius_proxy:put_routes_to_pool(Routes, Retries)
-                   end,
-    lists:foreach(fun (HandlerDefinition) ->
-                          case HandlerDefinition of
-                              {{_, []}, _} ->             ok;
-                              {{_, _, []}, _} ->          ok;
-                              {{_, HandlerOpts}, _} ->    UpdatePoolFn(HandlerOpts);
-                              {{_, _, HandlerOpts}, _} -> UpdatePoolFn(HandlerOpts);
-                              _HandlerDefinition ->       ok
-                          end
-                  end,
-                  HandlerDefinitions).
+client_config_name(Tag, #{family := inet6, ip := IP, ipv6_v6only := true} = Opts)
+  when IP =:= any; IP =:= {0, 0, 0, 0, 0, 0, 0, 0} ->
+    client_config_name("*", Tag, Opts);
+client_config_name(Tag, #{family := inet6, ip := any} = Opts) ->
+     client_config_name("[::]", Tag, Opts);
+client_config_name(Tag, #{family := inet, ip := any} = Opts) ->
+     client_config_name("[0.0.0.0]", Tag, Opts);
+client_config_name(Tag, #{family := inet6, ip := IP} = Opts) ->
+     client_config_name([$[, inet:ntoa(IP), $]], Tag, Opts);
+client_config_name(Tag, #{family := inet, ip := IP} = Opts) ->
+     client_config_name(inet:ntoa(IP), Tag, Opts).
 
-%% private
-store_radius_server_from_pool(Addr, Port, Retries)
-  when is_tuple(Addr), is_integer(Port), is_integer(Retries) ->
-    ets:insert(?MODULE, {{Addr, Port}, Retries, Retries});
-store_radius_server_from_pool(Addr, Port, Retries)
-  when is_list(Addr), is_integer(Port), is_integer(Retries) ->
-    IP = get_ip(Addr),
-    ets:insert(?MODULE, {{IP, Port}, Retries, Retries});
-store_radius_server_from_pool(Addr, Port, Retries) ->
-    ?LOG(error, "bad RADIUS upstream server specified in RADIUS servers pool configuration ~p", [{Addr, Port, Retries}]),
-    error(badarg).
+client_config_name(IP, Tag,  Opts) ->
+    {ok, Opts#{name => iolist_to_binary([IP, Tag])}}.
+
+client_config(Opts0) ->
+    maybe
+        {ok, Opts1} ?= client_config_ip(Opts0),
+        {ok, Opts2} ?= client_config_servers(Opts1),
+        {ok, Opts} ?= client_config_name(Opts2),
+        {ok, Opts#{metrics_callback => maps:get(metrics_callback, Opts0, undefined)}}
+    end.
 
 reconfigure_address(#{no_ports := NPorts} = Config,
                     #state{socket_id = OAdd, sockets = Sockts} = State) ->
@@ -375,25 +504,12 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
     NewCounters = Counters#{Peer => {NextPortIdx, NextReqId}},
     {NextPortIdx, NextReqId, NewCounters}.
 
-find_socket_process(PortIdx, Sockets, Config) ->
+find_socket_process(PortIdx, Sockets, #state{owner = Owner, config = Config}) ->
     case array:get(PortIdx, Sockets) of
         undefined ->
-            {ok, Socket} = eradius_client_socket:new(Config),
+            {ok, Supervisor} = eradius_client_sup:socket_supervisor(Owner),
+            {ok, Socket} = eradius_client_socket:new(Supervisor, Config),
             {Socket, array:set(PortIdx, Socket, Sockets)};
         Socket ->
             {Socket, Sockets}
-    end.
-
-%% @private
-init_server_status_metrics() ->
-    case application:get_env(eradius, server_status_metrics_enabled, false) of
-        false ->
-            ok;
-        true ->
-            %% That will be called at eradius startup and we must be sure that prometheus
-            %% application already started if server status metrics supposed to be used
-            application:ensure_all_started(prometheus),
-            ets:foldl(fun ({{Addr, Port}, _, _}, _Acc) ->
-                              eradius_counter:set_boolean_metric(server_status, [Addr, Port], false)
-                      end, [], ?MODULE)
     end.

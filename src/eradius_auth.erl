@@ -1,15 +1,32 @@
+%% Copyright (c) 2002-2007, Martin Björklund and Torbjörn Törnkvist
+%% Copyright (c) 2011, Travelping GmbH <info@travelping.com>
+%%
+%% SPDX-License-Identifier: MIT
+%%
+
 %% @doc user authentication helper functions
 -module(eradius_auth).
+
 -export([check_password/2]).
 -export([pap/2, chap/3, ms_chap/3, ms_chap_v2/4]).
 -export([des_key_from_hash/1, nt_password_hash/1, challenge_response/2,
          ascii_to_unicode/1]).
 
+-ignore_xref([check_password/2]).
+-ignore_xref([pap/2, chap/3, ms_chap/3, ms_chap_v2/4]).
+-ignore_xref([des_key_from_hash/1, nt_password_hash/1, challenge_response/2,
+              ascii_to_unicode/1]).
+
 -ifdef(TEST).
 -export([nt_hash/1, v2_generate_nt_response/4, mppe_get_master_key/2,
          mppe_generate_session_keys/3, mppe_get_asymetric_send_start_key/2,
          v2_generate_authenticator_response/5]).
+-ignore_xref([nt_hash/1, v2_generate_nt_response/4, mppe_get_master_key/2,
+              mppe_generate_session_keys/3, mppe_get_asymetric_send_start_key/2,
+              v2_generate_authenticator_response/5]).
 -endif.
+
+-dialyzer({nowarn_function, [mppe_generate_session_keys/3]}).
 
 -include("eradius_lib.hrl").
 -include("eradius_dict.hrl").
@@ -21,9 +38,10 @@
 
 %% @doc check the request password using all available authentication mechanisms.
 %%    Tries CHAP, then MS-CHAP, then MS-CHAPv2, finally PAP.
--spec check_password(binary(), #radius_request{}) -> 
-          false | {boolean(), eradius_lib:attribute_list()}.
-check_password(Password, Req = #radius_request{authenticator = Authenticator, attrs = AVPs}) ->
+-spec check_password(binary(), eradius_req:req()) ->
+          false | {boolean(), eradius_req:attribute_list()}.
+check_password(Password, #{authenticator := Authenticator, is_valid := true} = Req) ->
+    {AVPs, _} = eradius_req:attrs(Req),
     case lookup_auth_attrs(AVPs) of
         {false, Chap_pass, false, false, false, false} ->
             {chap(Password, Chap_pass, Authenticator), []};
@@ -32,12 +50,12 @@ check_password(Password, Req = #radius_request{authenticator = Authenticator, at
         {false, _, _, Challenge, Response, false} when Challenge =/= false, Response =/= false ->
             ms_chap(Password, Challenge, Response);
         {false, _, _, Challenge, false, Response} when Challenge =/= false, Response =/= false ->
-            Username = eradius_lib:get_attr(Req, ?User_Name),
+            Username = eradius_req:attr(?User_Name, Req),
             ms_chap_v2(Username, Password, Challenge, Response);
         {ReqPassword, _, _, _, _, _} when ReqPassword =/= false ->
             {pap(Password, ReqPassword), []};
         {_, _, _, _, _, _} ->
-            {false, []}
+            false
     end.
 
 %% composite lookup function, retrieve User_Password, CHAP_Password and CHAP_Challenge at once
@@ -59,7 +77,8 @@ lookup_auth_attrs(Attrs, [{#attribute{id = ?MS_CHAP2_Response}, Val}|T]) ->
 
 lookup_auth_attrs(Attrs, [{{_,_} = Id, Val}|T]) ->
     %% fallback for undecoded AVPs
-    lookup_auth_attrs(Attrs, [{#attribute{id = Id}, Val}|T]);
+    %%  init name field to make dialyzer happy
+    lookup_auth_attrs(Attrs, [{#attribute{id = Id, name = ""}, Val}|T]);
 lookup_auth_attrs(Attrs, [_|T]) ->
     lookup_auth_attrs(Attrs, T);
 lookup_auth_attrs(Attrs, []) ->
@@ -181,29 +200,34 @@ lm_password_hash(Password) ->
     << (des_hash(Key1))/binary, (des_hash(Key2))/binary >>.
 
 %% @doc MS-CHAP authentication
--spec ms_chap(binary(), binary(), binary()) -> false | {true, eradius_lib:attribute_list()}.
-ms_chap(Passwd, Challenge, <<_Ident:1/binary, Flags:1/integer-unit:8, LMResponse:24/binary, NTResponse:24/binary>>) ->
+-spec ms_chap(binary(), binary(), binary()) -> {boolean(), eradius_req:attribute_list()}.
+ms_chap(Passwd, Challenge,
+        <<_Ident:1/binary, Flags:1/integer-unit:8, LMResponse:24/binary, NTResponse:24/binary>>) ->
     LmPasswdHash = lm_password_hash(Passwd),
     NtPasswdHash = nt_password_hash(Passwd),
 
-    Resp1 = if
-                Flags == 1; NTResponse =/= << 0:24/unit:8 >> ->
+    Resp1 = case Flags of
+                1 when NTResponse =/= << 0:24/unit:8 >> ->
                     NTResponse =:= challenge_response(Challenge, NtPasswdHash);
-                true ->
+                _ ->
                     false
             end,
-    Resp2 = if
-                Resp1 == false ->
+    Resp2 = case Resp1 of
+                false ->
                     LMResponse =:= challenge_response(Challenge, LmPasswdHash);
-                Resp1 ->
+                _ ->
                     Resp1
             end,
-
-    Resp2 andalso {true, ms_chap_attrs(LmPasswdHash, NtPasswdHash)}.
+    case Resp2 of
+        false -> {false, []};
+        true  -> {true, ms_chap_attrs(LmPasswdHash, NtPasswdHash)}
+    end.
 
 %% @doc MS-CHAP-V2 authentication
--spec ms_chap_v2(binary(), binary(), binary(), binary()) -> false | {true, eradius_lib:attribute_list()}.
-ms_chap_v2(UserName, Passwd, AuthenticatorChallenge, <<Ident:1/binary, _Flags:1/binary, PeerChallenge:16/binary, _Reserved:8/binary, Response/binary>>) ->
+-spec ms_chap_v2(binary(), binary(), binary(), binary()) ->
+          {boolean(), eradius_req:attribute_list()}.
+ms_chap_v2(UserName, Passwd, AuthenticatorChallenge,
+           <<Ident:1/binary, _Flags:1/binary, PeerChallenge:16/binary, _Reserved:8/binary, Response/binary>>) ->
     PasswdHash = nt_password_hash(Passwd),
     ExpectedResponse = v2_generate_nt_response(AuthenticatorChallenge, PeerChallenge, UserName, PasswdHash),
 
@@ -211,7 +235,7 @@ ms_chap_v2(UserName, Passwd, AuthenticatorChallenge, <<Ident:1/binary, _Flags:1/
         ExpectedResponse == Response ->
             {true, ms_chap_v2_attrs(UserName, PasswdHash, AuthenticatorChallenge, Ident, PeerChallenge, Response)};
         true ->
-            false
+            {false, []}
     end.
 
 %% @doc calculate MS-CHAP response attributes
