@@ -8,32 +8,38 @@
 %% -- gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-ignore_xref([start/0, lookup_type/1, register_type/2, unregister_type/1]).
+-ignore_xref([decode/1, encode/3, decode_eap_type/2, encode_eap_type/1]).
+
 -behaviour(gen_server).
 
--define(NAME, ?MODULE).
+-define(SERVER, ?MODULE).
 
 %% ------------------------------------------------------------------------------------------
 %% -- API
 start() ->
-    gen_server:start({local, ?NAME}, ?MODULE, []).
+    gen_server:start({local, ?SERVER}, ?MODULE, [], []).
 
 %% @doc lookup the handler module for an extended EAP type
 lookup_type(Type) ->
-    ets:lookup(?NAME, Type).
+    case ets:lookup(?SERVER, Type) of
+        [{Type, Module}] -> {ok, Module};
+        _ -> false
+    end.
 
 %% @doc register the handler module for an extended EAP type
 register_type(Type, Module) ->
-    gen_server:call(?NAME, {register, Type, Module}).
+    gen_server:call(?SERVER, {register, Type, Module}).
 
 %% @doc unregister the handler module for an extended EAP type
 unregister_type(Type) ->
-    gen_server:call(?NAME, {unregister, Type}).
+    gen_server:call(?SERVER, {unregister, Type}).
 
 %% ------------------------------------------------------------------------------------------
 %% -- gen_server callbacks
 %% @private
 init([]) ->
-    Table = ets:new(?NAME, [ordered_set, protected, named_table, {read_concurrency, true}]),
+    Table = ets:new(?SERVER, [ordered_set, protected, named_table, {read_concurrency, true}]),
     {ok, Table}.
 
 %% @private
@@ -61,23 +67,23 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 decode(<<Code:8, Id:8, Len:16, Rest/binary>>) ->
     DataLen = Len - 4,
     case Rest of
-	<<Data:DataLen/bytes, _/binary>> ->
-	    do_decode_payload(code(Code), Id, Data);
-	_ ->
-	    {error, invalid_length}
+        <<Data:DataLen/bytes, _/binary>> ->
+            do_decode_payload(code(Code), Id, Data);
+        _ ->
+            {error, invalid_length}
     end.
 
 %% @doc endecode a EPA message
 encode(Code, Id, Msg) ->
     Data = encode_payload(Code, Msg),
     Len = size(Data) + 4,
-    <<Code:8, Id:8, Len:16, Data/binary>>.
+    <<(code(Code)):8, Id:8, Len:16, Data/binary>>.
 
 do_decode_payload(Code, Id, Data) ->
     try
-	decode_payload(Code, Id, Data)
+        decode_payload(Code, Id, Data)
     catch
-	_ -> {error, invalid_payload}
+        _ -> {error, invalid_payload}
     end.
 
 decode_payload(Code, Id, <<Type:8, TypeData/binary>>)
@@ -87,9 +93,9 @@ decode_payload(Code, Id, <<Type:8, TypeData/binary>>)
 decode_payload(Code, Id, Data)
   when Code == success; Code == failure ->
     case Data of
-	<<>> -> {ok, {Code, Id}};
-	_ ->    {error, invalid_length}
-	  end.
+        <<>> -> {ok, {Code, Id}};
+        _ ->    {error, invalid_length}
+    end.
 
 %% @doc EAP decoder functions for RFC-3784 types
 
@@ -130,11 +136,11 @@ decode_eap_type({0, 3}, Data) ->
     {nak_ext, [{Vendor,Type} || <<_T:8, Vendor:24, Type:32>> <= Data]};
 
 decode_eap_type(Type, Data) ->
-	case lookup_type(Type) of
-	    [Module] ->
-		Module:decode_eap_type(Type, Data);
-	    _ -> {Type, Data}
-	end.
+    case lookup_type(Type) of
+        {ok, Module} ->
+            Module:decode_eap_type(Type, Data);
+        _ -> {Type, Data}
+    end.
 
 encode_payload(Code, Msg)
   when Code == request; Code == response ->
@@ -173,7 +179,7 @@ encode_eap_type({otp, Data})
 %%    6       Generic Token Card (GTC)
 encode_eap_type({gtc, Data})
   when is_binary(Data) ->
-    <<6:8, Data>>;
+    <<6:8, Data/binary>>;
 
 %%  254       Expanded Types
 encode_eap_type({{Vendor, Type}, Data})
@@ -192,7 +198,7 @@ encode_eap_type({nak_ext, Data})
 
 encode_eap_type(Msg)
   when is_tuple(Msg) ->
-    [Module] = lookup_type(element(1, Msg)),
+    {ok, Module} = lookup_type(element(1, Msg)),
     Module:encode_eap_type(Msg).
 
 code(1) -> request;
@@ -206,4 +212,3 @@ code(success) ->  3;
 code(failure) ->  4;
 
 code(_) -> error.
-

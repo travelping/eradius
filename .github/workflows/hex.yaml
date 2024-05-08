@@ -7,9 +7,9 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     container:
-      image: erlang:23.2.5.0-alpine
+      image: erlang:26.2-alpine
     steps:
     - name: Prepare
       run: |
@@ -17,7 +17,7 @@ jobs:
            apk --no-cache upgrade
            apk --no-cache add gcc git libc-dev libc-utils libgcc linux-headers make bash \
                               musl-dev musl-utils ncurses-dev pcre2 pkgconf scanelf wget zlib
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: work around for permission issue
       run: |
            git config --global --add safe.directory /__w/eradius/eradius
@@ -25,5 +25,5 @@ jobs:
       env:
         HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
       run: |
-           rebar3 edoc
+           rebar3 ex_doc
            rebar3 hex publish -r hexpm --yes

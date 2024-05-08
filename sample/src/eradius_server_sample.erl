@@ -32,12 +32,12 @@ test() ->
 
 do_test(Count) ->
     Tasks = [run_task(fun() ->
-                        Port = erlang:phash2(self(), 1) + 1812, % 1812, 1813
-                        {ok, R, A} = eradius_client:send_request({{127,0,0,1}, Port, "secret"}, 
-                                                                 #radius_request{cmd = request}, []),
-                        #radius_request{} = eradius_lib:decode_request(R, <<"secret">>, A)
+                              Port = erlang:phash2(self(), 1) + 1812, % 1812, 1813
+                              {ok, R, A} = eradius_client:send_request({{127,0,0,1}, Port, "secret"}, 
+                                                                       #radius_request{cmd = request}, []),
+                              #radius_request{} = eradius_lib:decode_request(R, <<"secret">>, A)
                       end)
-    || _ <- lists:seq(1, Count)],
+             || _ <- lists:seq(1, Count)],
     [await(Task) || Task <- Tasks],
     Count.
 

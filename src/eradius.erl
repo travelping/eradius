@@ -1,15 +1,24 @@
 %% @doc Main module of the eradius application.
 -module(eradius).
--export([load_tables/1, load_tables/2,
-         modules_ready/1, modules_ready/2,
-         statistics/1]).
 
 -behaviour(application).
--export([start/2, stop/1, config_change/3]).
+
+%% API
+-export([load_tables/1, load_tables/2,
+        start_server/3, start_server/4]).
+-ignore_xref([load_tables/1, load_tables/2,
+              start_server/3, start_server/4]).
+
+%% application callbacks
+-export([start/2, stop/1]).
 
 %% internal use
 
 -include("eradius_lib.hrl").
+
+%%%=========================================================================
+%%%  API
+%%%=========================================================================
 
 %% @doc Load RADIUS dictionaries from the default directory.
 -spec load_tables(list(eradius_dict:table_name())) -> ok | {error, {consult, eradius_dict:table_name()}}.
@@ -17,35 +26,24 @@ load_tables(Tables) ->
     eradius_dict:load_tables(Tables).
 
 %% @doc Load RADIUS dictionaries from a certain directory.
--spec load_tables(file:filename(), list(eradius_dict:table_name())) -> ok | {error, {consult, eradius_dict:table_name()}}.
+-spec load_tables(Dir :: file:filename(), Tables :: [Table :: eradius_dict:table_name()]) ->
+          ok | {error, {consult, Table :: eradius_dict:table_name()}}.
 load_tables(Dir, Tables) ->
     eradius_dict:load_tables(Dir, Tables).
 
-%% @equiv modules_ready(self(), Modules)
-modules_ready(Modules) ->
-    eradius_node_mon:modules_ready(self(), Modules).
+start_server(IP, Port, #{handler := {_, _}, clients := #{}} = Opts)
+  when (IP =:= any orelse is_tuple(IP)) andalso
+       is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
+    eradius_server:start_instance(IP, Port, Opts).
 
-%% @doc Announce request handler module availability.
-%%    Applications need to call this function (usually from their application master)
-%%    in order to make their modules (which should implement the {@link eradius_server} behaviour)
-%%    available for processing. The modules will be revoked when the given Pid goes down.
-modules_ready(Pid, Modules) ->
-    eradius_node_mon:modules_ready(Pid, Modules).
+start_server(ServerName, IP, Port, #{handler := {_, _}, clients := #{}} = Opts)
+  when (IP =:= any orelse is_tuple(IP)) andalso
+       is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
+    eradius_server:start_instance(ServerName, IP, Port, Opts).
 
-%% @doc manipulate server statistics
-%%    * reset: reset all counters to zero
-%%    * pull:  read counters and reset to zero
-%%    * read:  read counters
-statistics(reset) ->
-    eradius_counter_aggregator:reset();
-statistics(pull) ->
-    eradius_counter_aggregator:pull();
-statistics(read) ->
-    eradius_counter_aggregator:read().
-
-
-%% ----------------------------------------------------------------------------------------------------
-%% -- application callbacks
+%%%===================================================================
+%%% application callbacks
+%%%===================================================================
 
 %% @private
 start(_StartType, _StartArgs) ->
@@ -53,20 +51,4 @@ start(_StartType, _StartArgs) ->
 
 %% @private
 stop(_State) ->
-    ok.
-
-%% @private
-config_change(Added, Changed, Removed) ->
-    lists:foreach(fun do_config_change/1, Added),
-    lists:foreach(fun do_config_change/1, Changed),
-    Keys = [K || {K, _} <- Added ++ Changed] ++ Removed,
-    (lists:member(logging, Keys) or lists:member(logfile, Keys))
-        andalso eradius_log:reconfigure(),
-    eradius_client:reconfigure().
-
-do_config_change({tables, NewTables}) ->
-    eradius_dict:load_tables(NewTables);
-do_config_change({servers, _}) ->
-    eradius_server_mon:reconfigure();
-do_config_change({_, _}) ->
     ok.

@@ -1,64 +1,27 @@
-%% @doc
-%%   This module implements a generic RADIUS server. A handler callback module
-%%   is used to process requests. The handler module is selected based on the NAS that
-%%   sent the request. Requests from unknown NASs are discarded.
+%% Copyright (c) 2002-2007, Martin Björklund and Torbjörn Törnkvist
+%% Copyright (c) 2011, Travelping GmbH <info@travelping.com>
 %%
-%%   It is also possible to run request handlers on remote nodes. If configured,
-%%   the server process will balance load among connected nodes.
-%%   Please see the Overview page for a detailed description of the server configuration.
+%% SPDX-License-Identifier: MIT
 %%
-%%   == Callback Description ==
-%%
-%%   There are two callbacks at the moment.
-%%
-%%   === validate_arguments(Args :: list()) -> boolean() | {true, NewArgs :: list()} | Error :: term(). ===
-%%
-%%   This is optional callback and can be absent. During application configuration processing `eradius_config`
-%%   calls this for the handler to validate and transform handler arguments.
-%%
-%%   === radius_request(#radius_request{}, #nas_prop{}, HandlerData :: term()) -> {reply, #radius_request{}} | noreply ===
-%%
-%%   This function is called for every RADIUS request that is received by the server.
-%%   Its first argument is a request record which contains the request type and AVPs.
-%%   The second argument is a NAS descriptor. The third argument is an opaque term from the
-%%   server configuration.
-%%
-%%   Both records are defined in 'eradius_lib.hrl', but their definition is reproduced here for easy reference.
-%%
-%%   ```
-%%   -record(radius_request, {
-%%       reqid         :: byte(),
-%%       cmd           :: 'request' | 'accept' | 'challenge' | 'reject' | 'accreq' | 'accresp' | 'coareq' | 'coaack' | 'coanak' | 'discreq' | 'discack' | 'discnak'm
-%%       attrs         :: eradius_lib:attribute_list(),
-%%       secret        :: eradius_lib:secret(),
-%%       authenticator :: eradius_lib:authenticator(),
-%%       msg_hmac      :: boolean(),
-%%       eap_msg       :: binary()
-%%   }).
-%%
-%%   -record(nas_prop, {
-%%       server_ip     :: inet:ip_address(),
-%%       server_port   :: eradius_server:port_number(),
-%%       nas_ip        :: inet:ip_address(),
-%%       nas_port      :: eradius_server:port_number(),
-%%       nas_id        :: term(),
-%%       metrics_info  :: {atom_address(), atom_address()},
-%%       secret        :: eradius_lib:secret(),
-%%       trace         :: boolean(),
-%%       handler_nodes :: 'local' | list(atom())
-%%   }).
-%%   '''
 -module(eradius_server).
--export([start_link/3, start_link/4]).
--export_type([port_number/0, req_id/0]).
-
-%% internal
--export([do_radius/7, handle_request/3, handle_remote_request/5, stats/2]).
-
--import(eradius_lib, [printable_peer/2]).
+-feature(maybe_expr, enable).
 
 -behaviour(gen_server).
+
+%% API
+-export([start_instance/3, start_instance/4, stop_instance/1]).
+-export([start_link/3, start_link/4]).
+-export_type([req_id/0]).
+
+%% internal API
+-export([do_radius/4]).
+-ignore_xref([do_radius/4]).
+
+%% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+
+-ignore_xref([start_link/3, start_link/4]).
+-ignore_xref([start_instance/3, start_instance/4, stop_instance/1]).
 
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -66,120 +29,231 @@
 -include("dictionary.hrl").
 -include("eradius_dict.hrl").
 
+-import(eradius_lib, [printable_peer/1, printable_peer/2]).
+
 -define(RESEND_TIMEOUT, 5000).          % how long the binary response is kept after sending it on the socket
 -define(RESEND_RETRIES, 3).             % how often a reply may be resent
--define(HANDLER_REPLY_TIMEOUT, 15000).  % how long to wait before a remote handler is considered dead
--define(DEFAULT_RADIUS_SERVER_OPTS(IP), [{active, once}, {ip, IP}, binary]).
 
--type port_number() :: 1..65535.
+-export_type([handler/0]).
+
 -type req_id()      :: byte().
--type udp_socket()  :: port().
--type udp_packet()  :: {udp, udp_socket(), inet:ip_address(), port_number(), binary()}.
+%% RADIUS request id
+
+-type socket_opts() :: #{family => inet | inet6,
+                         ifaddr => inet:ip_address() | any,
+                         port => inet:port_number(),
+                         active_n => 'once' | non_neg_integer(),
+                         ipv6_v6only => boolean,
+                         inet_backend => inet | socket,
+                         recbuf => non_neg_integer(),
+                         sndbuf => non_neg_integer()
+                        }.
+%% Options to configure the RADIUS server UDP socket.
+
+-type socket_config() :: #{family := inet | inet6,
+                           ifaddr := inet:ip_address() | any,
+                           port := inet:port_number(),
+                           active_n := 'once' | non_neg_integer(),
+                           ipv6_v6only => boolean,
+                           inet_backend => inet | socket,
+                           recbuf => non_neg_integer(),
+                           sndbuf => non_neg_integer()
+                          }.
+%% Options to configure the RADIUS server UDP socket.
+%% Conceptually the same as `t:socket_opts/0', except that may fields are mandatory.
+
+-type server_opts() :: #{server_name => term(),
+                         socket_opts => socket_opts(),
+                         handler := {module(), term()},
+                         metrics_callback => eradius_req:metrics_callback(),
+                         clients := map()}.
+%% Options to configure the RADIUS server.
+
+-type server_config() :: #{server_name := term(),
+                           socket_opts := socket_config(),
+                           handler := {module(), term()},
+                           metrics_callback := undefined | eradius_req:metrics_callback(),
+                           clients := map()}.
+%% Options to configure the RADIUS server.
+%% Conceptually the same as `t:server_opts/0', except that may fields are mandatory.
+
+-type client() :: #{client := binary(),
+                    secret := eradius_req:secret()}.
+%% RADIUS client settings
+
+-export_type([server_name/0, client/0]).
 
 -record(state, {
-    socket         :: udp_socket(),      % Socket Reference of opened UDP port
-    ip = {0,0,0,0} :: inet:ip_address(), % IP to which this socket is bound
-    port = 0       :: port_number(),     % Port number we are listening on
-    transacts      :: ets:tid(),         % ETS table containing current transactions
-    counter        :: #server_counter{}, % statistics counter,
-    name           :: atom()             % server name
-}).
+                name           :: atom(),            % server name
+                family         :: inet:address_family(),
+                socket         :: gen_udp:socket(),      % Socket Reference of opened UDP port
+                server         :: {inet:ip_address() | any, inet:port_number()}, % IP and port to which this socket is bound
+                active_n       :: 'once' | non_neg_integer(),
+                transacts      :: ets:tid(),         % ETS table containing current transactions
+                handler        :: handler(),
+                metrics_callback :: eradius_req:metrics_callback(),
+                clients        :: #{inet:ip_address() => client()}
+               }).
 
--optional_callbacks([validate_arguments/1]).
+-callback radius_request(eradius_req:req(), HandlerData :: term()) ->
+    {reply, eradius_req:req()} | noreply | {error, timeout}.
 
--callback validate_arguments(Args :: list()) ->
-    boolean() | {true, NewArgs :: list()}.
+%%%=========================================================================
+%%%  API
+%%%=========================================================================
 
--callback radius_request(#radius_request{}, #nas_prop{}, HandlerData :: term()) ->
-    {reply, #radius_request{}} | noreply | {error, timeout}.
+-spec start_instance(IP :: 'any' | inet:ip_address(), Port :: inet:port_number(),
+                     Opts :: server_opts()) ->  gen_server:start_ret().
+start_instance(IP, Port, Opts)
+  when (IP =:= any orelse is_tuple(IP)) andalso
+       is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
+    eradius_server_sup:start_instance([IP, Port, Opts]).
 
--spec start_link(atom(), inet:ip4_address(), port_number()) -> {ok, pid()} | {error, term()}.
-start_link(ServerName, IP, Port) ->
-    start_link(ServerName, IP, Port, []).
+-spec start_instance(ServerName :: gen_server:server_name(),
+                     IP :: 'any' | inet:ip_address(), Port :: inet:port_number(),
+                     Opts :: server_opts()) ->  gen_server:start_ret().
+start_instance(ServerName, IP, Port, Opts)
+  when (IP =:= any orelse is_tuple(IP)) andalso
+       is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
+    eradius_server_sup:start_instance([ServerName, IP, Port, Opts]).
 
--spec start_link(atom(), inet:ip4_address(), port_number(), [inet:socket_setopt()]) -> {ok, pid()} | {error, term()}.
-start_link(ServerName, IP = {A,B,C,D}, Port, Opts) ->
-    Name = list_to_atom(lists:flatten(io_lib:format("eradius_server_~b.~b.~b.~b:~b", [A,B,C,D,Port]))),
-    gen_server:start_link({local, Name}, ?MODULE, {ServerName, IP, Port, Opts}, []).
+-spec stop_instance(Pid :: pid()) -> ok.
+stop_instance(Pid) ->
+    try gen_server:call(Pid, stop)
+    catch exit:_ -> ok end.
 
-stats(Server, Function) ->
-    gen_server:call(Server, {stats, Function}).
+-spec start_link(IP :: 'any' | inet:ip_address(), Port :: inet:port_number(),
+                 Opts :: server_opts()) ->  gen_server:start_ret().
+start_link(IP, Port, #{handler := {_, _}, clients := #{}} = Opts)
+  when (IP =:= any orelse is_tuple(IP)) andalso
+       is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
+    maybe
+        {ok, Config} ?= config(IP, Port, Opts),
+        gen_server:start_link(?MODULE, [Config], [])
+    end.
 
-%% ------------------------------------------------------------------------------------------
-%% -- gen_server Callbacks
+-spec start_link(ServerName :: gen_server:server_name(),
+                 IP :: 'any' | inet:ip_address(), Port :: inet:port_number(),
+                 Opts :: server_opts()) ->  gen_server:start_ret().
+start_link(ServerName, IP, Port, #{handler := {_, _}, clients := #{}} = Opts)
+  when (IP =:= any orelse is_tuple(IP)) andalso
+       is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
+    maybe
+        {ok, Config} ?= config(IP, Port, Opts),
+        gen_server:start_link(ServerName, ?MODULE, [Config], [])
+    end.
+
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+
 %% @private
-init({ServerName, IP, Port, Opts}) ->
+init([#{server_name := ServerName,
+        socket_opts := #{family := Family, active_n := ActiveN,
+                         ifaddr := IP, port := Port} = SocketOpts,
+        handler := Handler, metrics_callback := MetricsCallback,
+        clients := Clients} = _Config]) ->
     process_flag(trap_exit, true),
-    SockOpts0 = proplists:get_value(socket_opts, Opts, []),
-    SockOpts1 = add_sock_opt(recbuf, 8192, SockOpts0),
-    SockOpts = add_sock_opt(sndbuf, 131072, SockOpts1),
-    SockOptsDef = ?DEFAULT_RADIUS_SERVER_OPTS(IP) ++ SockOpts,
-    case gen_udp:open(Port, SockOptsDef) of
+
+    InetOpts = inet_opts(SocketOpts, [{active, ActiveN}, binary, Family]),
+    Server = {IP, Port},
+    ?LOG(debug, "Starting RADIUS server on ~s with socket options ~0p",
+         [printable_peer(Server), InetOpts]),
+
+    case gen_udp:open(Port, InetOpts) of
         {ok, Socket} ->
-            {ok, #state{socket = Socket,
-                        ip = IP, port = Port, name = ServerName,
-                        transacts = ets:new(transacts, []),
-                        counter = eradius_counter:init_counter({IP, Port, ServerName})}};
+            State =
+                #state{
+                   name = ServerName,
+                   family = Family,
+                   socket = Socket,
+                   server = {IP, Port},
+                   active_n = ActiveN,
+                   handler = Handler,
+                   clients = Clients,
+                   transacts = ets:new(transacts, []),
+                   metrics_callback = MetricsCallback
+                  },
+            {ok, State};
         {error, Reason} ->
+            ?LOG(debug, "Starting RADIUS server on ~s failed with ~0p",
+                 [printable_peer(Server), Reason]),
             {stop, Reason}
     end.
 
 %% @private
-handle_info(ReqUDP = {udp, Socket, FromIP, FromPortNo, Packet},
-            State  = #state{name = ServerName, transacts = Transacts, ip = _IP, port = _Port}) ->
-    TS1 = erlang:monotonic_time(),
-    case lookup_nas(State, FromIP, Packet) of
-        {ok, ReqID, Handler, NasProp} ->
-            #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
-            ReqKey = {FromIP, FromPortNo, ReqID},
-            NNasProp = NasProp#nas_prop{nas_port = FromPortNo},
-            eradius_counter:inc_counter(requests, NasProp),
-            case ets:lookup(Transacts, ReqKey) of
-                [] ->
-                    HandlerPid = proc_lib:spawn_link(?MODULE, do_radius, [self(), ServerName, ReqKey, Handler, NNasProp, ReqUDP, TS1]),
-                    ets:insert(Transacts, {ReqKey, {handling, HandlerPid}}),
-                    ets:insert(Transacts, {HandlerPid, ReqKey}),
-                    eradius_counter:inc_counter(pending, NasProp);
-                [{_ReqKey, {handling, HandlerPid}}] ->
-                    %% handler process is still working on the request
-                    ?LOG(debug, "~s From: ~s INF: Handler process ~p is still working on the request. duplicate request (being handled) ~p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
-                    eradius_counter:inc_counter(dupRequests, NasProp);
-                [{_ReqKey, {replied, HandlerPid}}] ->
-                    %% handler process waiting for resend message
-                    HandlerPid ! {self(), resend, Socket},
-                    ?LOG(debug, "~s From: ~s INF: Handler ~p waiting for resent message. duplicate request (resent) ~p",
-                         [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
-                    eradius_counter:inc_counter(dupRequests, NasProp),
-                    eradius_counter:inc_counter(retransmissions, NasProp)
-            end,
-            NewState = State;
-        {discard, Reason} when Reason == no_nodes_local, Reason == no_nodes ->
-            NewState = State#state{counter = eradius_counter:inc_counter(discardNoHandler, State#state.counter)};
-        {discard, _Reason} ->
-            NewState = State#state{counter = eradius_counter:inc_counter(invalidRequests, State#state.counter)}
-    end,
-    inet:setopts(Socket, [{active, once}]),
-    {noreply, NewState};
-handle_info({replied, ReqKey, HandlerPid}, State = #state{transacts = Transacts}) ->
-    ets:insert(Transacts, {ReqKey, {replied, HandlerPid}}),
-    {noreply, State};
-handle_info({'EXIT', HandlerPid, _Reason}, State = #state{transacts = Transacts}) ->
-    [ets:delete(Transacts, ReqKey) || {_, ReqKey} <- ets:take(Transacts, HandlerPid)],
-    {noreply, State};
-handle_info(_Info, State) ->
+handle_call(stop, _From, State) ->
+    {stop, normal, ok, State};
+handle_call(_Call, _From, State) ->
+    {reply, ok, State}.
+
+%% @private
+handle_cast(_Msg, State) ->
     {noreply, State}.
 
 %% @private
--spec add_sock_opt(recbuf | sndbuf, pos_integer(), proplists:proplist()) -> proplists:proplist().
-add_sock_opt(OptName, Default, Opts) ->
-    case proplists:get_value(OptName, Opts) of
-        undefined ->
-            Buf = application:get_env(eradius, OptName, Default),
-            [{OptName, Buf} | Opts];
-        _Val ->
-            Opts
-    end.
+handle_info({udp_passive, _Socket}, #state{socket = Socket, active_n = ActiveN} = State) ->
+    inet:setopts(Socket, [{active, ActiveN}]),
+    {noreply, State};
+
+handle_info({udp, Socket, FromIP, FromPortNo, <<Header:20/bytes, Body/binary>>},
+            #state{name = ServerName, server = Server, transacts = Transacts,
+                   handler = Handler, clients = Clients,
+                   metrics_callback = MetricsCallback} = State)
+  when is_map_key(FromIP, Clients) ->
+    NAS = maps:get(FromIP, Clients),
+    <<_, ReqId:8, _/binary>> = Header,
+    Req0 = eradius_req:request(Header, Body, NAS, MetricsCallback),
+    Req1 = Req0#{socket => Socket,
+                 server => ServerName,
+                 server_addr => Server,
+                 client_addr => {FromIP, FromPortNo}},
+    ReqKey = {FromIP, FromPortNo, ReqId},
+
+    case ets:lookup(Transacts, ReqKey) of
+        [] ->
+            Req = eradius_req:record_metric(request, #{}, Req1),
+            HandlerPid =
+                proc_lib:spawn_link(?MODULE, do_radius, [self(), Handler, ReqKey, Req]),
+            ets:insert(Transacts, {ReqKey, {handling, HandlerPid}}),
+            ets:insert(Transacts, {HandlerPid, ReqKey});
+
+        [{_ReqKey, {handling, HandlerPid}}] ->
+            %% handler process is still working on the request
+            ?LOG(debug, "~s From: ~s INF: Handler process ~p is still working on the request."
+                 " duplicate request (being handled) ~p",
+                 [printable_peer(Server),
+                  printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
+            eradius_req:record_metric(discard, #{reason => duplicate}, Req1);
+        [{_ReqKey, {replied, HandlerPid}}] ->
+            %% handler process waiting for resend message
+            HandlerPid ! {self(), resend},
+            ?LOG(debug, "~s From: ~s INF: Handler ~p waiting for resent message. "
+                 "duplicate request (resent) ~p",
+                 [printable_peer(Server),
+                  printable_peer(FromIP, FromPortNo), HandlerPid, ReqKey]),
+            eradius_req:record_metric(retransmission, #{reason => duplicate}, Req1)
+    end,
+    flow_control(State),
+    {noreply, State};
+
+handle_info({udp, _Socket, _FromIP, _FromPortNo, _Packet},
+            #state{name = ServerName, metrics_callback = MetricsCallback} = State) ->
+    %% TBD: this should go into a malformed counter
+    eradius_req:metrics_callback(MetricsCallback, invalid_request, #{server => ServerName}),
+    flow_control(State),
+    {noreply, State};
+
+handle_info({replied, ReqKey, HandlerPid}, State = #state{transacts = Transacts}) ->
+    ets:insert(Transacts, {ReqKey, {replied, HandlerPid}}),
+    {noreply, State};
+
+handle_info({'EXIT', HandlerPid, _Reason}, State = #state{transacts = Transacts}) ->
+    [ets:delete(Transacts, ReqKey) || {_, ReqKey} <- ets:take(Transacts, HandlerPid)],
+    {noreply, State};
+
+handle_info(_Info, State) ->
+    {noreply, State}.
 
 %% @private
 terminate(_Reason, State) ->
@@ -187,287 +261,167 @@ terminate(_Reason, State) ->
     ok.
 
 %% @private
-handle_call({stats, pull}, _From, State = #state{counter = Counter}) ->
-    {reply, Counter, State#state{counter = eradius_counter:reset_counter(Counter)}};
-handle_call({stats, read}, _From, State = #state{counter = Counter}) ->
-    {reply, Counter, State};
-handle_call({stats, reset}, _From, State = #state{counter = Counter}) ->
-    {reply, ok, State#state{counter = eradius_counter:reset_counter(Counter)}}.
-
-%% -- unused callbacks
-%% @private
-handle_cast(_Msg, State)            -> {noreply, State}.
-%% @private
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
--spec lookup_nas(#state{}, inet:ip_address(), binary()) -> {ok, req_id(), eradius_server_mon:handler(), #nas_prop{}} | {discard, invalid | malformed}.
-lookup_nas(#state{ip = IP, port = Port}, NasIP, <<_Code, ReqID, _/binary>>) ->
-    case eradius_server_mon:lookup_handler(IP, Port, NasIP) of
-        {ok, Handler, NasProp} ->
-            {ok, ReqID, Handler, NasProp};
-        {error, not_found} ->
-            {discard, invalid}
-    end;
-lookup_nas(_State, _NasIP, _Packet) ->
-    {discard, malformed}.
+%%%=========================================================================
+%%% handler functions
+%%%=========================================================================
 
-%% ------------------------------------------------------------------------------------------
-%% -- Request Handler
 %% @private
--spec do_radius(pid(), string(), term(), eradius_server_mon:handler(), #nas_prop{}, udp_packet(), integer()) -> any().
-do_radius(ServerPid, ServerName, ReqKey, Handler = {HandlerMod, _}, NasProp, {udp, Socket, FromIP, FromPort, EncRequest}, TS1) ->
-    #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
-    Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
-    case run_handler(Nodes, NasProp, Handler, EncRequest) of
-        {reply, EncReply, {ReqCmd, RespCmd}, Request} ->
-            ?LOG(debug, "~s From: ~s INF: Sending response for request ~p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), ReqKey]),
-            TS2 = erlang:monotonic_time(),
-            inc_counter({ReqCmd, RespCmd}, ServerName, NasProp, TS2 - TS1, Request),
-            gen_udp:send(Socket, FromIP, FromPort, EncReply),
+-spec do_radius(pid(), handler(), term(), eradius_req:req()) -> any().
+do_radius(ServerPid, {HandlerMod, HandlerArg}, ReqKey,
+          #{server := Server, client_addr := Client} = Req0) ->
+    case apply_handler_mod(HandlerMod, HandlerArg, Req0) of
+        {reply, Packet, Resp0, Req} ->
+            ?LOG(debug, "~s From: ~s INF: Sending response for request ~0p",
+                 [printable_peer(Server), printable_peer(Client), ReqKey]),
+
+            Resp = eradius_req:record_metric(reply, #{request => Req}, Resp0),
+            send_response(Resp, Packet),
             case application:get_env(eradius, resend_timeout, 2000) of
                 ResendTimeout when ResendTimeout > 0, is_integer(ResendTimeout) ->
-                   ServerPid ! {replied, ReqKey, self()},
-                   wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, ?RESEND_RETRIES);
+                    ServerPid ! {replied, ReqKey, self()},
+                    wait_resend_init(ServerPid, ReqKey, Resp, Packet, ResendTimeout, ?RESEND_RETRIES);
                 _ -> ok
             end;
         {discard, Reason} ->
             ?LOG(debug, "~s From: ~s INF: Handler discarded the request ~p for reason ~1000.p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
-            inc_discard_counter(Reason, NasProp);
+                 [printable_peer(Server), printable_peer(Client), Reason, ReqKey]),
+            eradius_req:record_metric(discard, #{reason => Reason}, Req0);
         {exit, Reason} ->
             ?LOG(debug, "~s From: ~s INF: Handler exited for reason ~p, discarding request ~p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), Reason, ReqKey]),
-            inc_discard_counter(packetsDropped, NasProp)
-    end,
-    eradius_counter:dec_counter(pending, NasProp).
+                 [printable_peer(Server), printable_peer(Client), Reason, ReqKey]),
+            eradius_req:record_metric(discard, #{reason => dropped}, Req0)
+    end.
 
-wait_resend_init(ServerPid, ReqKey, FromIP, FromPort, EncReply, ResendTimeout, Retries) ->
+wait_resend_init(ServerPid, ReqKey, Resp, Packet, ResendTimeout, Retries) ->
     erlang:send_after(ResendTimeout, self(), timeout),
-    wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries).
+    wait_resend(ServerPid, ReqKey, Resp, Packet, Retries).
 
-wait_resend(_ServerPid, _ReqKey, _FromIP, _FromPort, _EncReply, 0) -> ok;
-wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries) ->
+wait_resend(_ServerPid, _ReqKey, _Resp, _Packet, 0) ->
+    ok;
+wait_resend(ServerPid, ReqKey, Resp, Packet, Retries) ->
     receive
-        {ServerPid, resend, Socket} ->
-            gen_udp:send(Socket, FromIP, FromPort, EncReply),
-            wait_resend(ServerPid, ReqKey, FromIP, FromPort, EncReply, Retries - 1);
+        {ServerPid, resend} ->
+            send_response(Resp, Packet),
+            wait_resend(ServerPid, ReqKey, Resp, Packet, Retries - 1);
         timeout -> ok
     end.
 
-run_handler([], _NasProp, _Handler, _EncRequest) ->
-    {discard, no_nodes};
-run_handler(NodesAvailable, NasProp = #nas_prop{handler_nodes = local}, Handler, EncRequest) ->
-    case lists:member(node(), NodesAvailable) of
-        true ->
-            handle_request(Handler, NasProp, EncRequest);
-        false ->
-            {discard, no_nodes_local}
-    end;
-run_handler(NodesAvailable, NasProp, Handler, EncRequest) ->
-    case ordsets:intersection(lists:usort(NodesAvailable), lists:usort(NasProp#nas_prop.handler_nodes)) of
-        [LocalNode] when LocalNode == node() ->
-            handle_request(Handler, NasProp, EncRequest);
-        [RemoteNode] ->
-            run_remote_handler(RemoteNode, Handler, NasProp, EncRequest);
-        Nodes ->
-            %% humble testing at the erlang shell indicated that phash2 distributes N
-            %% very well even for small lenghts.
-            N = erlang:phash2(make_ref(), length(Nodes)) + 1,
-            case lists:nth(N, Nodes) of
-                LocalNode when LocalNode == node() ->
-                    handle_request(Handler, NasProp, EncRequest);
-                RemoteNode ->
-                    run_remote_handler(RemoteNode, Handler, NasProp, EncRequest)
-            end
-    end.
+send_response(#{socket := Socket, client_addr := {ClientIP, ClientPort}}, Packet) ->
+    gen_udp:send(Socket, ClientIP, ClientPort, Packet).
 
-run_remote_handler(Node, {HandlerMod, HandlerArgs}, NasProp, EncRequest) ->
-    RemoteArgs = [self(), HandlerMod, HandlerArgs, NasProp, EncRequest],
-    HandlerPid = spawn_link(Node, ?MODULE, handle_remote_request, RemoteArgs),
-    receive
-        {HandlerPid, ReturnValue} ->
-            ReturnValue
-    after
-        ?HANDLER_REPLY_TIMEOUT ->
-            %% this happens if the remote handler doesn't terminate
-            unlink(HandlerPid),
-            {discard, {remote_handler_reply_timeout, Node}}
-    end.
-
-%% @private
--spec handle_request(eradius_server_mon:handler(), #nas_prop{}, binary()) -> any().
-handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, nas_ip = ServerIP, nas_port = Port}, EncRequest) ->
-    case eradius_lib:decode_request(EncRequest, Secret) of
-        Request = #radius_request{} ->
-            Sender = {ServerIP, Port, Request#radius_request.reqid},
-            ?LOG(info, "~s", [eradius_log:collect_message(Sender, Request)],
-                 maps:from_list(eradius_log:collect_meta(Sender, Request))),
-            eradius_log:write_request(Sender, Request),
-            apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
-        {bad_pdu, "Message-Authenticator Attribute is invalid" = Reason} ->
-            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
-            {discard, bad_authenticator};
-        {bad_pdu, "Authenticator Attribute is invalid" = Reason} ->
-            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
-            {discard, bad_authenticator};
-        {bad_pdu, "unknown request type" = Reason} ->
-            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
-            {discard, unknown_req_type};
-        {bad_pdu, Reason} ->
-            ?LOG(error, "~s INF: Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Reason]),
-            {discard, malformed}
-    end.
-
-%% @private
-%% @doc this function is spawned on a remote node to handle a radius request.
-%%   remote handlers need to be upgraded if the signature of this function changes.
-%%   error reports go to the logger of the node that executes the request.
-handle_remote_request(ReplyPid, HandlerMod, HandlerArg, NasProp, EncRequest) ->
-    Result = handle_request({HandlerMod, HandlerArg}, NasProp, EncRequest),
-    ReplyPid ! {self(), Result}.
-
--spec apply_handler_mod(module(), term(), #radius_request{}, #nas_prop{}) -> {discard, term()} | {exit, term()} | {reply, binary()}.
-apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
-    #nas_prop{server_ip = ServerIP, server_port = Port} = NasProp,
-    try HandlerMod:radius_request(Request, NasProp, HandlerArg) of
-        {reply, Reply = #radius_request{cmd = ReplyCmd, attrs = ReplyAttrs, msg_hmac = MsgHMAC, eap_msg = EAPmsg}} ->
-            Sender = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
-            EncReply = eradius_lib:encode_reply(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
-                                                                       msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
-                                                                       eap_msg = EAPmsg}),
-            ?LOG(info, "~s", [eradius_log:collect_message(Sender, Reply)],
-                 maps:from_list(eradius_log:collect_meta(Sender, Reply))),
-            eradius_log:write_request(Sender, Reply),
-            {reply, EncReply, {Request#radius_request.cmd, ReplyCmd}, Request};
+-spec apply_handler_mod(module(), term(), eradius_req:req()) ->
+          {discard, term()} |
+          {exit, term()} |
+          {reply, binary(), eradius_req:req(), eradius_req:req()}.
+apply_handler_mod(HandlerMod, HandlerArg,
+                  #{cmd := Cmd, req_id := ReqId, server := Server, client_addr := {ClientIP, _}} = Req) ->
+    try HandlerMod:radius_request(Req, HandlerArg) of
+        {reply, Resp0} ->
+            {Packet, Resp} = eradius_req:packet(Resp0),
+            {reply, Packet, Resp, Req};
         noreply ->
-            ?LOG(error, "~s INF: Noreply for request ~p from handler ~p: returned value: ~p",
-                        [printable_peer(ServerIP, Port), Request, HandlerArg, noreply]),
+            ?LOG(error, "~ts INF: Noreply for request ~tp from handler ~tp: returned value: ~tp",
+                 [printable_peer(Server), ReqId, HandlerArg, noreply]),
             {discard, handler_returned_noreply};
         {error, timeout} ->
-            ReqType = eradius_log:format_cmd(Request#radius_request.cmd),
-            ReqId = integer_to_list(Request#radius_request.reqid),
-            S = {NasProp#nas_prop.nas_ip, NasProp#nas_prop.nas_port, Request#radius_request.reqid},
-            NAS = eradius_lib:get_attr(Request, ?NAS_Identifier),
-            NAS_IP = inet_parse:ntoa(NasProp#nas_prop.nas_ip),
-            ?LOG(error, "~s INF: Timeout after waiting for response to ~s(~s) from RADIUS NAS: ~s NAS_IP:~s",
-                 [printable_peer(ServerIP, Port), ReqType, ReqId, NAS, NAS_IP],
-                 maps:from_list(eradius_log:collect_meta(S, Request))),
+            ReqType = eradius_log:format_cmd(Cmd),
+            ?LOG(error, "~ts INF: Timeout after waiting for response to ~ts(~w) from RADIUS Client: ~s",
+                 [printable_peer(Server), ReqType, ReqId, inet:ntoa(ClientIP)]),
             {discard, {bad_return, {error, timeout}}};
         OtherReturn ->
-            ?LOG(error, "~s INF: Unexpected return for request ~p from handler ~p: returned value: ~p",
-                        [printable_peer(ServerIP, Port), Request, HandlerArg, OtherReturn]),
+            ?LOG(error, "~ts INF: Unexpected return for request ~0tp from handler ~tp: returned value: ~tp",
+                 [printable_peer(Server), ReqId, HandlerArg, OtherReturn]),
             {discard, {bad_return, OtherReturn}}
     catch
         Class:Reason:S ->
-            ?LOG(error, "~s INF: Handler crashed after request ~p, radius handler class: ~p, reason of crash: ~p, stacktrace: ~p",
-                        [printable_peer(ServerIP, Port), Request, Class, Reason, S]),
+            ?LOG(error, "~ts INF: Handler crashed after request ~tp, radius handler class: ~tp, reason of crash: ~tp, stacktrace: ~tp",
+                 [printable_peer(Server), ReqId, Class, Reason, S]),
             {exit, {Class, Reason}}
     end.
 
-inc_counter({ReqCmd, RespCmd}, ServerName, NasProp, Ms, Request) ->
-    inc_request_counter(ReqCmd, ServerName, NasProp, Ms, Request),
-    inc_reply_counter(RespCmd, NasProp, Request).
+%%%=========================================================================
+%%%  internal functions
+%%%=========================================================================
 
-inc_request_counter(request, ServerName, NasProp, Ms, _) ->
-    eradius_counter:observe(eradius_request_duration_milliseconds,
-                            NasProp, Ms, ServerName, "RADIUS request exeuction time"),
-    eradius_counter:observe(eradius_access_request_duration_milliseconds,
-                            NasProp, Ms, ServerName, "Access-Request execution time"),
-    eradius_counter:inc_request_counter(accessRequests, NasProp);
-inc_request_counter(accreq, ServerName, NasProp, Ms, Request) ->
-    eradius_counter:observe(eradius_request_duration_milliseconds,
-                            NasProp, Ms, ServerName, "RADIUS request exeuction time"),
-    eradius_counter:observe(eradius_accounting_request_duration_milliseconds,
-                            NasProp, Ms, ServerName, "Accounting-Request execution time"),
-    inc_request_counter_accounting(NasProp, Request);
-inc_request_counter(coareq, ServerName, NasProp, Ms, _) ->
-    eradius_counter:observe(eradius_request_duration_milliseconds,
-                            NasProp, Ms, ServerName, "RADIUS request exeuction time"),
-    eradius_counter:observe(eradius_coa_request_duration_milliseconds,
-                            NasProp, Ms, ServerName, "Coa-Request execution time"),
-    eradius_counter:inc_request_counter(coaRequests, NasProp);
-inc_request_counter(discreq, ServerName, NasProp, Ms, _) ->
-    eradius_counter:observe(eradius_request_duration_milliseconds,
-                            NasProp, Ms, ServerName, "RADIUS request exeuction time"),
-    eradius_counter:observe(eradius_disconnect_request_duration_milliseconds,
-                            NasProp, Ms, ServerName, "Disconnect-Request execution time"),
-    eradius_counter:inc_request_counter(discRequests, NasProp);
-inc_request_counter(_Cmd, _ServerName, _NasProp, _Ms, _Request) ->
+-spec config(IP :: inet:ip_address() | any, inet:port_number(),
+             server_opts()) -> {ok, server_config()}.
+config(IP, Port, #{handler := {_, _}, clients := Clients} = Opts0)
+  when (IP =:= any orelse is_tuple(IP)) andalso
+       is_map(Clients) andalso
+       is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
+    SocketOpts0 = maps:get(socket_opts, Opts0, #{}),
+    SocketOpts = #{family := Family, ifaddr := IfAddr} =
+        maps:merge(default_socket_opts(IP, Port), to_map(SocketOpts0)),
+
+    Opts =
+        Opts0#{server_name => server_name(IP, Port, Opts0),
+               socket_opts => SocketOpts#{ifaddr := socket_ip(Family, IfAddr)},
+               metrics_callback => maps:get(metrics_callback, Opts0, undefined),
+               clients =>
+                   maps:fold(fun(K, V, M) -> M#{socket_ip(Family, K) => V} end, #{}, Clients)
+              },
+    {ok, Opts}.
+
+flow_control(#state{socket = Socket, active_n = once}) ->
+    inet:setopts(Socket, [{active, once}]);
+flow_control(_) ->
     ok.
 
-inc_reply_counter(accept, NasProp, _) ->
-    eradius_counter:inc_counter(replies, NasProp),
-    eradius_counter:inc_reply_counter(accessAccepts, NasProp);
-inc_reply_counter(reject, NasProp, _) ->
-    eradius_counter:inc_counter(replies, NasProp),
-    eradius_counter:inc_reply_counter(accessRejects, NasProp);
-inc_reply_counter(challenge, NasProp, _) ->
-    eradius_counter:inc_counter(replies, NasProp),
-    eradius_counter:inc_reply_counter(accessChallenges, NasProp);
-inc_reply_counter(accresp, NasProp, Request) ->
-    eradius_counter:inc_counter(replies, NasProp),
-    inc_response_counter_accounting(NasProp, Request);
-inc_reply_counter(coaack, NasProp, _) ->
-    eradius_counter:inc_counter(replies, NasProp),
-    eradius_counter:inc_reply_counter(coaAcks, NasProp);
-inc_reply_counter(coanak, NasProp, _) ->
-    eradius_counter:inc_counter(replies, NasProp),
-    eradius_counter:inc_reply_counter(coaNaks, NasProp);
-inc_reply_counter(discack, NasProp, _) ->
-    eradius_counter:inc_counter(replies, NasProp),
-    eradius_counter:inc_reply_counter(discAcks, NasProp);
-inc_reply_counter(discnak, NasProp, _) ->
-    eradius_counter:inc_counter(replies, NasProp),
-    eradius_counter:inc_reply_counter(discNaks, NasProp);
-inc_reply_counter(_Cmd, _NasProp, _Request) ->
-    ok.
+server_name(_, _, #{server_name := ServerName}) ->
+    ServerName;
+server_name(IP, Port, _) ->
+    iolist_to_binary(server_name(IP, Port)).
 
-inc_request_counter_accounting(NasProp, #radius_request{attrs = Attrs}) ->
-    Requests = ets:match_spec_run(Attrs, server_request_counter_account_match_spec_compile()),
-    [eradius_counter:inc_request_counter(Type, NasProp) || Type <- Requests],
-    ok;
-inc_request_counter_accounting(_, _) ->
-    ok.
+server_name(IP, Port) ->
+    [inet:ntoa(IP), $:, integer_to_list(Port)].
 
-inc_response_counter_accounting(NasProp, #radius_request{attrs = Attrs}) ->
-    Responses = ets:match_spec_run(Attrs, server_response_counter_account_match_spec_compile()),
-    [eradius_counter:inc_reply_counter(Type, NasProp) || Type <- Responses],
-    ok;
-inc_response_counter_accounting(_, _) ->
-    ok.
+to_map(Opts) when is_list(Opts) ->
+    maps:from_list(Opts);
+to_map(Opts) when is_map(Opts) ->
+    Opts.
 
-inc_discard_counter(bad_authenticator, NasProp) ->
-    eradius_counter:inc_counter(badAuthenticators, NasProp);
-inc_discard_counter(unknown_req_type, NasProp) ->
-    eradius_counter:inc_counter(unknownTypes, NasProp);
-inc_discard_counter(malformed, NasProp) ->
-    eradius_counter:inc_counter(malformedRequests, NasProp);
-inc_discard_counter(_Reason, NasProp) ->
-    eradius_counter:inc_counter(packetsDropped, NasProp).
+%% @private
+socket_ip(_, any) ->
+    any;
+socket_ip(inet, {_, _, _, _} = IP) ->
+    IP;
+socket_ip(inet6, {_, _, _, _} = IP) ->
+    inet:ipv4_mapped_ipv6_address(IP);
+socket_ip(inet6, {_, _, _, _,_, _, _, _} = IP) ->
+    IP.
 
-server_request_counter_account_match_spec_compile() ->
-    case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
-        undefined ->
-            MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountRequestsStart;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountRequestsStop;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountRequestsUpdate end)),
-            persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
-            MatchSpecCompile;
-        MatchSpecCompile ->
-            MatchSpecCompile
-    end.
+default_socket_opts(Port) ->
+    #{port => Port,
+      active_n => 100,
+      recbuf => application:get_env(eradius, recbuf, 8192),
+      sndbuf => application:get_env(eradius, sndbuf, 131072)
+     }.
 
-server_response_counter_account_match_spec_compile() ->
-    case persistent_term:get({?MODULE, ?FUNCTION_NAME}, undefined) of
-        undefined ->
-            MatchSpecCompile = ets:match_spec_compile(ets:fun2ms(fun
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Start})  -> accountResponsesStart;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Stop})   -> accountResponsesStop;
-                ({#attribute{id = ?RStatus_Type}, ?RStatus_Type_Update}) -> accountResponsesUpdate end)),
-            persistent_term:put({?MODULE, ?FUNCTION_NAME}, MatchSpecCompile),
-            MatchSpecCompile;
-        MatchSpecCompile ->
-            MatchSpecCompile
+default_socket_opts(any, Port) ->
+    Opts = default_socket_opts(Port),
+    Opts#{family => inet6,
+          ifaddr => any,
+          ipv6_v6only => false};
+default_socket_opts({_, _, _, _} = IP, Port) ->
+    Opts = default_socket_opts(Port),
+    Opts#{family => inet,
+          ifaddr => IP};
+default_socket_opts({_, _, _, _, _, _, _, _} = IP, Port) ->
+    Opts = default_socket_opts(Port),
+    Opts#{family => inet6,
+          ifaddr => IP,
+          ipv6_v6only => false}.
+
+inet_opts(Config, Opts0) ->
+    Opts =
+        maps:to_list(
+          maps:with([recbuf, sndbuf, ifaddr,
+                     ipv6_v6only, netns, bind_to_device, read_packets], Config)) ++ Opts0,
+    case Config of
+        #{inet_backend := Backend} when Backend =:= inet; Backend =:= socket ->
+            [{inet_backend, Backend} | Opts];
+        _ ->
+            Opts
     end.
