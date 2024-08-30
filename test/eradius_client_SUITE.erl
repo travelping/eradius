@@ -24,7 +24,7 @@
 -include("test/eradius_test.hrl").
 
 -define(BAD_SERVER_IP, {eradius_test_handler:localhost(ip), 1820, "secret"}).
--define(BAD_SERVER_INITIAL_RETRIES, 3).
+-define(BAD_SERVER_INITIAL_RETRIES, 2).
 -define(BAD_SERVER_TUPLE_INITIAL, {{eradius_test_handler:localhost(tuple), 1820},
                                    ?BAD_SERVER_INITIAL_RETRIES,
                                    ?BAD_SERVER_INITIAL_RETRIES}).

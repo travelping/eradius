@@ -305,7 +305,7 @@ All pools are configured via:
     %%% ...
     {servers_pool, [
         {pool_name, [
-            {{127, 0, 0, 2}, 1812, <<"secret">>, [{retries, 3}]},
+            {{127, 0, 0, 2}, 1812, <<"secret">>, [{retries, 3}, {timeout, 3000}]},
             {{127, 0, 0, 3}, 1812, <<"secret">>}
         ]}
     ]}

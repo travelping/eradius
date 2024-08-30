@@ -13,7 +13,7 @@
 -module(eradius_client).
 -export([start_link/0, send_request/2, send_request/3, send_remote_request/3, send_remote_request/4]).
 %% internal
--export([reconfigure/0, send_remote_request_loop/8, find_suitable_peer/1,
+-export([reconfigure/0, send_remote_request_loop/8,
          restore_upstream_server/1, store_radius_server_from_pool/3,
          init_server_status_metrics/0]).
 
@@ -92,21 +92,14 @@ send_request({IP, Port, Secret}, Request, Options) when ?GOOD_CMD(Request) andal
         [] ->
             SendReqFn();
         UpstreamServers ->
-            case find_suitable_peer([{IP, Port, Secret} | UpstreamServers]) of
+            case find_suitable_peer([{IP, Port, Secret, Options} | UpstreamServers]) of
                 [] ->
                     no_active_servers;
-                {{IP, Port, Secret}, _NewPool} ->
+                {{IP, Port, Secret, Options}, _NewPool} ->
                     SendReqFn();
-                {NewPeer, []} ->
-                    % Special case, we don't have servers in the pool anymore, but we need
-                    % to preserve `failover` option to mark current server as inactive if
-                    % it will fail
-                    NewOptions = lists:keyreplace(failover, 1, Options, {failover, undefined}),
-                    send_request(NewPeer, Request, NewOptions);
-                {NewPeer, NewPool} ->
+                {{NewPeerAddr, NewPeerPort, NewPeerSecret, PeerOpts}, NewPool} ->
                     % current server is not in list of active servers, so use another one
-                    NewOptions = lists:keyreplace(failover, 1, Options, {failover, NewPool}),
-                    send_request(NewPeer, Request, NewOptions)
+                    send_request({NewPeerAddr, NewPeerPort, NewPeerSecret}, Request, [{failover, NewPool} | PeerOpts])
             end
     end;
 send_request({_IP, _Port, _Secret}, _Request, _Options) ->
@@ -223,10 +216,8 @@ handle_failed_request(Request, {ServerIP, Port} = _FailedServer, UpstreamServers
     case find_suitable_peer(UpstreamServers) of
         [] ->
             Response;
-        {NewPeer, NewPool} ->
-            % leave only active upstream servers
-            NewOptions = lists:keyreplace(failover, 1, Options, {failover, NewPool}),
-            send_request(NewPeer, Request, NewOptions)
+        {{NewPeerAddr, NewPeerPort, NewPeerSecret, PeerOpts}, NewPool} ->
+            send_request({NewPeerAddr, NewPeerPort, NewPeerSecret}, Request, [{failover, NewPool} | PeerOpts])
     end.
 
 % @private
@@ -632,27 +623,25 @@ client_response_counter_account_match_spec_compile() ->
             MatchSpecCompile
     end.
 
-find_suitable_peer(undefined) ->
-    [];
 find_suitable_peer([]) ->
     [];
-find_suitable_peer([{Host, Port, Secret} | Pool]) when is_list(Host) ->
+find_suitable_peer([{Host, Port, Secret, Opts} | Pool]) when is_list(Host) ->
     try
 	IP = get_ip(Host),
-	find_suitable_peer([{IP, Port, Secret} | Pool])
+	find_suitable_peer([{IP, Port, Secret, Opts} | Pool])
     catch _:_ ->
 	% can't resolve ip by some reasons, just ignore it
 	find_suitable_peer(Pool)
     end;
-find_suitable_peer([{IP, Port, Secret} | Pool]) ->
+find_suitable_peer([{IP, Port, Secret, Opts} | Pool]) ->
     case ets:lookup(?MODULE, {IP, Port}) of
         [] ->
             find_suitable_peer(Pool);
         [{{IP, Port}, _Retries, _InitialRetries}] ->
-            {{IP, Port, Secret}, Pool}
+            {{IP, Port, Secret, Opts}, Pool}
     end;
-find_suitable_peer([{IP, Port, Secret, _Opts} | Pool]) ->
-    find_suitable_peer([{IP, Port, Secret} | Pool]).
+find_suitable_peer([{IP, Port, Secret} | Pool]) ->
+    find_suitable_peer([{IP, Port, Secret, []} | Pool]).
 
 get_ip(Host) ->
     case inet:gethostbyname(Host) of
