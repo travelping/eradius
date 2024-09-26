@@ -6,7 +6,7 @@
 -type atom_name() :: atom().
 -type atom_ip() :: atom().
 -type atom_port() :: atom().
--type atom_address() :: {atom_name(), {atom_ip(), atom_port()}}.
+-type atom_address() :: {atom_name(), atom_ip(), atom_port()}.
 -type atom_address_pair() :: {atom_address(), atom_address()}.
 
 %%- cmds
