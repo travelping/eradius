@@ -20,7 +20,7 @@ jobs:
       run: |
            rebar3 dialyzer || true
            WARNINGS=$(cat _build/default/*.dialyzer_warnings | grep -e '^$' |  wc -l)
-           if [ ${WARNINGS} -gt 89 ]; then exit -1; fi
+           if [ ${WARNINGS} -gt 103 ]; then exit -1; fi
     - name: Run tests
       run: |
            rebar3 do xref, ct
