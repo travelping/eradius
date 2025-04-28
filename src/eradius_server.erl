@@ -220,8 +220,6 @@ do_radius(ServerPid, ServerName, ReqKey, Handler = {HandlerMod, _}, NasProp, {ud
     Nodes = eradius_node_mon:get_module_nodes(HandlerMod),
     case run_handler(Nodes, NasProp, Handler, EncRequest) of
         {reply, EncReply, {ReqCmd, RespCmd}, Request} ->
-            ?LOG(debug, "~s From: ~s INF: Sending response for request ~p",
-                        [printable_peer(ServerIP, Port), printable_peer(FromIP, FromPort), ReqKey]),
             TS2 = erlang:monotonic_time(),
             inc_counter({ReqCmd, RespCmd}, ServerName, NasProp, TS2 - TS1, Request),
             gen_udp:send(Socket, FromIP, FromPort, EncReply),
@@ -301,7 +299,7 @@ handle_request({HandlerMod, HandlerArg}, NasProp = #nas_prop{secret = Secret, na
     case eradius_lib:decode_request(EncRequest, Secret) of
         Request = #radius_request{} ->
             Sender = {ServerIP, Port, Request#radius_request.reqid},
-            ?LOG(info, "~s", [eradius_log:collect_message(Sender, Request)],
+            ?LOG(debug, "~s", [eradius_log:collect_message(Sender, Request)],
                  maps:from_list(eradius_log:collect_meta(Sender, Request))),
             eradius_log:write_request(Sender, Request),
             apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp);
@@ -336,7 +334,7 @@ apply_handler_mod(HandlerMod, HandlerArg, Request, NasProp) ->
             EncReply = eradius_lib:encode_reply(Request#radius_request{cmd = ReplyCmd, attrs = ReplyAttrs,
                                                                        msg_hmac = Request#radius_request.msg_hmac or MsgHMAC or (size(EAPmsg) > 0),
                                                                        eap_msg = EAPmsg}),
-            ?LOG(info, "~s", [eradius_log:collect_message(Sender, Reply)],
+            ?LOG(debug, "~s", [eradius_log:collect_message(Sender, Reply)],
                  maps:from_list(eradius_log:collect_meta(Sender, Reply))),
             eradius_log:write_request(Sender, Reply),
             {reply, EncReply, {Request#radius_request.cmd, ReplyCmd}, Request};
