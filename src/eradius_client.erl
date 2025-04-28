@@ -435,8 +435,15 @@ store_upstream_servers(Server) ->
 store_radius_server_from_pool(Addr, Port, Retries) when is_tuple(Addr) and is_integer(Port) and is_integer(Retries) ->
     ets:insert(?MODULE, {{Addr, Port}, Retries, Retries});
 store_radius_server_from_pool(Addr, Port, Retries) when is_list(Addr) and is_integer(Port) and is_integer(Retries) ->
-    IP = get_ip(Addr),
-    ets:insert(?MODULE, {{IP, Port}, Retries, Retries});
+    try
+        IP = get_ip(Addr),
+        ets:insert(?MODULE, {{IP, Port}, Retries, Retries})
+    catch error:badarg ->
+      ?LOG(error, "Can't resolve hostname - ~p", [Addr]),
+      % Throw again badarg as it was before to catch non-resolvable hostname during eradius start-up
+      % and exit early to not lost secondary pools.
+      error(badarg)
+    end;
 store_radius_server_from_pool(Addr, Port, Retries) ->
     ?LOG(error, "bad RADIUS upstream server specified in RADIUS servers pool configuration ~p", [{Addr, Port, Retries}]),
     error(badarg).
@@ -630,6 +637,7 @@ find_suitable_peer([{Host, Port, Secret, Opts} | Pool]) when is_list(Host) ->
 	IP = get_ip(Host),
 	find_suitable_peer([{IP, Port, Secret, Opts} | Pool])
     catch _:_ ->
+        ?LOG(error, "Can't resolve hostname - ~p", [Host]),
 	% can't resolve ip by some reasons, just ignore it
 	find_suitable_peer(Pool)
     end;
