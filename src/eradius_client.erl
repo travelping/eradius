@@ -327,9 +327,18 @@ init([]) ->
     end.
 
 %% @private
+inet_family_based_on_peer(_PeerSocket = {{_, _, _, _}, _port}) ->
+    [inet];
+inet_family_based_on_peer(_PeerSocket = {{_, _, _, _, _, _, _, _}, _port}) ->
+    [inet6];
+inet_family_based_on_peer(_PeerSocket) ->
+    [].
+
+%% @private
 handle_call({wanna_send, Peer = {_PeerName, PeerSocket}, _MetricsInfo}, _From, State) ->
     {PortIdx, ReqId, NewIdCounters} = next_port_and_req_id(PeerSocket, State#state.no_ports, State#state.idcounters),
-    {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip, State#state.sup),
+    InetFamily = inet_family_based_on_peer(PeerSocket),
+    {SocketProcess, NewSockets} = find_socket_process(PortIdx, State#state.sockets, State#state.socket_ip, InetFamily, State#state.sup),
     IsCreated = lists:member(Peer, State#state.clients),
     NewState = case IsCreated of
                    false ->
@@ -510,11 +519,11 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
     NewCounters = Counters#{Peer => {NextPortIdx, NextReqId}},
     {NextPortIdx, NextReqId, NewCounters}.
 
-find_socket_process(PortIdx, Sockets, SocketIP, Sup) ->
+find_socket_process(PortIdx, Sockets, SocketIP, Options, Sup) ->
     case array:get(PortIdx, Sockets) of
         undefined ->
             Res = supervisor:start_child(Sup, {PortIdx,
-                {eradius_client_socket, start, [SocketIP, self(), PortIdx]},
+                {eradius_client_socket, start, [SocketIP, self(), PortIdx, Options]},
                 transient, brutal_kill, worker, [eradius_client_socket]}),
             Pid = case Res of
                 {ok, P} -> P;
@@ -536,7 +545,7 @@ parse_ip(Address) when is_list(Address) ->
     inet_parse:address(Address);
 parse_ip(T = {_, _, _, _}) ->
     {ok, T};
-parse_ip(T = {_, _, _, _, _, _}) ->
+parse_ip(T = {_, _, _, _, _, _, _, _}) ->
     {ok, T}.
 
 init_server_status_metrics() ->
@@ -658,5 +667,14 @@ get_ip(Host) ->
         {ok, #hostent{h_addrtype = inet, h_addr_list = [_ | _] = IPs}} ->
             Index = rand:uniform(length(IPs)),
             lists:nth(Index, IPs);
-        _ -> error(badarg)
+        _ ->
+          case inet:gethostbyname(Host, inet6) of
+              {ok, #hostent{h_addrtype = inet6, h_addr_list = [IP]}} ->
+                  IP;
+              {ok, #hostent{h_addrtype = inet6, h_addr_list = [_ | _] = IPs}} ->
+                  Index = rand:uniform(length(IPs)),
+                  lists:nth(Index, IPs);
+              _Err ->
+                  error(badarg)
+          end
     end.
