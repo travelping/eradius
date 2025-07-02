@@ -158,19 +158,19 @@ proceed_response(Request, {ok, Response, Secret, Authenticator}, _Peer = {_Serve
     case eradius_lib:decode_request(Response, Secret, Authenticator) of
         {bad_pdu, "Message-Authenticator Attribute is invalid" = Reason} ->
             update_client_response(bad_authenticator, MetricsInfo, Request),
-            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the response, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         {bad_pdu, "Authenticator Attribute is invalid" = Reason} ->
             update_client_response(bad_authenticator, MetricsInfo, Request),
-            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the response, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         {bad_pdu, "unknown request type" = Reason} ->
             update_client_response(unknown_req_type, MetricsInfo, Request),
-            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the response, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             noreply;
         {bad_pdu, Reason} ->
             update_client_response(dropped, MetricsInfo, Request),
-            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the request, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
+            ?LOG(error, "~s INF: Noreply for request ~p. Could not decode the response, reason: ~s", [printable_peer(ServerIP, Port), Request, Reason]),
             maybe_failover(Request, noreply, {ServerIP, Port}, Options);
         Decoded ->
             update_server_status_metric(ServerIP, Port, true, Options),
