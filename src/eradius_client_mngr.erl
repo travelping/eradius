@@ -182,7 +182,7 @@ servers(ServerRef) ->
     #state{servers = Servers} = sys:get_state(ServerRef),
     maps:fold(
       fun(_, #{ip := IP, port := Port, retries := Retries, failed := Failed} = _, M)
-            when Failed < Retries ->
+            when Failed =< Retries ->
               [{{IP, Port}, Retries, Failed} | M];
          (_, _, M) -> M
       end, [], Servers).
@@ -246,20 +246,16 @@ handle_call({wanna_send, Candidates, Tried}, _From,
             {reply, Error, State0}
     end;
 
-handle_call({failed, Peer}, _From, #state{servers = Servers0} = State0) ->
-    Servers =
-        case Servers0 of
-            #{Peer := #{retries := Retries, failed := Failed} = Server}
-              when Failed < Retries ->
-                Servers0#{Peer := Server#{failed := Failed + 1}};
-            #{Peer := #{retries := Retries, failed := Failed} = Server}
-              when Failed =:= Retries ->
-                erlang:start_timer(?DEFAULT_DOWN_TIME, self(), {reset, Peer}),
-                Servers0#{Peer := Server#{failed := Failed + 1}};
-            _ ->
-                Servers0
-        end,
-    State = State0#state{servers = Servers},
+handle_call({failed, Peer}, _From, #state{servers = Servers} = State0)
+  when is_map_key(Peer, Servers) ->
+    #{retries := Retries, failed := Failed} = Server = map_get(Peer, Servers),
+    case Failed > Retries of
+        true  -> erlang:start_timer(?DEFAULT_DOWN_TIME, self(), {reset, Peer});
+        false -> ok
+    end,
+    State = State0#state{servers = Servers#{Peer := Server#{failed := Failed + 1}}},
+    {reply, ok, State};
+handle_call({failed, _Peer}, _From, State) ->
     {reply, ok, State};
 
 %% @private
@@ -364,7 +360,7 @@ select_servers([Candidate|More], Servers, Selected) ->
         #{Candidate := [_|_] = Pool} ->
             select_servers(More, Servers, select_servers(Pool, Servers, Selected));
         #{Candidate := #{retries := Retries, failed := Failed}}
-          when Failed < Retries ->
+          when Failed =< Retries ->
             select_servers(More, Servers, [Candidate | Selected]);
         _ ->
             select_servers(More, Servers, Selected)
