@@ -125,7 +125,7 @@ start_client(Opts) ->
     eradius_client_top_sup:start_client([Opts]).
 
 %% @doc Start a new, named RADIUS client that is managed by the eradius applications supervisor tree.
--spec start_client(server_name(), client_opts()) ->
+-spec start_client(gen_server:server_name(), client_opts()) ->
           {ok, pid()} | {error, supervisor:startchild_err()}.
 start_client(ServerName, Opts) ->
     maybe
@@ -143,7 +143,7 @@ start_link(Owner, Opts) ->
     end.
 
 %% @private
--spec start_link(pid(), server_name(), client_opts()) ->
+-spec start_link(pid(), gen_server:server_name(), client_opts()) ->
           {ok, pid()} | {error, supervisor:startchild_err()}.
 start_link(Owner, ServerName, Opts) ->
     maybe
