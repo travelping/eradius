@@ -119,10 +119,16 @@
 %%%=========================================================================
 
 %% @doc Start a new RADIUS client that is managed by the eradius applications supervisor tree.
+%% Returns the client manager pid (usable with eradius_client:send_request/3,4).
 -spec start_client(client_opts()) ->
           {ok, pid()} | {error, supervisor:startchild_err()}.
 start_client(Opts) ->
-    eradius_client_top_sup:start_client([Opts]).
+    case eradius_client_top_sup:start_client([Opts]) of
+        {ok, SupPid} ->
+            client_mngr_pid(SupPid);
+        Error ->
+            Error
+    end.
 
 %% @doc Start a new, named RADIUS client that is managed by the eradius applications supervisor tree.
 -spec start_client(gen_server:server_name(), client_opts()) ->
@@ -261,8 +267,9 @@ handle_call({failed, _Peer}, _From, State) ->
 %% @private
 handle_call({reconfigure, Opts}, _From, #state{config = OConfig} = State0) ->
     case client_config(maps:merge(OConfig, Opts)) of
-        {ok, Config} ->
-            State = reconfigure_address(Config, State0#state{config = Config}),
+        {ok, #{servers := Servers} = Config} ->
+            State1 = State0#state{config = Config, servers = Servers},
+            State = reconfigure_address(Config, State1),
             {reply, ok, State};
 
         {error, _} = Error ->
@@ -508,4 +515,12 @@ find_socket_process(PortIdx, Sockets, #state{owner = Owner, config = Config}) ->
             {Socket, array:set(PortIdx, Socket, Sockets)};
         Socket ->
             {Socket, Sockets}
+    end.
+
+client_mngr_pid(SupPid) ->
+    case lists:keyfind(eradius_client_mngr, 1, supervisor:which_children(SupPid)) of
+        {eradius_client_mngr, Pid, worker, _} when is_pid(Pid) ->
+            {ok, Pid};
+        _ ->
+            {error, not_started}
     end.
