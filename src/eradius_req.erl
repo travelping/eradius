@@ -156,8 +156,15 @@ packet(#{req_id := _, cmd := _, authenticator := _, body := Body, secret := _} =
   when is_binary(Body) ->
     %% body must be fully prepared
     encode_body(Req, Body);
-packet(#{req_id := _, cmd := _, secret := _, attrs := Attrs, eap_msg := EAPmsg} = Req)
+packet(#{req_id := _, cmd := Cmd, secret := _, attrs := Attrs, eap_msg := EAPmsg} = Req0)
   when is_list(Attrs) ->
+    %% For 'request' cmd, the authenticator is random. Pre-generate it so that
+    %% scramble encryption (User-Password) and Message-Authenticator HMAC can
+    %% both use the same value before encode_body writes it into the packet header.
+    Req = case Cmd of
+              request -> Req0#{authenticator => random_authenticator()};
+              _       -> Req0
+          end,
     Body0 = encode_attributes(Req, Attrs, <<>>),
     Body1 = encode_eap_message(EAPmsg, Body0),
     Body = encode_message_authenticator(Req, Body1),
@@ -218,7 +225,8 @@ new(Command, MetricsCallback)
 -spec request(binary(), binary(), eradius_server:client(), 'undefined' | metrics_callback()) ->
           req() | no_return().
 request(<<Cmd, ReqId, Len:16, Authenticator:16/bytes>> = Header, Body,
-        #{secret := Secret, client := ClientId}, MetricsCallback) ->
+        #{secret := Secret} = NAS, MetricsCallback) ->
+    ClientId = maps:get(client, NAS, <<>>),
     Command = decode_command(Cmd),
     Req = new(Command, MetricsCallback),
     mk_req(Command, ReqId, Len, Authenticator, Header, Body,
@@ -321,7 +329,9 @@ mk_req(_, _, Len, _, _, Body, _)
 
 encode_body(#{req_id := ReqId, cmd := Cmd} = Req, Body)
   when Cmd =:= request ->
-    Authenticator = random_authenticator(),
+    %% Use pre-generated authenticator if present (set by packet/1 for scramble
+    %% encryption), otherwise generate a fresh one.
+    Authenticator = maps:get(authenticator, Req, random_authenticator()),
     Packet = <<(encode_command(Cmd)):8, ReqId:8, (byte_size(Body) + 20):16,
                Authenticator:16/binary, Body/binary>>,
     {Packet, Req#{is_valid := true, request_authenticator => Authenticator}};
@@ -357,7 +367,7 @@ encode_command(discack)   -> ?RDisconnect_Ack;
 encode_command(discnak)   -> ?RDisconnect_Nak.
 
 -spec encode_message_authenticator(req(), binary()) -> binary().
-encode_message_authenticator(#{reqid := ReqId, cmd := Cmd,
+encode_message_authenticator(#{req_id := ReqId, cmd := Cmd,
                                authenticator := Authenticator,
                                secret := Secret,
                                msg_hmac := true}, Body) ->
