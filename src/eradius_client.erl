@@ -2,19 +2,43 @@
 %% Copyright (c) 2011, Travelping GmbH <info@travelping.com>
 %%
 %% SPDX-License-Identifier: MIT
-%%
-%% @doc This module contains a RADIUS client that can be used to send authentication and accounting requests.
-%%   A counter is kept for every client instance in order to determine the next request id and sender port
-%%   for each outgoing request.
-%%
-%%   The client uses OS-assigned ports. The maximum number of open ports can be specified through the
-%%   ``client_ports'' application environment variable, it defaults to ``20''. The number of ports should not
-%%   be set too low. If ``N'' ports are opened, the maximum number of concurrent requests is ``N * 256''.
-%%
-%%   The IP address used to send requests is read <emph>once</emph> (at startup) from the ``client_ip''
-%%   parameter. Changing it currently requires a restart. It can be given as a string or ip address tuple,
-%%   or the atom ``any'' (the default), which uses whatever address the OS selects.
+
 -module(eradius_client).
+
+-moduledoc """
+Send RADIUS requests using a managed client instance.
+
+This module provides the `send_request/3,4` API for sending RADIUS requests through
+a client manager started with `eradius_client_mngr:start_client/1,2`.
+
+== Basic usage ==
+
+```
+%% Start a named client manager first
+{ok, _} = eradius_client_mngr:start_client({local, my_client},
+    #{family => inet,
+      ip => any,
+      servers => #{
+        auth => #{ip => {192,168,1,1}, port => 1812,
+                  secret => <<"mysecret">>, retries => 3}
+      }}),
+
+%% Send an access request
+Req = eradius_req:set_attrs([{?User_Name, <<"alice">>}], eradius_req:new(request)),
+{{ok, Resp}, _Req} = eradius_client:send_request(my_client, auth, Req, #{}).
+```
+
+== Retries and timeout ==
+
+Per-request options in `t:options/0` override the server defaults configured in
+`t:eradius_client_mngr:server_opts/0`. The defaults are 3 retries and a 5-second timeout.
+
+== Failover ==
+
+The `failover` option accepts a list of server pool names. If the primary server fails
+(all retries exhausted), the request is retried against the first available server
+from each failover pool in order.
+""".
 
 %% API
 -export([send_request/3, send_request/4]).
@@ -51,7 +75,7 @@
 %%%  API
 %%%=========================================================================
 
-%% @equiv send_request(ServerRef, ServerName, Req, [])
+-doc "Equivalent to `send_request(ServerRef, ServerName, Req, #{})`.".
 -spec send_request(gen_server:server_ref(),
                    eradius_client_mngr:server_name() | [eradius_client_mngr:server_name()],
                    eradius_req:req()) ->
@@ -59,8 +83,27 @@
 send_request(ServerRef, ServerName, #{cmd := _, payload := _} = Req) ->
     send_request(ServerRef, ServerName, Req, #{}).
 
-%% @doc Send a radius request to the given server or server pool.
-%%   If no answer is received within the specified timeout, the request will be sent again.
+-doc """
+Send a RADIUS request to a server or server pool.
+
+`ServerRef` is the pid or registered name of a client manager started with
+`eradius_client_mngr:start_client/1,2`.
+
+`ServerName` identifies the target: either an atom/binary server name configured in the
+client's `servers` map, or a list of names to try in order (first reachable wins).
+
+`Req` is the request to send, built with `eradius_req:new/1` and populated with
+`eradius_req:set_attrs/2`. The `cmd` field must be a valid client command
+(`request`, `accreq`, `coareq`, or `discreq`).
+
+`Opts` may contain:
+- `retries` — number of retransmissions before giving up (default: 3)
+- `timeout` — milliseconds to wait per attempt (default: 5000)
+- `failover` — list of server pool names to try if the primary fails
+
+Returns `{{ok, Response}, Request}` on success or `{{error, Reason}, Request}` on failure.
+`Reason` is `timeout` if all retries were exhausted, or `socket_down` if the socket closed.
+""".
 -spec send_request(gen_server:server_ref(),
                    eradius_client_mngr:server_name() | [eradius_client_mngr:server_pool()],
                    eradius_req:req(), options()) ->

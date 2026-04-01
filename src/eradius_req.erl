@@ -4,6 +4,49 @@
 
 -module(eradius_req).
 
+-moduledoc """
+Central RADIUS request/response type and encoding module.
+
+This module defines the `t:req/0` map type that represents a RADIUS packet
+throughout its lifecycle — from construction through wire encoding and response decoding.
+
+== Request lifecycle ==
+
+A typical outgoing (client-side) request goes through these steps:
+
+1. Create a request: `new/1` or `new/2`
+2. Add attributes: `add_attr/3`, `set_attr/3`, or `set_attrs/2`
+3. Encode to wire format: `packet/1`
+4. Send over the network (handled by `m:eradius_client`)
+5. Receive the raw response
+6. Decode: `response/3`
+7. Read the response command and attributes: `cmd/1`, `attrs/1`
+
+A server-side incoming request uses `request/4` to decode the wire data into a
+`t:req/0`, then the handler module receives it via `radius_request/2`
+(see `m:eradius_server`). The handler builds a response by updating the request map
+and returning it; `packet/1` encodes it for sending.
+
+== Request map fields ==
+
+The `t:req/0` type is an open map. Public fields that handlers and clients may read:
+
+<dl>
+  <dt>`cmd`</dt><dd>The RADIUS command atom (e.g. `request`, `accept`, `reject`).</dd>
+  <dt>`is_valid`</dt><dd>Validation state: `undefined`, `true`, or `false`.</dd>
+  <dt>`req_id`</dt><dd>RADIUS request identifier byte.</dd>
+  <dt>`authenticator`</dt><dd>16-byte authenticator field from the packet header.</dd>
+  <dt>`request_authenticator`</dt><dd>The original request authenticator (server-side).</dd>
+  <dt>`client`</dt><dd>Client name (server-side, populated from the `clients` config).</dd>
+  <dt>`client_addr`</dt><dd>`{IP, Port}` of the client (server-side).</dd>
+  <dt>`server`</dt><dd>Server name atom (server-side).</dd>
+  <dt>`server_addr`</dt><dd>`{IP, Port}` the server is listening on.</dd>
+</dl>
+
+Private fields (`body`, `head`, `socket`, `arrival_time`) are used internally and
+should not be accessed directly by application code.
+""".
+
 -export([is_valid/1,
          req_id/1,
          cmd/1,
@@ -112,45 +155,57 @@
 %%%  API
 %%%=========================================================================
 
-%% @doc Return validation state of the request.
-%%
-%% - `true' for a requests if has been encoded to binary form,
-%%
-%% - `true' for a response if has been decoded from binary form
-%%    and the authenticator has been validate,
-%%
-%% - `true' for a response if has been decoded from binary form
-%%    and the authenticator failed to validate,
-%%
-%% - `undefined' otherwise
-%% @end
+-doc """
+Return validation state of the request.
+
+- `true` for a requests if has been encoded to binary form,
+
+- `true` for a response if has been decoded from binary form
+   and the authenticator has been validate,
+
+- `true` for a response if has been decoded from binary form
+   and the authenticator failed to validate,
+
+- `undefined` otherwise
+""".
 -spec is_valid(req()) -> true | false | undefined.
 is_valid(#{is_valid := IsValid}) -> IsValid.
 
+-doc "Return the RADIUS request identifier, or `undefined` if not yet assigned.".
 -spec req_id(req()) -> byte() | undefined.
 req_id(#{req_id := ReqId}) -> ReqId;
 req_id(_) -> undefined.
 
+-doc "Return the RADIUS command of the request or response.".
 -spec cmd(req()) -> command().
 cmd(#{cmd := Cmd}) -> Cmd.
 
+-doc "Return the authenticator field from the packet header, or `undefined` if not set.".
 -spec authenticator(req()) -> authenticator() | undefined.
 authenticator(#{authenticator := Authenticator}) -> Authenticator;
 authenticator(_) -> undefined.
 
+-doc """
+Return the original request authenticator (server-side), or `undefined` if not available.
+
+On the server side, this holds the authenticator from the incoming request packet, which
+is needed to validate and construct the response authenticator.
+""".
 -spec request_authenticator(req()) -> authenticator() | undefined.
 request_authenticator(#{authenticator := Authenticator}) -> Authenticator;
 request_authenticator(_) -> undefined.
 
+-doc "Return the Message-Authenticator HMAC flag or value, or `undefined` if not set.".
 -spec msg_hmac(req()) -> boolean() | undefined.
 msg_hmac(#{msg_hmac := MsgHMAC}) -> MsgHMAC;
 msg_hmac(_) -> undefined.
 
+-doc "Return the EAP-Message payload, or `undefined` if not present.".
 -spec eap_msg(req()) -> binary() | undefined.
 eap_msg(#{eap_msg := EAPmsg}) -> EAPmsg;
 eap_msg(_) -> undefined.
 
-%% @doc Convert a RADIUS request to the wire format.
+-doc "Convert a RADIUS request to the wire format.".
 -spec packet(req()) -> {binary(), req()} | no_return().
 packet(#{req_id := _, cmd := _, authenticator := _, body := Body, secret := _} = Req)
   when is_binary(Body) ->
@@ -172,6 +227,15 @@ packet(#{req_id := _, cmd := Cmd, secret := _, attrs := Attrs, eap_msg := EAPmsg
 packet(Req) ->
     erlang:error(badarg, [Req]).
 
+-doc """
+Decode and return the attribute list from the request.
+
+If the attributes have already been decoded, returns them directly. Otherwise,
+decodes the raw binary body. The updated request (with decoded attrs cached)
+is returned as the second element of the tuple.
+
+Raises `{bad_pdu, decoder_error}` if the body cannot be decoded.
+""".
 -spec attrs(req()) -> {attribute_list(), req()} | no_return().
 attrs(#{attrs := Attrs, is_valid := IsValid} = Req)
   when is_list(Attrs), IsValid =/= false ->
@@ -188,6 +252,12 @@ attrs(#{body := Body, secret := _} = Req0)
 attrs(Req) ->
     erlang:error(badarg, [Req]).
 
+-doc """
+Return the value of a single attribute by id or attribute record, or `undefined`.
+
+Requires the request to have a decoded attribute list (i.e. `is_valid` is not `false`).
+Returns `undefined` if the attribute is not present.
+""".
 attr(Id, #{attrs := Attrs, is_valid := IsValid})
   when is_list(Attrs), IsValid =/= false ->
     get_attr(Id, Attrs);
@@ -204,10 +274,19 @@ get_attr(Id, [Head|Tail]) ->
     end.
 
 
+-doc "Create a new RADIUS request with the given command. Equivalent to `new(Command, undefined)`.".
 -spec new(command()) -> req().
 new(Command) ->
     new(Command, undefined).
 
+-doc """
+Create a new RADIUS request with the given command and metrics callback.
+
+`Command` is one of the RADIUS command atoms: `request`, `accreq`, `coareq`, `discreq`,
+`accept`, `reject`, `challenge`, `accresp`, `coaack`, `coanak`, `discack`, `discnak`.
+
+`MetricsCallback` may be `undefined` or a 3-arity fun — see `t:metrics_callback/0`.
+""".
 -spec new(command(), 'undefined' | metrics_callback()) -> req().
 new(Command, MetricsCallback)
   when MetricsCallback =:= undefined; is_function(MetricsCallback, 3) ->
@@ -222,6 +301,15 @@ new(Command, MetricsCallback)
       metrics_callback => MetricsCallback
      }.
 
+-doc """
+Decode an incoming RADIUS request from wire format (server-side).
+
+Parses the 20-byte `Header` and `Body` received from a UDP socket, populates the
+`t:req/0` map with the decoded command, request id, authenticator, shared secret
+and client identity from the `NAS` client config map.
+
+Raises on malformed input (bad command code or truncated header).
+""".
 -spec request(binary(), binary(), eradius_server:client(), 'undefined' | metrics_callback()) ->
           req() | no_return().
 request(<<Cmd, ReqId, Len:16, Authenticator:16/bytes>> = Header, Body,
@@ -233,6 +321,18 @@ request(<<Cmd, ReqId, Len:16, Authenticator:16/bytes>> = Header, Body,
            Req#{req_id => ReqId, request_authenticator => Authenticator,
                 client => ClientId, secret => Secret}).
 
+-doc """
+Decode a RADIUS response from wire format, or build a response from a command and attrs.
+
+Two forms:
+
+- `response(Header, Body, Req)` — decodes the 20-byte `Header` and `Body` received from
+  a UDP socket as a reply to `Req`. Validates that the response `req_id` matches the
+  original request. Returns an updated `t:req/0` with the response command and payload.
+
+- `response(Command, Attrs, Req)` — sets the command and attribute list directly without
+  encoding to binary. Useful for building test responses or intermediate server-side state.
+""".
 -spec response(binary(), binary(), req()) -> req() | no_return();
               (command(), undefined | attribute_list(), req()) -> req().
 response(<<Cmd, ReqId, Len:16, Authenticator:16/bytes>> = Header, Body,
@@ -243,40 +343,85 @@ response(<<Cmd, ReqId, Len:16, Authenticator:16/bytes>> = Header, Body,
 response(Response, Attrs, Req) when is_atom(Response) ->
     Req#{cmd := Response, body := undefined, attrs := Attrs, is_valid := undefined}.
 
+-doc """
+Set the shared secret on the request.
+
+Resets `is_valid` to `undefined` since the encoded form is now stale.
+""".
 -spec set_secret(req(), secret()) -> req().
 set_secret(Req, Secret) ->
     Req#{secret => Secret, is_valid := undefined}.
 
+-doc """
+Set the raw binary body of the request, replacing any decoded attribute list.
+
+Resets `attrs` to `undefined` and `is_valid` to `undefined`.
+""".
 -spec set_body(req(), binary()) -> req().
 set_body(Req, Body) when is_binary(Body) ->
     Req#{body := Body, attrs := undefined, is_valid := undefined}.
 
+-doc """
+Replace the attribute list of the request.
+
+Clears the encoded body and resets `is_valid` to `undefined`.
+""".
 -spec set_attrs(attribute_list(), req()) -> req().
 set_attrs(Attrs, Req) when is_list(Attrs) ->
     Req#{body := undefined, attrs := Attrs, is_valid := undefined}.
 
+-doc """
+Prepend an attribute to the attribute list.
+
+Does not check for duplicates — use `set_attr/3` if uniqueness is required.
+""".
 add_attr(Id, Value, #{attrs := Attrs} = Req)
   when is_list(Attrs) ->
     Req#{attrs := [{Id, Value} | Attrs], is_valid := undefined}.
 
+-doc "Set an attribute, replacing any existing entry with the same id.".
 set_attr(Id, Value, #{attrs := Attrs} = Req)
   when is_list(Attrs) ->
     Req#{attrs := lists:keystore(Id, 1, Attrs, {Id, Value}), is_valid := undefined}.
 
+-doc """
+Enable or disable the Message-Authenticator HMAC attribute.
+
+When set to `true`, `packet/1` will append a Message-Authenticator attribute
+to the encoded packet.
+""".
 -spec set_msg_hmac(boolean(), req()) -> req().
 set_msg_hmac(MsgHMAC, Req)
   when is_boolean(MsgHMAC) ->
     Req#{msg_hmac => MsgHMAC}.
 
+-doc """
+Set the EAP-Message payload.
+
+The binary is automatically split into EAP-Message attributes during encoding by `packet/1`.
+Clears the encoded body.
+""".
 -spec set_eap_msg(binary(), req()) -> req().
 set_eap_msg(EAPmsg, Req)
   when is_binary(EAPmsg) ->
     Req#{body := undefined, eap_msg := EAPmsg}.
 
+-doc """
+Replace the metrics callback on the request.
+
+Pass `undefined` to disable metrics recording. The callback is a 3-arity fun;
+see `t:metrics_callback/0`.
+""".
 -spec set_metrics_callback(undefined | metrics_callback(), req()) -> req().
 set_metrics_callback(MetricsCallback, Req) ->
     Req#{metrics_callback => MetricsCallback}.
 
+-doc """
+Invoke the metrics callback without a request context.
+
+Used for server-level events that are not associated with a specific `t:req/0`.
+Returns `undefined` if no callback is set.
+""".
 -spec metrics_callback(Cb :: undefined | eradius_req:metrics_callback(), Event :: metrics_event(), MetaData :: term()) -> any().
 metrics_callback(Cb, Event, MetaData)
   when is_function(Cb, 3) ->
@@ -284,6 +429,13 @@ metrics_callback(Cb, Event, MetaData)
 metrics_callback(_, _, _) ->
     undefined.
 
+-doc """
+Record a metrics event on the request, returning the updated request.
+
+If the request has a `t:metrics_callback/0` set, calls it with `Event`, `MetaData`,
+and the request. The callback may update and return a modified request.
+If no callback is set, returns the request unchanged.
+""".
 -spec record_metric(Event :: metrics_event(), MetaData :: term(), Req :: req()) -> req().
 record_metric(Event, MetaData, #{metrics_callback := Cb} = Req)
   when is_function(Cb, 3) ->
@@ -719,10 +871,12 @@ ascend(SharedSecret, RequestAuthenticator, <<PlainText/binary>>) ->
     Digest = crypto:hash(md5, [RequestAuthenticator, SharedSecret]),
     crypto:exor(Digest, pad_to(16, PlainText)).
 
-%% @doc pad binary to specific length
-%%   See <a href="http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html">
-%%          http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html
-%%       </a>
+-doc """
+pad binary to specific length
+  See <a href="http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html">
+         http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html
+      </a>
+""".
 -compile({inline, pad_to/2}).
 pad_to(Width, Binary) ->
     case (Width - byte_size(Binary) rem Width) rem Width of
@@ -730,7 +884,7 @@ pad_to(Width, Binary) ->
         N -> <<Binary/binary, 0:(N*8)>>
     end.
 
-%% @doc calculate the MD5 message authenticator
+-doc "calculate the MD5 message authenticator".
 -if(?OTP_RELEASE >= 23).
 %% crypto API changes in OTP >= 23
 message_authenticator(Secret, Msg) ->

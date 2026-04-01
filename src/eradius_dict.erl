@@ -3,8 +3,9 @@
 %%
 %% SPDX-License-Identifier: MIT
 %%
-%% @doc Dictionary server
 -module(eradius_dict).
+
+-moduledoc "Dictionary server".
 
 -behaviour(gen_server).
 

@@ -20,26 +20,30 @@
 %%% API
 %%%===================================================================
 
-%% @doc copy RADIUS AVPs into `m:logger' metadata.
-%%
-%% Helper function for use in a RADIUS server handler that will
-%% copy all RADIUS attributes into `m:logger' metadata.
-%%
-%% <blockquote><h4 class="warning">WARNING</h4>
-%% The function will format all attribute values to strings,
-%% the resulting processing load can be significant.
-%% </blockquote>
+-doc """
+copy RADIUS AVPs into `m:logger` metadata.
+
+Helper function for use in a RADIUS server handler that will
+copy all RADIUS attributes into `m:logger` metadata.
+
+<blockquote><h4 class="warning">WARNING</h4>
+The function will format all attribute values to strings,
+the resulting processing load can be significant.
+</blockquote>
+""".
 -spec update_logger_process_metadata(eradius_req:req()) -> ok.
 update_logger_process_metadata(Req) ->
     Metadata = maps:from_list(collect_meta(Req)),
     logger:update_process_metadata(Metadata).
 
-%% @doc Serialize `t:eradius_req:req/0' object into a proplist.
-%%
-%% Helper function for use in a RADIUS server handler that will
-%% serialize a RADIUS `t:eradius_req:req/0' object into a Key/Value lists.
-%%
-%% All values will be converted to human readable strings.
+-doc """
+Serialize `t:eradius_req:req/0` object into a proplist.
+
+Helper function for use in a RADIUS server handler that will
+serialize a RADIUS `t:eradius_req:req/0` object into a Key/Value lists.
+
+All values will be converted to human readable strings.
+""".
 -spec collect_meta(eradius_req:req()) -> [{term(), term()}].
 collect_meta(#{cmd := Cmd, req_id := ReqId, attrs := Attrs}) ->
     RequestType = binary_to_list(format_cmd(Cmd)),
@@ -48,27 +52,31 @@ collect_meta(#{cmd := Cmd, req_id := ReqId, attrs := Attrs}) ->
      {request_id, RequestId}|
      [collect_attr(Key, Val) || {Key, Val} <- Attrs]].
 
-%% @doc Format `t:eradius_req:req/0' object into a RADIUS short log entry
-%%
-%% The short log format is not part of any RADIUS RFC, but has been
-%% used by many RADIUS server implementations.
-%%
-%% The format is: `<Client-IP>:<Client-Port> [<Request-Id>]: <Command> [AcctStatusType]'
+-doc """
+Format `t:eradius_req:req/0` object into a RADIUS short log entry
+
+The short log format is not part of any RADIUS RFC, but has been
+used by many RADIUS server implementations.
+
+The format is: `<Client-IP>:<Client-Port> [<Request-Id>]: <Command> [AcctStatusType]`
+""".
 -spec line(eradius_req:req()) -> iolist().
 line(#{cmd := Cmd, req_id := ReqId, server_addr := {IP, Port}} = Req) ->
     StatusType = format_acct_status_type(Req),
     io_lib:format("~s:~p [~p]: ~s ~s", [inet:ntoa(IP), Port, ReqId, format_cmd(Cmd), StatusType]).
 
-%% @doc Format `t:eradius_req:req/0' object into a RADIUS log entry
-%%
-%% The long log format is not part of any RADIUS RFC, but has been
-%% used by many RADIUS server implementations in the past.
-%%
-%% The format is:
-%% ```
-%% <TimeStamp> <Client-IP>:<Client-Port> [<Request-Id>] <Command>
-%%     [<Key> = <Value>]+
-%% '''
+-doc """
+Format `t:eradius_req:req/0` object into a RADIUS log entry
+
+The long log format is not part of any RADIUS RFC, but has been
+used by many RADIUS server implementations in the past.
+
+The format is:
+```
+<TimeStamp> <Client-IP>:<Client-Port> [<Request-Id>] <Command>
+    [<Key> = <Value>]+
+```
+""".
 -spec format_req(eradius_req:req()) -> binary().
 format_req(Req) ->
     Time =

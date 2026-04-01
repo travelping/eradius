@@ -2,8 +2,9 @@
 %%
 %% SPDX-License-Identifier: MIT
 %%
-%% @doc Provides metrics callbacks for recording metrics with prometheus.erl
 -module(eradius_metrics_prometheus).
+
+-moduledoc "Provides metrics callbacks for recording metrics with prometheus.erl".
 
 -export([init/1, reset/0]).
 -export([client_metrics_callback/3, server_metrics_callback/3]).
@@ -27,7 +28,7 @@
 %%% Setup
 %%%=========================================================================
 
-%% @doc Initialize the prometheus metrics
+-doc "Initialize the prometheus metrics".
 -spec init(#{histogram_buckets => [pos_integer()],
              client_metrics => boolean(),
              server_metrics => boolean()}) -> ok.
@@ -307,8 +308,10 @@ init_server_metrics(_Config) ->
 %%% Metrics Handler
 %%%=========================================================================
 
-%% @doc Function for use as `t:eradius_req:metrics_callback/0' for a `t:eradius_req:req/0'
-%% object in a RADIUS client to record prometheus metrics
+-doc """
+Function for use as `t:eradius_req:metrics_callback/0` for a `t:eradius_req:req/0`
+object in a RADIUS client to record prometheus metrics
+""".
 -spec client_metrics_callback(Event :: eradius_req:metrics_event(),
                               MetaData :: term(),
                               Req :: eradius_req:req()) -> eradius_req:req().
@@ -410,8 +413,10 @@ client_reply_metrics(MetaData, Labels,
     end,
     client_request_duration(MetaData, Labels, Req).
 
-%% @doc Function for use as `t:eradius_req:metrics_callback/0' for a `t:eradius_req:req/0'
-%% object in a RADIUS server to record prometheus metrics
+-doc """
+Function for use as `t:eradius_req:metrics_callback/0` for a `t:eradius_req:req/0`
+object in a RADIUS server to record prometheus metrics
+""".
 -spec server_metrics_callback(Event :: eradius_req:metrics_event(),
                               MetaData :: term(),
                               Req :: eradius_req:req()) -> eradius_req:req().

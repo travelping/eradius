@@ -1,6 +1,7 @@
 %% @private
-%% @doc Supervisor for RADIUS server processes.
 -module(eradius_server_sup).
+
+-moduledoc "Supervisor for RADIUS server processes.".
 -behaviour(supervisor).
 
 -export([start_link/0, start_instance/1, all/0]).

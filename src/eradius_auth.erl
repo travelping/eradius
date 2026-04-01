@@ -4,8 +4,9 @@
 %% SPDX-License-Identifier: MIT
 %%
 
-%% @doc user authentication helper functions
 -module(eradius_auth).
+
+-moduledoc "user authentication helper functions".
 
 -export([check_password/2]).
 -export([pap/2, chap/3, ms_chap/3, ms_chap_v2/4]).
@@ -36,8 +37,10 @@
 %% ------------------------------------------------------------------------------------------
 %% -- high level interface
 
-%% @doc check the request password using all available authentication mechanisms.
-%%    Tries CHAP, then MS-CHAP, then MS-CHAPv2, finally PAP.
+-doc """
+check the request password using all available authentication mechanisms.
+   Tries CHAP, then MS-CHAP, then MS-CHAPv2, finally PAP.
+""".
 -spec check_password(binary(), eradius_req:req()) ->
           false | {boolean(), eradius_req:attribute_list()}.
 check_password(Password, #{authenticator := Authenticator, is_valid := true} = Req) ->
@@ -86,7 +89,7 @@ lookup_auth_attrs(Attrs, []) ->
 
 %% ------------------------------------------------------------------------------------------
 %% -- PAP/CHAP
-%% @doc PAP authentication
+-doc "PAP authentication".
 -spec pap(binary(), binary()) -> boolean().
 pap(<<C, PasswdRest/binary>>, <<C, ReqRest/binary>>) ->
     pap(PasswdRest, ReqRest);
@@ -105,13 +108,13 @@ only_null(<<_, _/binary>>) ->
 only_null(<<>>) ->
     true.
 
-%% @doc CHAP authentication
+-doc "CHAP authentication".
 -spec chap(binary(), binary(), binary()) -> boolean().
 chap(Passwd, <<ChapId, ChapPassword/binary>>, ChapChallenge) ->
     EncPassword = crypto:hash(md5, [ChapId, Passwd, ChapChallenge]),
     EncPassword == ChapPassword.
 
-%% @doc build a des key from a hash
+-doc "build a des key from a hash".
 set_des_parity_odd(P0) ->
     P1 = P0 bxor (P0 bsr 4),
     P2 = P1 bxor (P1 bsr 2),
@@ -122,35 +125,37 @@ set_des_parity_odd(P0) ->
 des_key_from_hash(Hash) ->
     << << (set_des_parity_odd(X)) >> || <<X:7>> <= Hash >>.
 
-%% @doc turn a plain text password (either binary or list representation)
-%% into UTF-16 binary representation.
+-doc """
+turn a plain text password (either binary or list representation)
+into UTF-16 binary representation.
+""".
 ascii_to_unicode(Bin) when is_binary(Bin) ->
     << <<X, 0>> || <<X>> <= Bin >>;
 ascii_to_unicode(Lst) when is_list(Lst) ->
     list_to_binary([[X, 0] || X <- Lst]).
 
-%% @doc calculte MD4 hash for value
+-doc "calculte MD4 hash for value".
 nt_hash(Value) ->
     crypto:hash(md4, Value).
 
-%% @doc calculate the MD4 hash of a plain text password the NT way
+-doc "calculate the MD4 hash of a plain text password the NT way".
 nt_password_hash(Passwd) ->
     crypto:hash(md4, ascii_to_unicode(Passwd)).
 
 %% ------------------------------------------------------------------------------------------
 %% -- MS-CHAP
-%% @doc generate MS-CHAP NT-Response
+-doc "generate MS-CHAP NT-Response".
 v2_generate_nt_response(AuthenticatorChallenge, PeerChallenge, UserName, PasswdHash) ->
     ChallengeHash = v2_challenge_hash(PeerChallenge, AuthenticatorChallenge, UserName),
     challenge_response(ChallengeHash, PasswdHash).
 
-%% @doc calculate MS-CHAP challenge hash
+-doc "calculate MS-CHAP challenge hash".
 v2_challenge_hash(PeerChallenge, AuthenticatorChallenge, UserName) ->
     binary:part(crypto:hash(sha, [PeerChallenge, AuthenticatorChallenge, UserName]), 0, 8).
 
 %% crypto API changes in OTP >= 23
 -if(?OTP_RELEASE >= 23).
-%% @doc calculate MS-CHAP challenge response
+-doc "calculate MS-CHAP challenge response".
 challenge_response(Challenge, PasswdHash) ->
     Hash = eradius_lib:pad_to(21, PasswdHash),
     <<Key1:8/binary, Key2:8/binary, Key3:8/binary>> = des_key_from_hash(Hash),
@@ -161,7 +166,7 @@ challenge_response(Challenge, PasswdHash) ->
 
     <<Resp1/binary, Resp2/binary, Resp3/binary>>.
 -else.
-%% @doc calculate MS-CHAP challenge response
+-doc "calculate MS-CHAP challenge response".
 challenge_response(Challenge, PasswdHash) ->
     Hash = eradius_lib:pad_to(21, PasswdHash),
     <<Key1:8/binary, Key2:8/binary, Key3:8/binary>> = des_key_from_hash(Hash),
@@ -199,7 +204,7 @@ lm_password_hash(Password) ->
     << Key1:7/binary, Key2:7/binary >> = lm_password(Password),
     << (des_hash(Key1))/binary, (des_hash(Key2))/binary >>.
 
-%% @doc MS-CHAP authentication
+-doc "MS-CHAP authentication".
 -spec ms_chap(binary(), binary(), binary()) -> {boolean(), eradius_req:attribute_list()}.
 ms_chap(Passwd, Challenge,
         <<_Ident:1/binary, Flags:1/integer-unit:8, LMResponse:24/binary, NTResponse:24/binary>>) ->
@@ -223,7 +228,7 @@ ms_chap(Passwd, Challenge,
         true  -> {true, ms_chap_attrs(LmPasswdHash, NtPasswdHash)}
     end.
 
-%% @doc MS-CHAP-V2 authentication
+-doc "MS-CHAP-V2 authentication".
 -spec ms_chap_v2(binary(), binary(), binary(), binary()) ->
           {boolean(), eradius_req:attribute_list()}.
 ms_chap_v2(UserName, Passwd, AuthenticatorChallenge,
@@ -238,13 +243,13 @@ ms_chap_v2(UserName, Passwd, AuthenticatorChallenge,
             {false, []}
     end.
 
-%% @doc calculate MS-CHAP response attributes
+-doc "calculate MS-CHAP response attributes".
 ms_chap_attrs(LmPasswdHash, NtPasswdHash) ->
     Key1 = binary:part(LmPasswdHash, 0, 8),
     Key2 = binary:part(nt_hash(NtPasswdHash), 0, 16),
     [{?MS_CHAP_MPPE_Keys, <<Key1/binary, Key2/binary>>}].
 
-%% @doc calculate MS-CHAPv2 response attributes
+-doc "calculate MS-CHAPv2 response attributes".
 ms_chap_v2_attrs(UserName, PasswdHash, AuthenticatorChallenge, Ident, PeerChallenge, Response) ->
     SFlag = 1, LFlag = 0, EncPolicy = 2, %% TODO: determine from config or something...
     {SendKey, ReceiveKey} = mppe_generate_session_keys(PasswdHash, Response, 128),
@@ -257,20 +262,20 @@ ms_chap_v2_attrs(UserName, PasswdHash, AuthenticatorChallenge, Ident, PeerChalle
 
 %% ------------------------------------------------------------------------------------------
 %% -- MS-CHAP-V2 MPPE key functions
-%% @doc calculate MPPE master key
+-doc "calculate MPPE master key".
 mppe_get_master_key(PasswordHashHash, NTResponse) ->
     binary:part(crypto:hash(sha, [PasswordHashHash, NTResponse, mppe_magic1()]), 0, 16).
 
-%% @doc calculate next MPPE key from current
+-doc "calculate next MPPE key from current".
 mppe_get_new_key_from_sha(StartKey, SessionKey, SessionKeyLength) ->
     Key = crypto:hash(sha, [StartKey, mppe_sha_pad1(), SessionKey, mppe_sha_pad2()]),
     binary:part(Key, 0, SessionKeyLength).
 
-%% @doc calculate first MPPE send key
+-doc "calculate first MPPE send key".
 mppe_get_asymetric_send_start_key(MasterKey, SessionKeyLength) ->
     mppe_get_new_key_from_sha(MasterKey, mppe_magic3(), SessionKeyLength).
 
-%% @doc calculate first MPPE recieve key
+-doc "calculate first MPPE recieve key".
 mppe_get_asymetric_recv_start_key(MasterKey, SessionKeyLength) ->
     mppe_get_new_key_from_sha(MasterKey, mppe_magic2(), SessionKeyLength).
 

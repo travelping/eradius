@@ -1,6 +1,6 @@
-%% @doc
-%%  This module implements the EAP RFC-3748 message encoder and decoder functions
 -module(eradius_eap_packet).
+
+-moduledoc "This module implements the EAP RFC-3748 message encoder and decoder functions".
 
 -export([start/0, lookup_type/1, register_type/2, unregister_type/1]).
 -export([decode/1, encode/3, decode_eap_type/2, encode_eap_type/1]).
@@ -20,18 +20,18 @@
 start() ->
     gen_server:start({local, ?SERVER}, ?MODULE, [], []).
 
-%% @doc lookup the handler module for an extended EAP type
+-doc "lookup the handler module for an extended EAP type".
 lookup_type(Type) ->
     case ets:lookup(?SERVER, Type) of
         [{Type, Module}] -> {ok, Module};
         _ -> false
     end.
 
-%% @doc register the handler module for an extended EAP type
+-doc "register the handler module for an extended EAP type".
 register_type(Type, Module) ->
     gen_server:call(?SERVER, {register, Type, Module}).
 
-%% @doc unregister the handler module for an extended EAP type
+-doc "unregister the handler module for an extended EAP type".
 unregister_type(Type) ->
     gen_server:call(?SERVER, {unregister, Type}).
 
@@ -63,7 +63,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% ------------------------------------------------------------------------------------------
 %% -- decoder functions
 
-%% @doc decode a EPA message
+-doc "decode a EPA message".
 decode(<<Code:8, Id:8, Len:16, Rest/binary>>) ->
     DataLen = Len - 4,
     case Rest of
@@ -73,7 +73,7 @@ decode(<<Code:8, Id:8, Len:16, Rest/binary>>) ->
             {error, invalid_length}
     end.
 
-%% @doc endecode a EPA message
+-doc "endecode a EPA message".
 encode(Code, Id, Msg) ->
     Data = encode_payload(Code, Msg),
     Len = size(Data) + 4,
@@ -97,7 +97,7 @@ decode_payload(Code, Id, Data)
         _ ->    {error, invalid_length}
     end.
 
-%% @doc EAP decoder functions for RFC-3784 types
+-doc "EAP decoder functions for RFC-3784 types".
 
 %%    1       Identity
 decode_eap_type(1, Data) ->
@@ -149,7 +149,7 @@ encode_payload(Code, _Msg)
   when Code == success; Code == failure ->
     <<>>.
 
-%% @doc EAP encoder functions for RFC-3784 types
+-doc "EAP encoder functions for RFC-3784 types".
 
 %%    1       Identity
 encode_eap_type({identity, Data})

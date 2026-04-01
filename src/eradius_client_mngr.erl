@@ -2,20 +2,47 @@
 %% Copyright (c) 2011, Travelping GmbH <info@travelping.com>
 %%
 %% SPDX-License-Identifier: MIT
-%%
-%% @doc This module contains the management logic for the RADIUS client instances.
-%%   A counter is kept for every client instance in order to determine the next request id and sender port
-%%   for each outgoing request.
-%%
-%%   The client uses OS-assigned ports. The maximum number of open ports can be specified through the
-%%   ``client_ports'' option, it defaults to ``20''. The number of ports should not
-%%   be set too low. If ``N'' ports are opened, the maximum number of concurrent requests is ``N * 256''.
-%%
-%%   The IP address used to send requests is configured through the ``ip'' option.
-%%   Changing it currently requires a restart. It can be given as a string or ip address tuple,
-%%   or the atom ``any'' (the default), which uses whatever address the OS selects.
+
 -module(eradius_client_mngr).
--feature(maybe_expr, enable).
+
+-moduledoc """
+RADIUS client instance manager.
+
+Manages a pool of UDP sockets and the state of configured RADIUS servers.
+Each client manager is a `gen_server` supervised by the eradius application tree.
+Requests are dispatched through `m:eradius_client`.
+
+== Configuration ==
+
+A client is started with a `t:client_opts/0` map. The mandatory `servers` key maps
+server names to either a `t:server_opts/0` map (a concrete server) or a
+`t:server_pool/0` list of server names (a named pool for failover):
+
+```
+{ok, _} = eradius_client_mngr:start_client({local, my_client},
+    #{family  => inet,
+      ip      => any,
+      servers => #{
+          primary   => #{ip => {10,0,0,1}, port => 1812,
+                         secret => <<"secret1">>, retries => 3},
+          secondary => #{ip => {10,0,0,2}, port => 1812,
+                         secret => <<"secret2">>},
+          auth_pool => [primary, secondary]
+      }}).
+```
+
+== Failure tracking ==
+
+The manager tracks server failures. A server that fails to respond is marked as
+unreachable for a configurable period (`unreachable_timeout` application env, default 2 s).
+Pool-based failover in `m:eradius_client` automatically skips unreachable servers.
+
+== Socket pool ==
+
+The client opens `no_ports` UDP sockets (default: 1) on OS-assigned ports.
+Each socket supports up to 256 concurrent requests (one per RADIUS request id).
+Increase `no_ports` for higher concurrency requirements.
+""".
 
 -behaviour(gen_server).
 
@@ -60,7 +87,7 @@
                     timeout := non_neg_integer(),
                     failed := non_neg_integer()}.
 %% Options to describe a RADIUS server.
-%% Conceptually the same as `t:server_opts/0', except that may fields are mandatory.
+%% Conceptually the same as server_opts(), except that mandatory fields use :=.
 
 -type server_pool() :: [server_name()].
 %% List of server names that form a pool.
@@ -94,7 +121,7 @@
           metrics_callback := 'undefined' | eradius_req:metrics_callback()
          }.
 %% Options to configure the RADIUS client.
-%% Conceptually the same as `t:client_opts/0', except that may fields are mandatory.
+%% Conceptually the same as client_opts(), except that mandatory fields use :=.
 
 -export_type([server_name/0, server_pool/0, servers/0, client_opts/0]).
 
@@ -119,8 +146,10 @@
 %%%  API
 %%%=========================================================================
 
-%% @doc Start a new RADIUS client that is managed by the eradius applications supervisor tree.
-%% Returns the client manager pid (usable with eradius_client:send_request/3,4).
+-doc """
+Start a new RADIUS client that is managed by the eradius applications supervisor tree.
+Returns the client manager pid (usable with eradius_client:send_request/3,4).
+""".
 -spec start_client(client_opts()) ->
           {ok, pid()} | {error, supervisor:startchild_err()}.
 start_client(Opts) ->
@@ -131,7 +160,7 @@ start_client(Opts) ->
             Error
     end.
 
-%% @doc Start a new, named RADIUS client that is managed by the eradius applications supervisor tree.
+-doc "Start a new, named RADIUS client that is managed by the eradius applications supervisor tree.".
 -spec start_client(gen_server:server_name(), client_opts()) ->
           {ok, pid()} | {error, supervisor:startchild_err()}.
 start_client(ServerName, Opts) ->
@@ -167,7 +196,13 @@ wanna_send(Server, Peer, Tried) ->
 request_failed(Server, Peer) ->
     gen_server:call(Server, {failed, Peer}).
 
-%% @doc reconfigure the Radius client
+-doc """
+Reconfigure a running RADIUS client manager.
+
+Merges `Opts` into the current configuration. The manager will update its server list
+and socket pool accordingly, closing sockets that are no longer needed and opening new ones.
+Waits up to 15 seconds for the reconfiguration to complete.
+""".
 reconfigure(ServerRef, Opts) ->
     gen_server:call(ServerRef, {reconfigure, Opts}, ?RECONFIGURE_TIMEOUT).
 

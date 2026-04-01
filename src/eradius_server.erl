@@ -2,9 +2,57 @@
 %% Copyright (c) 2011, Travelping GmbH <info@travelping.com>
 %%
 %% SPDX-License-Identifier: MIT
-%%
+
 -module(eradius_server).
--feature(maybe_expr, enable).
+
+-moduledoc """
+RADIUS server behaviour and instance management.
+
+This module implements a UDP-based RADIUS server and defines the `eradius_server`
+behaviour that application handler modules must implement.
+
+== Handler behaviour ==
+
+A handler module implements the `radius_request/2` callback:
+
+```
+-module(my_handler).
+-behaviour(eradius_server).
+
+radius_request(#{cmd := request} = Req, _HandlerData) ->
+    %% Build response by updating the request map
+    Resp = eradius_req:set_attrs([{?User_Name, <<"accepted">>}], Req#{cmd := accept}),
+    {reply, Resp}.
+```
+
+The handler receives the decoded `t:eradius_req:req/0` map and returns:
+- `{reply, Resp}` — send the response packet to the client
+- `noreply` — do not respond (request is silently discarded)
+- `{error, timeout}` — discard with a timeout reason logged
+
+== Client authentication ==
+
+Incoming requests are authenticated by matching the source IP against the `clients`
+map in `t:server_opts/0`. Each entry maps a client IP to a `t:client/0` map containing
+the shared secret. Packets from unlisted IPs are silently discarded.
+
+== Starting a server ==
+
+Servers are typically started via `m:eradius`:
+
+```
+{ok, Pid} = eradius:start_server({127,0,0,1}, 1812,
+    #{handler => {my_handler, []},
+      clients => #{{127,0,0,1} => #{secret => <<"mysecret">>,
+                                    client => <<"my-nas">>}}}).
+```
+
+Or directly for named instances:
+
+```
+{ok, Pid} = eradius:start_server({local, my_server}, {127,0,0,1}, 1812, Opts).
+```
+""".
 
 -behaviour(gen_server).
 
@@ -60,7 +108,7 @@
                            sndbuf => non_neg_integer()
                           }.
 %% Options to configure the RADIUS server UDP socket.
-%% Conceptually the same as `t:socket_opts/0', except that may fields are mandatory.
+%% Conceptually the same as socket_opts(), except that mandatory fields use :=.
 
 -type server_opts() :: #{server_name => term(),
                          socket_opts => socket_opts(),
@@ -75,13 +123,13 @@
                            metrics_callback := undefined | eradius_req:metrics_callback(),
                            clients := map()}.
 %% Options to configure the RADIUS server.
-%% Conceptually the same as `t:server_opts/0', except that may fields are mandatory.
+%% Conceptually the same as server_opts(), except that mandatory fields use :=.
 
 -type client() :: #{client := binary(),
                     secret := eradius_req:secret()}.
 %% RADIUS client settings
 
--export_type([server_name/0, client/0]).
+-export_type([server_name/0, client/0, server_opts/0, socket_opts/0]).
 
 -record(state, {
                 name           :: atom(),            % server name
@@ -95,6 +143,18 @@
                 clients        :: #{inet:ip_address() => client()}
                }).
 
+-doc """
+Handle an incoming RADIUS request.
+
+Called by the server for each valid incoming packet. `Req` is the decoded
+request map. `HandlerData` is the second element of the `{Module, HandlerData}`
+tuple from the `handler` key in `t:server_opts/0`.
+
+Return values:
+- `{reply, Resp}` — encode `Resp` and send it back to the client
+- `noreply` — do not send a response
+- `{error, timeout}` — discard the request with a timeout reason
+""".
 -callback radius_request(eradius_req:req(), HandlerData :: term()) ->
     {reply, eradius_req:req()} | noreply | {error, timeout}.
 
@@ -102,6 +162,17 @@
 %%%  API
 %%%=========================================================================
 
+-doc """
+Start a RADIUS server instance under the eradius supervision tree.
+
+`IP` is the address to bind to (`any` binds to all interfaces).
+`Port` is the UDP port number.
+`Opts` must include at minimum `handler` and `clients`; see `t:server_opts/0`.
+
+Returns the pid of the started server process.
+
+See `eradius:start_server/3`.
+""".
 -spec start_instance(IP :: 'any' | inet:ip_address(), Port :: inet:port_number(),
                      Opts :: server_opts()) ->  gen_server:start_ret().
 start_instance(IP, Port, Opts)
@@ -109,6 +180,14 @@ start_instance(IP, Port, Opts)
        is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
     eradius_server_sup:start_instance([IP, Port, Opts]).
 
+-doc """
+Start a named RADIUS server instance under the eradius supervision tree.
+
+Same as `start_instance/3` but registers the server process under `ServerName`
+(e.g. `{local, my_server}`).
+
+See `eradius:start_server/4`.
+""".
 -spec start_instance(ServerName :: gen_server:server_name(),
                      IP :: 'any' | inet:ip_address(), Port :: inet:port_number(),
                      Opts :: server_opts()) ->  gen_server:start_ret().
@@ -117,6 +196,12 @@ start_instance(ServerName, IP, Port, Opts)
        is_integer(Port) andalso Port >= 0 andalso Port < 65536 ->
     eradius_server_sup:start_instance([ServerName, IP, Port, Opts]).
 
+-doc """
+Stop a running RADIUS server instance.
+
+Sends a stop request to the server process and waits for it to terminate.
+Returns `ok` even if the process is already stopped.
+""".
 -spec stop_instance(Pid :: pid()) -> ok.
 stop_instance(Pid) ->
     try gen_server:call(Pid, stop)
