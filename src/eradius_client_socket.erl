@@ -90,7 +90,7 @@ handle_info({udp_passive, _Socket}, #state{socket = Socket, active_n = ActiveN} 
     {noreply, State};
 
 handle_info({udp, Socket, FromIP, FromPort, Response},
-            State = #state{socket = Socket, mode = Mode}) ->
+            State = #state{socket = Socket}) ->
     flow_control(State),
     NState =
         case Response of
