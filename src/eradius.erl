@@ -5,7 +5,7 @@
 
 %% API
 -export([load_tables/1, load_tables/2,
-        start_server/3, start_server/4]).
+         start_server/3, start_server/4]).
 -ignore_xref([load_tables/1, load_tables/2,
               start_server/3, start_server/4]).
 

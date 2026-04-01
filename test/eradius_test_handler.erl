@@ -21,7 +21,7 @@ start(Backend, Family) ->
 
     SrvOpts = #{handler => {?MODULE, []},
                 clients => #{eradius_test_lib:localhost(Family, native) =>
-                                #{secret => "secret", client => <<"ONE">>}}},
+                                 #{secret => "secret", client => <<"ONE">>}}},
     {ok, _} = eradius:start_server(
                 eradius_test_lib:localhost(Family, native), 1812, SrvOpts#{server_name => one}),
     {ok, _} = eradius:start_server(

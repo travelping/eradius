@@ -296,7 +296,7 @@ handle_info({timeout, _, {reset, Peer}}, #state{servers = Servers0} = State0) ->
     {noreply, State};
 
 handle_info(_Info, State) ->
-   {noreply, State}.
+    {noreply, State}.
 
 %% @private
 terminate(Reason, _State) ->
@@ -425,13 +425,13 @@ client_config_name(Tag, #{family := inet6, ip := IP, ipv6_v6only := true} = Opts
   when IP =:= any; IP =:= {0, 0, 0, 0, 0, 0, 0, 0} ->
     client_config_name("*", Tag, Opts);
 client_config_name(Tag, #{family := inet6, ip := any} = Opts) ->
-     client_config_name("[::]", Tag, Opts);
+    client_config_name("[::]", Tag, Opts);
 client_config_name(Tag, #{family := inet, ip := any} = Opts) ->
-     client_config_name("[0.0.0.0]", Tag, Opts);
+    client_config_name("[0.0.0.0]", Tag, Opts);
 client_config_name(Tag, #{family := inet6, ip := IP} = Opts) ->
-     client_config_name([$[, inet:ntoa(IP), $]], Tag, Opts);
+    client_config_name([$[, inet:ntoa(IP), $]], Tag, Opts);
 client_config_name(Tag, #{family := inet, ip := IP} = Opts) ->
-     client_config_name(inet:ntoa(IP), Tag, Opts).
+    client_config_name(inet:ntoa(IP), Tag, Opts).
 
 client_config_name(IP, Tag,  Opts) ->
     {ok, Opts#{name => iolist_to_binary([IP, Tag])}}.

@@ -411,7 +411,7 @@ encode_attributes(Req, Attributes, Init) ->
                       <<Body/binary, EncAttr/binary>>;
                   _ ->
                       Body
-                end
+              end
       end, Init, Attributes).
 
 -spec encode_attribute(eradius_req:req(), #attribute{}, term()) -> binary().
