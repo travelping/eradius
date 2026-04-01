@@ -140,7 +140,7 @@ error_requests(_Config) ->
 request_with_attrs_as_record(_Config) ->
     ok = send_request(good, accreq, ?ATTRS_AS_RECORD,
                       #{server_name => good, client_name => test_records}),
-    check_metric(accreq, eradius_client_accounting_requests_total, [{"server_name", good}, {"acct_type", start}], 1).
+    check_metric(accreq, eradius_client_accounting_requests_total, [{server_name, good}, {acct_type, start}], 1).
 
 %% helpers
 check_single_request(good, EradiusRequestType, _RequestType, _ResponseType) ->
@@ -151,46 +151,46 @@ check_single_request(good, EradiusRequestType, _RequestType, _ResponseType) ->
     ERadM = re:run(Metrics, "^eradius.*", [multiline, global, {capture, all, binary}]),
     ct:pal("Metrics:~n~p~n", [ERadM]),
 
-    check_metric(eradius_client_access_requests_total, [{"server_name", good}], 1),
-    check_metric_multi(EradiusRequestType, eradius_client_accounting_requests_total, [{"server_name", good}], 1),
-    check_metric_multi({bad_type, EradiusRequestType}, eradius_client_accounting_requests_total, [{"server_name", good}, {"acct_type", bad_type}], 0),
-    check_metric(EradiusRequestType, eradius_client_accounting_requests_total, [{"server_name", good}, {"acct_type", start}], 1),
-    check_metric(EradiusRequestType, eradius_client_accounting_requests_total, [{"server_name", good}, {"acct_type", stop}], 0),
-    check_metric(EradiusRequestType, eradius_client_accounting_requests_total, [{"server_name", good}, {"acct_type", update}], 0),
-    check_metric(eradius_client_accept_responses_total, [{"server_name", good}], 1),
-    check_metric(eradius_accept_responses_total, [{"server_name", good}], 1),
-    check_metric(eradius_access_requests_total, [{"server_name", good}], 1),
+    check_metric(eradius_client_access_requests_total, [{server_name, good}], 1),
+    check_metric_multi(EradiusRequestType, eradius_client_accounting_requests_total, [{server_name, good}], 1),
+    check_metric_multi({bad_type, EradiusRequestType}, eradius_client_accounting_requests_total, [{server_name, good}, {acct_type, bad_type}], 0),
+    check_metric(EradiusRequestType, eradius_client_accounting_requests_total, [{server_name, good}, {acct_type, start}], 1),
+    check_metric(EradiusRequestType, eradius_client_accounting_requests_total, [{server_name, good}, {acct_type, stop}], 0),
+    check_metric(EradiusRequestType, eradius_client_accounting_requests_total, [{server_name, good}, {acct_type, update}], 0),
+    check_metric(eradius_client_accept_responses_total, [{server_name, good}], 1),
+    check_metric(eradius_accept_responses_total, [{server_name, good}], 1),
+    check_metric(eradius_access_requests_total, [{server_name, good}], 1),
     check_metric(eradius_server_status, true, [eradius_test_lib:localhost(ipv4, native), 1812]);
 check_single_request(bad, EradiusRequestType, _RequestType, _ResponseType) ->
     ok = send_request(bad, EradiusRequestType, ?ATTRS_BAD,
                       #{server_name => bad, client_name => test}),
-    check_metric(eradius_client_access_requests_total, [{"server_name", bad}], 1),
-    check_metric(eradius_client_reject_responses_total, [{"server_name", bad}], 1),
-    check_metric(eradius_access_requests_total, [{"server_name", bad}], 1),
-    check_metric(eradius_reject_responses_total, [{"server_name", bad}], 1),
+    check_metric(eradius_client_access_requests_total, [{server_name, bad}], 1),
+    check_metric(eradius_client_reject_responses_total, [{server_name, bad}], 1),
+    check_metric(eradius_access_requests_total, [{server_name, bad}], 1),
+    check_metric(eradius_reject_responses_total, [{server_name, bad}], 1),
     check_metric(eradius_server_status, true, [eradius_test_lib:localhost(ipv4, native), 1813]);
 check_single_request(error, EradiusRequestType, _RequestType, _ResponseType) ->
     ok = send_request(error, EradiusRequestType, ?ATTRS_ERROR,
                       #{server_name => error, client_name => test, timeout => 100,
                         failover => []}),
-    check_metric(eradius_client_access_requests_total, [{"server_name", error}], 1),
-    check_metric(eradius_client_retransmissions_total, [{"server_name", error}], 1),
-    check_metric(eradius_access_requests_total, [{"server_name", error}], 1),
-    check_metric(eradius_accept_responses_total, [{"server_name", error}], 1),
-    check_metric(eradius_duplicated_requests_total, [{"server_name", error}], 1),
-    check_metric(eradius_client_requests_total, [{"server_name", error}], 1),
-    check_metric(eradius_requests_total, [{"server_name", error}], 2),
+    check_metric(eradius_client_access_requests_total, [{server_name, error}], 1),
+    check_metric(eradius_client_retransmissions_total, [{server_name, error}], 1),
+    check_metric(eradius_access_requests_total, [{server_name, error}], 1),
+    check_metric(eradius_accept_responses_total, [{server_name, error}], 1),
+    check_metric(eradius_duplicated_requests_total, [{server_name, error}], 1),
+    check_metric(eradius_client_requests_total, [{server_name, error}], 1),
+    check_metric(eradius_requests_total, [{server_name, error}], 2),
     check_metric(eradius_server_status, undefined, [eradius_test_lib:localhost(ipv4, native), 1812]),
     check_metric(eradius_server_status, undefined, [eradius_test_lib:localhost(ipv4, native), 1813]),
     check_metric(eradius_server_status, true, [eradius_test_lib:localhost(ipv4, native), 1814]),
     ok.
 
 check_total_requests(good, N) ->
-    check_metric(eradius_requests_total, [{"server_name", good}], N),
-    check_metric(eradius_replies_total, [{"server_name", good}], N);
+    check_metric(eradius_requests_total, [{server_name, good}], N),
+    check_metric(eradius_replies_total, [{server_name, good}], N);
 check_total_requests(bad, N) ->
-    check_metric(eradius_requests_total, [{"server_name", bad}], N),
-    check_metric(eradius_replies_total, [{"server_name", bad}], N).
+    check_metric(eradius_requests_total, [{server_name, bad}], N),
+    check_metric(eradius_replies_total, [{server_name, bad}], N).
 
 check_metric_multi({bad_type, accreq}, Id, Labels, _Count) ->
     Values = prometheus_counter:values(default, Id),
