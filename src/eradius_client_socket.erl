@@ -34,7 +34,7 @@ send_request(Socket, Peer, ReqId, Request, Timeout) ->
     catch
         exit:{noproc, _} ->
             {error, closed};
-        {nodedown, _} ->
+        exit:{nodedown, _} ->
             {error, closed}
     end.
 

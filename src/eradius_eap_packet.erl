@@ -83,7 +83,7 @@ do_decode_payload(Code, Id, Data) ->
     try
         decode_payload(Code, Id, Data)
     catch
-        _ -> {error, invalid_payload}
+        _:_ -> {error, invalid_payload}
     end.
 
 decode_payload(Code, Id, <<Type:8, TypeData/binary>>)
