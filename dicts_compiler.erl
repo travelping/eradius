@@ -217,9 +217,10 @@ pd(["VALUE", Attr, Name, Id], _VendId) ->
 pd(_X, _VendId) -> false.
 
 id2i(Id) ->
-    case catch l2i(Id) of
-        I when is_integer(I) -> I;
-        {'EXIT', _} ->
+    try l2i(Id) of
+        I when is_integer(I) -> I
+    catch
+        error:_ ->
             hex2i(Id)
     end.
 
