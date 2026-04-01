@@ -17,7 +17,7 @@ jobs:
            apk --no-cache upgrade
            apk --no-cache add gcc git libc-dev libc-utils libgcc linux-headers make bash \
                               musl-dev musl-utils ncurses-dev pcre2 pkgconf scanelf wget zlib
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: work around for permission issue
       run: |
            git config --global --add safe.directory /__w/eradius/eradius

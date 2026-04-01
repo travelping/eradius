@@ -13,7 +13,7 @@ jobs:
       image: erlang:${{ matrix.otp }}-alpine
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Build
       run: rebar3 compile
     - name: Run tests
@@ -26,7 +26,7 @@ jobs:
     if: always()
     steps:
     - name: Slack notification
-      uses: 8398a7/action-slack@v3
+      uses: 8398a7/action-slack@77eaa4f1c608a7d68b38af4e3f739dcd8cba273e # v3.19.0
       with:
         author_name: "GitHub Actions"
         username: ${{ github.event.repository.name }}
