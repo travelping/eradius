@@ -22,7 +22,7 @@ jobs:
 
   slack:
     needs: test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     if: always()
     steps:
     - name: Slack notification
