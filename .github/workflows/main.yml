@@ -25,7 +25,7 @@ jobs:
       run: |
            export ERL_AFLAGS="+pc unicode -enable-feature all"
            rebar3 do xref, ct
-           rebar3 as dialyzer do dialyzer
+           rebar3 as dialyzer dialyzer
     - name: Tar Test Output
       if: ${{ always() }}
       run: tar -cf - _build/test/logs/ | zstd -15 -o ct-logs-${{ matrix.otp }}.tar.zst
