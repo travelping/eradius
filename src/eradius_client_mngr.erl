@@ -48,14 +48,14 @@
 
 -type server_opts() :: #{ip := inet:ip_address(),
                          port := inet:port_number(),
-                         secret := binary,
+                         secret := binary(),
                          retries => non_neg_integer(),
                          timeout => non_neg_integer()}.
 %% Options to describe a RADIUS server.
 
 -type server() :: #{ip := inet:ip_address(),
                     port := inet:port_number(),
-                    secret := binary,
+                    secret := binary(),
                     retries := non_neg_integer(),
                     timeout := non_neg_integer(),
                     failed := non_neg_integer()}.
@@ -72,6 +72,7 @@
         #{name => server_name(),
           servers :=  #{server_name() := server_opts() | server_pool()},
           family => inet | inet6,
+          inet_backend => inet | socket,
           ip => any | inet:ip_address(),
           active_n => once | non_neg_integer(),
           no_ports => non_neg_integer(),

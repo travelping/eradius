@@ -21,7 +21,7 @@ start(Backend, Family) ->
 
     SrvOpts = #{handler => {?MODULE, []},
                 clients => #{eradius_test_lib:localhost(Family, native) =>
-                                 #{secret => "secret", client => <<"ONE">>}}},
+                                 #{secret => <<"secret">>, client => <<"ONE">>}}},
     {ok, _} = eradius:start_server(
                 eradius_test_lib:localhost(Family, native), 1812, SrvOpts#{server_name => one}),
     {ok, _} = eradius:start_server(
@@ -38,7 +38,7 @@ start_client(Backend, Family) ->
     Clients =
         maps:from_list(
           [{binary_to_atom(<<(X+$A)>>), #{ip => eradius_test_lib:localhost(Family, native),
-                                          port => 1820 + X, secret => "secret"}}
+                                          port => 1820 + X, secret => <<"secret">>}}
            || X <- lists:seq(0, 9)]),
     ClientConfig =
         #{inet_backend => Backend,
@@ -46,15 +46,15 @@ start_client(Backend, Family) ->
           ip => eradius_test_lib:localhost(Family, native),
           servers => Clients#{one => #{ip => eradius_test_lib:localhost(Family, native),
                                        port => 1812,
-                                       secret => "secret",
+                                       secret => <<"secret">>,
                                        retries => 3},
                               two => #{ip => eradius_test_lib:localhost(Family, native),
                                        port => 1813,
-                                       secret => "secret",
+                                       secret => <<"secret">>,
                                        retries => 3},
                               bad => #{ip => eradius_test_lib:localhost(Family, native),
                                        port => 1920,
-                                       secret => "secret",
+                                       secret => <<"secret">>,
                                        retries => 3},
                               test_pool => [one, two]}
          },
