@@ -74,7 +74,7 @@ used by many RADIUS server implementations in the past.
 The format is:
 ```
 <TimeStamp> <Client-IP>:<Client-Port> [<Request-Id>] <Command>
-    [<Key> = <Value>]+
+[<Key> = <Value>]+
 ```
 """.
 -spec format_req(eradius_req:req()) -> binary().

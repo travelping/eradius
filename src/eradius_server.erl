@@ -42,9 +42,9 @@ Servers are typically started via `m:eradius`:
 
 ```
 {ok, Pid} = eradius:start_server({127,0,0,1}, 1812,
-    #{handler => {my_handler, []},
-      clients => #{{127,0,0,1} => #{secret => <<"mysecret">>,
-                                    client => <<"my-nas">>}}}).
+                                 #{handler => {my_handler, []},
+                                   clients => #{{127,0,0,1} => #{secret => <<"mysecret">>,
+                                                                 client => <<"my-nas">>}}}).
 ```
 
 Or directly for named instances:

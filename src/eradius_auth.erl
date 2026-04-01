@@ -39,7 +39,7 @@
 
 -doc """
 check the request password using all available authentication mechanisms.
-   Tries CHAP, then MS-CHAP, then MS-CHAPv2, finally PAP.
+Tries CHAP, then MS-CHAP, then MS-CHAPv2, finally PAP.
 """.
 -spec check_password(binary(), eradius_req:req()) ->
           false | {boolean(), eradius_req:attribute_list()}.

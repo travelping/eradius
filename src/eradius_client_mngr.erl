@@ -20,15 +20,15 @@ server names to either a `t:server_opts/0` map (a concrete server) or a
 
 ```
 {ok, _} = eradius_client_mngr:start_client({local, my_client},
-    #{family  => inet,
-      ip      => any,
-      servers => #{
-          primary   => #{ip => {10,0,0,1}, port => 1812,
-                         secret => <<"secret1">>, retries => 3},
-          secondary => #{ip => {10,0,0,2}, port => 1812,
-                         secret => <<"secret2">>},
-          auth_pool => [primary, secondary]
-      }}).
+                                           #{family  => inet,
+                                             ip      => any,
+                                             servers => #{
+                                                          primary   => #{ip => {10,0,0,1}, port => 1812,
+                                                                         secret => <<"secret1">>, retries => 3},
+                                                          secondary => #{ip => {10,0,0,2}, port => 1812,
+                                                                         secret => <<"secret2">>},
+                                                          auth_pool => [primary, secondary]
+                                                         }}).
 ```
 
 == Failure tracking ==

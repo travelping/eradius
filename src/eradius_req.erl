@@ -32,7 +32,7 @@ and returning it; `packet/1` encodes it for sending.
 The `t:req/0` type is an open map. Public fields that handlers and clients may read:
 
 <dl>
-  <dt>`cmd`</dt><dd>The RADIUS command atom (e.g. `request`, `accept`, `reject`).</dd>
+<dt>`cmd`</dt><dd>The RADIUS command atom (e.g. `request`, `accept`, `reject`).</dd>
   <dt>`is_valid`</dt><dd>Validation state: `undefined`, `true`, or `false`.</dd>
   <dt>`req_id`</dt><dd>RADIUS request identifier byte.</dd>
   <dt>`authenticator`</dt><dd>16-byte authenticator field from the packet header.</dd>

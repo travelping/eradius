@@ -22,9 +22,9 @@
 
 -doc """
 pad binary to specific length
-  See <a href="http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html">
-         http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html
-      </a>
+See <a href="http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html">
+http://www.erlang.org/pipermail/erlang-questions/2008-December/040709.html
+</a>
 """.
 -compile({inline, pad_to/2}).
 pad_to(Width, Binary) ->

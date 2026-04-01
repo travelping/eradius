@@ -16,12 +16,12 @@ a client manager started with `eradius_client_mngr:start_client/1,2`.
 ```
 %% Start a named client manager first
 {ok, _} = eradius_client_mngr:start_client({local, my_client},
-    #{family => inet,
-      ip => any,
-      servers => #{
-        auth => #{ip => {192,168,1,1}, port => 1812,
-                  secret => <<"mysecret">>, retries => 3}
-      }}),
+                                           #{family => inet,
+                                             ip => any,
+                                             servers => #{
+                                                          auth => #{ip => {192,168,1,1}, port => 1812,
+                                                                    secret => <<"mysecret">>, retries => 3}
+                                                         }}),
 
 %% Send an access request
 Req = eradius_req:set_attrs([{?User_Name, <<"alice">>}], eradius_req:new(request)),
@@ -101,7 +101,7 @@ client's `servers` map, or a list of names to try in order (first reachable wins
 - `timeout` — milliseconds to wait per attempt (default: 5000)
 - `failover` — list of server pool names to try if the primary fails
 
-Returns `{{ok, Response}, Request}` on success or `{{error, Reason}, Request}` on failure.
+                                                   Returns `{{ok, Response}, Request}` on success or `{{error, Reason}, Request}` on failure.
 `Reason` is `timeout` if all retries were exhausted, or `socket_down` if the socket closed.
 """.
 -spec send_request(gen_server:server_ref(),
