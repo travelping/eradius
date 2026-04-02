@@ -74,7 +74,7 @@ handle_call({send_request, {IP, Port}, ReqId, Request, Timeout}, From,
     end;
 
 handle_call(_Request, _From, State) ->
-    {noreply, State}.
+    {reply, {error, bad_call}, State}.
 
 handle_cast(close, #state{pending = Pending} = State)
   when map_size(Pending) =:= 0 ->

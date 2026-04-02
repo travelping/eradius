@@ -73,7 +73,7 @@ decode(<<Code:8, Id:8, Len:16, Rest/binary>>) ->
             {error, invalid_length}
     end.
 
--doc "endecode a EPA message".
+-doc "encode an EAP message".
 encode(Code, Id, Msg) ->
     Data = encode_payload(Code, Msg),
     Len = size(Data) + 4,

@@ -100,7 +100,7 @@ handle_info(_Info, State)  -> {noreply, State}.
 terminate(_Reason, _State) -> ok.
 
 %% @private
-code_change(_OldVsn, _NewVsn, _State) -> {ok, state}.
+code_change(_OldVsn, _NewVsn, State) -> {ok, State}.
 
 %%%=========================================================================
 %%%  internal functions

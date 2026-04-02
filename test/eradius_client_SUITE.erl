@@ -198,7 +198,7 @@ check(#{sockets := OS, no_ports := _OP, idcounters := _OC, socket_id := {_, OA}}
       #{sockets := NS, no_ports := NP, idcounters := NC, socket_id := {_, NA}},
       P, A) ->
     {ok, PA} = parse_ip(A),
-    test(PA == NA, "Adress not configured") and
+    test(PA == NA, "Address not configured") and
         case NA of
             OA  ->
                 ct:pal("NP: ~p, NC: ~p", [NP, NC]),
