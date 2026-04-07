@@ -2,22 +2,23 @@
 
 -behaviour(gen_server).
 
--export([start/3]).
+-export([start/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -record(state, {client, socket, pending, mode, counter}).
 
-start(SocketIP, Client, PortIdx) ->
-    gen_server:start_link(?MODULE, [SocketIP, Client, PortIdx], []).
+start(SocketIP, Client, PortIdx, Options) ->
+    gen_server:start_link(?MODULE, [SocketIP, Client, PortIdx, Options], []).
 
-init([SocketIP, Client, PortIdx]) ->
+init([SocketIP, Client, PortIdx, Options]) ->
     Client ! {PortIdx, self()},
-    case SocketIP of
-        undefined ->
-            ExtraOptions = [];
-        SocketIP when is_tuple(SocketIP) ->
-            ExtraOptions = [{ip, SocketIP}]
-    end,
+    ExtraOptions =
+        case SocketIP of
+            undefined ->
+                Options;
+            SocketIP when is_tuple(SocketIP) ->
+                [{ip, SocketIP} | Options]
+        end,
     RecBuf = application:get_env(eradius, recbuf, 8192),
     SndBuf = application:get_env(eradius, sndbuf, 131072),
     {ok, Socket} = gen_udp:open(0, [{active, once}, binary , {recbuf, RecBuf}, {sndbuf, SndBuf} | ExtraOptions]),
