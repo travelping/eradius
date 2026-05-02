@@ -229,7 +229,7 @@ decode_request_id(_Req) -> {bad_pdu, "invalid request id"}.
 decode_request(Packet, Secret) ->
     decode_request(Packet, Secret, undefined).
 
--spec decode_request(binary(), secret(), authenticator()) -> #radius_request{} | {bad_pdu, list()}.
+-spec decode_request(binary(), secret(), authenticator() | undefined) -> #radius_request{} | {bad_pdu, list()}.
 decode_request(Packet, Secret, Authenticator) ->
     case (catch decode_request0(Packet, Secret, Authenticator)) of
         {'EXIT', _} -> {bad_pdu, "decode packet error"};
@@ -261,13 +261,13 @@ decode_request0(<<Cmd:8, ReqId:8, Len:16, PacketAuthenticator:16/binary, Body0/b
 	true -> Request
     end.
 
--spec validate_packet_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), binary(), authenticator(), authenticator() | 'undefined') -> ok.
+-spec validate_packet_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), binary(), non_neg_integer(), binary(), authenticator(), authenticator() | 'undefined') -> ok.
 validate_packet_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, PacketAuthenticator, undefined) ->
     validate_packet_authenticator(Cmd, ReqId, Len, PacketAuthenticator, Body, Pos, Secret);
 validate_packet_authenticator(Cmd, ReqId, Len, Body, Pos, Secret, _PacketAuthenticator, RequestAuthenticator) ->
     validate_packet_authenticator(Cmd, ReqId, Len, RequestAuthenticator, Body, Pos, Secret).
 
--spec validate_packet_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), authenticator(), non_neg_integer(), binary(), binary()) -> ok.
+-spec validate_packet_authenticator(non_neg_integer(), non_neg_integer(), non_neg_integer(), authenticator(), binary(), non_neg_integer(), binary()) -> ok.
 validate_packet_authenticator(Cmd, ReqId, Len, Auth, Body, Pos, Secret) ->
     case Body of
         <<Before:Pos/bytes, Value:16/bytes, After/binary>> ->
@@ -321,7 +321,7 @@ decode_command(_)                     -> error({bad_pdu, "unknown request type"}
 append_attr(Attr, State) ->
     State#decoder_state{attrs = [Attr | State#decoder_state.attrs]}.
 
--spec decode_attributes(#radius_request{}, binary(), binary()) -> #decoder_state{}.
+-spec decode_attributes(#radius_request{}, undefined | binary(), binary()) -> #decoder_state{}.
 decode_attributes(Req, RequestAuthenticator, As) ->
     decode_attributes(Req, As, 0, #decoder_state{request_authenticator = RequestAuthenticator}).
 
@@ -508,7 +508,7 @@ pad_to(Width, Binary) ->
          N -> <<Binary/binary, 0:(N*8)>>
      end.
 
--spec timestamp() -> erlang:timestamp().
+-spec timestamp() -> integer().
 timestamp() ->
     erlang:system_time(milli_seconds).
 
