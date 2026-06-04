@@ -63,7 +63,9 @@ common() ->
      clobber_does_not_hang,
      connected_socket_matches_reply,
      retire_holds_then_closes,
-     retire_waits_for_pending
+     retire_waits_for_pending,
+     client_config_defaults,
+     pool_rolls_and_retires
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -445,3 +447,51 @@ retire_waits_for_pending(Config) ->
             ct:fail("retired socket did not close after pending drained")
     end,
     gen_udp:close(BH).
+
+client_config_defaults() ->
+    [{doc, "new client config carries no_ports (K), max_ports and "
+      "reqid_reuse_timeout with sane defaults"}].
+client_config_defaults(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            servers => #{test_server => Server}}),
+    St = eradius_client_mngr:get_state(Client),
+    ?equal(10, maps:get(k_ports, St)),
+    ?equal(256, maps:get(max_ports, St)),
+    ?equal(30000, maps:get(reqid_reuse_timeout, St)),
+    ok.
+
+pool_rolls_and_retires() ->
+    [{doc, "with no_ports=1 the single filler issues ids 0..255 then rolls to a "
+      "fresh socket on the 257th send; the exhausted socket is retired"}].
+pool_rolls_and_retires(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            no_ports => 1, reqid_reuse_timeout => 30000,
+            servers => #{test_server => Server}}),
+    Allocs =
+        [begin
+             {ok, {Pid, ReqId, test_server, _Srv, _Info}} =
+                 eradius_client_mngr:wanna_send(Client, [test_server], []),
+             {Pid, ReqId}
+         end || _ <- lists:seq(1, 257)],
+    {Pids, Ids} = lists:unzip(Allocs),
+    ?equal(lists:seq(0, 255) ++ [0], Ids),
+    First256 = lists:sublist(Pids, 256),
+    ?equal(1, length(lists:usort(First256))),
+    Socket257 = lists:nth(257, Pids),
+    ?equal(false, lists:member(Socket257, First256)),
+    ?equal(2, length(lists:usort(Pids))),
+    %% the retired socket was told to retire but is still alive (cooling, 30s)
+    ?equal(true, is_process_alive(hd(First256))),
+    ok.
