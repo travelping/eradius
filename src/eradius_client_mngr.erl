@@ -319,8 +319,14 @@ handle_call({failed, _Peer}, _From, State) ->
 handle_call({reconfigure, Opts}, _From, #state{config = OConfig} = State0) ->
     case client_config(maps:merge(OConfig, Opts)) of
         {ok, #{servers := Servers} = Config} ->
-            State1 = State0#state{config = Config, servers = Servers},
-            State = reconfigure_address(Config, State1),
+            State1 = State0#state{
+                       config = Config, servers = Servers,
+                       max_ports = maps:get(max_ports_per_server, Config,
+                                            ?DEFAULT_MAX_PORTS_PER_SERVER),
+                       reqid_reuse_timeout = maps:get(reqid_reuse_timeout, Config,
+                                                      ?DEFAULT_REQID_REUSE_TIMEOUT)},
+            State2 = reconfigure_address(Config, State1),
+            State = drop_removed_pools(Servers, State2),
             {reply, ok, State};
 
         {error, _} = Error ->
@@ -390,9 +396,6 @@ where(ServerName) ->
 socket_id(#{family := Family, ip := IP}) ->
     {Family, IP}.
 
-%% Retained for an upcoming task that reworks reconfigure_address to close
-%% sockets and log the new client address.
--compile({nowarn_unused_function, socket_id_str/1}).
 socket_id_str({_, IP}) when is_tuple(IP) ->
     inet:ntoa(IP);
 socket_id_str({_, IP}) when is_atom(IP) ->
@@ -516,14 +519,46 @@ reconfigure_address(#{no_ports := NPorts} = Config,
                     #state{socket_id = OAdd, socket_refs = Refs} = State) ->
     NAdd = socket_id(Config),
     case OAdd of
-        NAdd -> reconfigure_ports(NPorts, State);
-        _    ->
-            %% address changed: drop all pools. Demonitor first so the abandoned
-            %% sockets' DOWNs don't linger in the mailbox. (Task A8 also closes them.)
+        NAdd ->
+            reconfigure_ports(NPorts, State);
+        _ ->
+            ?LOG(info, "Reopening RADIUS client sockets (client_ip changed to ~s)",
+                 [socket_id_str(NAdd)]),
+            close_all_pools(State),
             maps:foreach(fun(Ref, _SA) -> erlang:demonitor(Ref, [flush]) end, Refs),
             State#state{socket_id = NAdd, k_ports = NPorts,
                         pools = #{}, socket_refs = #{}}
     end.
+
+close_all_pools(#state{pools = Pools}) ->
+    maps:foreach(
+      fun(_ServerAddr, Pool) ->
+              lists:foreach(fun eradius_client_socket:close/1, pool_pids(Pool))
+      end, Pools),
+    ok.
+
+%% Drop pools whose server is no longer configured; close their sockets and
+%% demonitor them.
+drop_removed_pools(Servers, #state{pools = Pools} = State) ->
+    Active = sets:from_list(
+               maps:fold(fun(_, #{ip := IP, port := Port}, Acc) -> [{IP, Port} | Acc];
+                            (_, _Pool, Acc) -> Acc
+                         end, [], Servers)),
+    Drop = [SA || SA <- maps:keys(Pools), not sets:is_element(SA, Active)],
+    lists:foldl(fun drop_one_pool/2, State, Drop).
+
+drop_one_pool(ServerAddr, #state{pools = Pools, socket_refs = Refs} = State) ->
+    lists:foreach(fun eradius_client_socket:close/1,
+                  pool_pids(maps:get(ServerAddr, Pools))),
+    Refs1 =
+        maps:filter(
+          fun(Ref, SA) when SA =:= ServerAddr -> erlang:demonitor(Ref, [flush]), false;
+             (_Ref, _SA) -> true
+          end, Refs),
+    State#state{pools = maps:remove(ServerAddr, Pools), socket_refs = Refs1}.
+
+pool_pids(#{active := Active, cooling := Cooling}) ->
+    [maps:get(pid, F) || F <- Active] ++ Cooling.
 
 reconfigure_ports(NPorts, State) ->
     State#state{k_ports = NPorts}.
