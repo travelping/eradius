@@ -534,7 +534,7 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
         #{Peer := {NextPortIdx, ReqId}} when ReqId < 255 ->
             NextReqId = (ReqId + 1);
         #{Peer := {PortIdx, 255}} ->
-            NextPortIdx = (PortIdx + 1) rem (NumberOfPorts - 1),
+            NextPortIdx = (PortIdx + 1) rem NumberOfPorts,
             NextReqId = 0;
         _ ->
             NextPortIdx = erlang:phash2(Peer, NumberOfPorts),

@@ -58,7 +58,8 @@ common() ->
      reconf_ports_10,
      wanna_send,
      send_request_failover,
-     check_upstream_servers
+     check_upstream_servers,
+     no_ports_one_wraps
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -287,4 +288,23 @@ check_upstream_servers(Config) ->
     ?equal(true,
            sets:is_subset(sets:from_list(?RADIUS_SERVERS(Family)),
                           sets:from_list(Servers))),
+    ok.
+
+no_ports_one_wraps() ->
+    [{doc, "wanna_send must not crash when no_ports = 1 and the req-id wraps past 255"}].
+no_ports_one_wraps(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any, no_ports => 1,
+            servers => #{test_server => Server}}),
+    %% 257 allocations force the {PortIdx, 255} wrap branch at least once
+    lists:foreach(
+      fun(_) ->
+              ?match({ok, {_Sock, _ReqId, test_server, _Srv, _Info}},
+                     eradius_client_mngr:wanna_send(Client, [test_server], []))
+      end, lists:seq(1, 257)),
     ok.
