@@ -141,6 +141,9 @@ Increase `no_ports` for higher concurrency requirements.
 -define(RECONFIGURE_TIMEOUT, 15000).
 -define(DEFAULT_MAX_RETRIES, 20).
 -define(DEFAULT_DOWN_TIME, 1000).
+-define(DEFAULT_K_PORTS, 10).
+-define(DEFAULT_MAX_PORTS_PER_SERVER, 256).
+-define(DEFAULT_REQID_REUSE_TIMEOUT, 30000).
 
 %%%=========================================================================
 %%%  API
@@ -372,7 +375,9 @@ socket_id_str({_, IP}) when is_atom(IP) ->
 default_client_opts() ->
     #{family => inet6,
       ip => any,
-      no_ports => 10,
+      no_ports => ?DEFAULT_K_PORTS,
+      max_ports_per_server => ?DEFAULT_MAX_PORTS_PER_SERVER,
+      reqid_reuse_timeout => ?DEFAULT_REQID_REUSE_TIMEOUT,
       active_n => 100,
       recbuf => 8192,
       sndbuf => 131072,
