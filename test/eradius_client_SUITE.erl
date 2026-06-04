@@ -58,7 +58,9 @@ common() ->
      reconf_ports_10,
      wanna_send,
      send_request_failover,
-     check_upstream_servers
+     check_upstream_servers,
+     no_ports_one_wraps,
+     clobber_does_not_hang
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -198,7 +200,7 @@ check(#{sockets := OS, no_ports := _OP, idcounters := _OC, socket_id := {_, OA}}
       #{sockets := NS, no_ports := NP, idcounters := NC, socket_id := {_, NA}},
       P, A) ->
     {ok, PA} = parse_ip(A),
-    test(PA == NA, "Adress not configured") and
+    test(PA == NA, "Address not configured") and
         case NA of
             OA  ->
                 ct:pal("NP: ~p, NC: ~p", [NP, NC]),
@@ -288,3 +290,54 @@ check_upstream_servers(Config) ->
            sets:is_subset(sets:from_list(?RADIUS_SERVERS(Family)),
                           sets:from_list(Servers))),
     ok.
+
+no_ports_one_wraps() ->
+    [{doc, "wanna_send must not crash when no_ports = 1 and the req-id wraps past 255"}].
+no_ports_one_wraps(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any, no_ports => 1,
+            servers => #{test_server => Server}}),
+    %% 257 allocations force the {PortIdx, 255} wrap branch at least once
+    lists:foreach(
+      fun(_) ->
+              ?match({ok, {_Sock, _ReqId, test_server, _Srv, _Info}},
+                     eradius_client_mngr:wanna_send(Client, [test_server], []))
+      end, lists:seq(1, 257)),
+    ok.
+
+clobber_does_not_hang() ->
+    [{doc, "A pending request whose entry is overwritten by a same-ReqId "
+      "request must still return {error,timeout} to its caller, not hang"}].
+clobber_does_not_hang(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, Sock} = eradius_client_socket:start_link(
+                   #{family => eradius_test_lib:inet_family(Family), active_n => 10}),
+    %% port 1 on loopback: packets go out, no reply ever comes back
+    Peer = {eradius_test_lib:localhost(Family, native), 1},
+    ReqId = 1,
+    Packet = <<1, ReqId, 0, 20, 0:128>>,   %% 20-byte minimal RADIUS header
+    Caller = self(),
+    %% First caller: stays pending (2 s socket-side timeout)
+    P1 = spawn(fun() ->
+                       R = eradius_client_socket:send_request(
+                             Sock, Peer, ReqId, Packet, 2000),
+                       Caller ! {p1, R}
+               end),
+    timer:sleep(200),
+    %% Second caller: SAME ReqId -> overwrites P1's pending entry
+    spawn(fun() ->
+                  eradius_client_socket:send_request(Sock, Peer, ReqId, Packet, 2000)
+          end),
+    %% P1 must not hang; with the bounded call timeout it gets {error,timeout}
+    receive
+        {p1, Result} ->
+            ?equal({error, timeout}, Result)
+    after 6000 ->
+            exit(P1, kill),
+            ct:fail("P1 hung after its pending entry was clobbered")
+    end.

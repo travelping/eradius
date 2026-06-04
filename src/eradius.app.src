@@ -20,7 +20,7 @@
         ]},
   {maintainers, ["Andreas Schultz", "Vladimir Tarasenko", "Yury Gargay"]},
   {licenses, ["MIT"]},
-  {links, [{"Github", "https://github.com/travelping/eradius"}]},
+  {links, [{"GitHub", "https://github.com/travelping/eradius"}]},
   %% List copied from rebar3_hex.hrl ?DEFAULT_FILES, adding "Makefile"
   {files, ["applications", "src", "c_src", "include/eradius_*.hrl", "rebar.config.script"
           ,"priv/dictionaries", "rebar.config", "rebar.lock"

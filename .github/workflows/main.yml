@@ -34,7 +34,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: test-output-${{ matrix.otp }}
-        path: ct-logs-${{ matrix.otp }}.tar.xz
+        path: ct-logs-${{ matrix.otp }}.tar.zst
 
   slack:
     needs: test

@@ -18,6 +18,12 @@
 
 -record(state, {family, socket, active_n, pending, mode, counter}).
 
+%% Safety margin added to the per-request timeout for the gen_server:call.
+%% The socket process enforces the real timeout and replies {error,timeout};
+%% this bound only fires if the socket fails to reply at all (e.g. a pending
+%% entry was overwritten by a same-ReqId request).
+-define(CALL_TIMEOUT_MARGIN, 1000).
+
 %%%=========================================================================
 %%%  API
 %%%=========================================================================
@@ -30,13 +36,21 @@ start_link(Config) ->
 
 send_request(Socket, Peer, ReqId, Request, Timeout) ->
     try
-        gen_server:call(Socket, {send_request, Peer, ReqId, Request, Timeout}, infinity)
+        gen_server:call(Socket, {send_request, Peer, ReqId, Request, Timeout},
+                        call_timeout(Timeout))
     catch
         exit:{noproc, _} ->
             {error, closed};
         exit:{nodedown, _} ->
-            {error, closed}
+            {error, closed};
+        exit:{timeout, _} ->
+            {error, timeout}
     end.
+
+%% infinity is passed through unchanged: a request configured with an
+%% infinite per-attempt timeout is a caller decision, not this layer's to cap.
+call_timeout(infinity) -> infinity;
+call_timeout(Timeout) when is_integer(Timeout) -> Timeout + ?CALL_TIMEOUT_MARGIN.
 
 close(Socket) ->
     gen_server:cast(Socket, close).
@@ -74,7 +88,7 @@ handle_call({send_request, {IP, Port}, ReqId, Request, Timeout}, From,
     end;
 
 handle_call(_Request, _From, State) ->
-    {noreply, State}.
+    {reply, {error, unknown_request}, State}.
 
 handle_cast(close, #state{pending = Pending} = State)
   when map_size(Pending) =:= 0 ->

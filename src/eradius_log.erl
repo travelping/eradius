@@ -61,7 +61,8 @@ used by many RADIUS server implementations.
 The format is: `<Client-IP>:<Client-Port> [<Request-Id>]: <Command> [AcctStatusType]`
 """.
 -spec line(eradius_req:req()) -> iolist().
-line(#{cmd := Cmd, req_id := ReqId, server_addr := {IP, Port}} = Req) ->
+line(#{cmd := Cmd, req_id := ReqId} = Req) ->
+    {IP, Port} = peer_addr(Req),
     StatusType = format_acct_status_type(Req),
     io_lib:format("~s:~p [~p]: ~s ~s", [inet:ntoa(IP), Port, ReqId, format_cmd(Cmd), StatusType]).
 
@@ -98,8 +99,13 @@ format_message(Time, #{cmd := Cmd} = Req) ->
     BinPacket = format_packet(Req),
     <<BinTStamp/binary, " ", BinSender/binary, " ", BinCommand/binary, "\n", BinPacket/binary, "\n">>.
 
-format_sender(#{req_id := ReqId, server_addr := {IP, Port}}) ->
+format_sender(#{req_id := ReqId} = Req) ->
+    {IP, Port} = peer_addr(Req),
     <<(format_ip(IP))/binary, $:, (i2b(Port))/binary, " [", (i2b(ReqId))/binary, $]>>.
+
+%% Use client_addr (the peer/NAS) on server side; fall back to server_addr on client side.
+peer_addr(#{client_addr := Addr}) -> Addr;
+peer_addr(#{server_addr := Addr}) -> Addr.
 
 %% @private
 format_cmd(request)   -> <<"Access-Request">>;

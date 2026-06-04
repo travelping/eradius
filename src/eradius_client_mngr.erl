@@ -314,7 +314,7 @@ handle_call({reconfigure, Opts}, _From, #state{config = OConfig} = State0) ->
 
 %% @private
 handle_call(_OtherCall, _From, State) ->
-    {noreply, State}.
+    {reply, {error, unknown_request}, State}.
 
 %% @private
 handle_cast(_Msg, State) -> {noreply, State}.
@@ -534,7 +534,7 @@ next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
         #{Peer := {NextPortIdx, ReqId}} when ReqId < 255 ->
             NextReqId = (ReqId + 1);
         #{Peer := {PortIdx, 255}} ->
-            NextPortIdx = (PortIdx + 1) rem (NumberOfPorts - 1),
+            NextPortIdx = (PortIdx + 1) rem NumberOfPorts,
             NextReqId = 0;
         _ ->
             NextPortIdx = erlang:phash2(Peer, NumberOfPorts),
