@@ -66,7 +66,8 @@ common() ->
      client_config_defaults,
      pool_rolls_and_retires,
      pool_cap_backpressures,
-     cooling_socket_reclaimed
+     cooling_socket_reclaimed,
+     rotation_uses_fresh_source_ports
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -459,3 +460,55 @@ cooling_socket_reclaimed(Config) ->
     ?equal(0, length(Cool1)),
     ?equal(1, length(Act1)),
     ok.
+
+rotation_uses_fresh_source_ports() ->
+    [{doc, "across a 256-id wrap the client sends from a different source port, "
+      "so no {srcport, ReqId} pair repeats while the old port is cooling"}].
+rotation_uses_fresh_source_ports(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    BindIP = eradius_test_lib:localhost(Family, mapped),
+    LH = eradius_test_lib:localhost(Family, native),
+    {ok, Server} = gen_udp:open(0, [binary, {active, false}, InetFamily, {ip, BindIP}]),
+    {ok, SrvPort} = inet:port(Server),
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => InetFamily, ip => any, no_ports => 1,
+            reqid_reuse_timeout => 60000,
+            servers => #{s => #{ip => LH, port => SrvPort,
+                                secret => <<"secret">>, retries => 1}}}),
+    Test = self(),
+    %% echo server: reply to each request and report the observed source port
+    _Echo = spawn_link(fun() -> echo_loop(Server, Test) end),
+    %% 257 synchronous sends: ids run 0..255 on socket 1, then the 257th rolls
+    %% to a fresh socket (id 0 again) on a new OS-assigned source port.
+    Pairs =
+        [begin
+             {ok, {Pid, ReqId, s, _S, _I}} =
+                 eradius_client_mngr:wanna_send(Client, [s], []),
+             {ok, _H, _B} =
+                 eradius_client_socket:send_request(
+                   Pid, {LH, SrvPort}, ReqId, <<1, ReqId, 0, 20, 0:128>>, 2000),
+             receive
+                 {observed, Port, ReqId} -> {Port, ReqId}
+             after 2000 ->
+                     ct:fail("server did not observe request id ~p", [ReqId])
+             end
+         end || _ <- lists:seq(1, 257)],
+    gen_udp:close(Server),
+    %% no {source port, ReqId} pair repeats within the cooldown window
+    ?equal(length(Pairs), length(lists:usort(Pairs))),
+    %% the id-0 wrap landed on a second, distinct source port
+    ?equal(true, length(lists:usort([P || {P, _} <- Pairs])) >= 2),
+    ok.
+
+echo_loop(Server, Test) ->
+    case gen_udp:recv(Server, 0, 5000) of
+        {ok, {FromIP, FromPort, <<_, ReqId, _/binary>>}} ->
+            gen_udp:send(Server, FromIP, FromPort, <<2, ReqId, 0, 20, 0:128>>),
+            Test ! {observed, FromPort, ReqId},
+            echo_loop(Server, Test);
+        {error, _} ->
+            ok
+    end.

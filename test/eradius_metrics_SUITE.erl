@@ -186,11 +186,26 @@ check_single_request(error, EradiusRequestType, _RequestType, _ResponseType) ->
     ok.
 
 check_total_requests(good, N) ->
-    check_metric(eradius_requests_total, [{server_name, good}], N),
-    check_metric(eradius_replies_total, [{server_name, good}], N);
+    check_metric_sum(eradius_requests_total, [{server_name, good}], N),
+    check_metric_sum(eradius_replies_total, [{server_name, good}], N);
 check_total_requests(bad, N) ->
-    check_metric(eradius_requests_total, [{server_name, bad}], N),
-    check_metric(eradius_replies_total, [{server_name, bad}], N).
+    check_metric_sum(eradius_requests_total, [{server_name, bad}], N),
+    check_metric_sum(eradius_replies_total, [{server_name, bad}], N).
+
+%% Sum a server-side counter across all matching label-sets. The client's
+%% per-server pool issues requests from several source ports (round-robin over
+%% K fillers), so the server records them under several nas_ip label-sets; the
+%% total across those must equal N.
+check_metric_sum(Id, Labels, Count) ->
+    Values = prometheus_counter:values(default, Id),
+    Filtered =
+        lists:filter(
+          fun({ValueLabels, _}) -> Labels -- ValueLabels =:= [] end,
+          Values),
+    Sum = lists:sum([V || {_, V} <- Filtered]),
+    ct:pal("check_metric_sum: ~p, ~p, expect ~p~nFiltered ~p~n",
+           [Id, Labels, Count, Filtered]),
+    ?assertEqual(Count, Sum).
 
 check_metric_multi({bad_type, accreq}, Id, Labels, _Count) ->
     Values = prometheus_counter:values(default, Id),
