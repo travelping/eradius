@@ -161,7 +161,7 @@ so the caller can apply backpressure.
 -type server_addr() :: {inet:ip_address(), inet:port_number()}.
 -type filler() :: #{pid := pid(), monitor := reference(),
                     next_id := 0..255, issued := 0..256}.
--type pool() :: #{active := [filler()], cooling := [pid()]}.
+-type pool() :: #{active := queue:queue(filler()), cooling := [pid()]}.
 
 %%%=========================================================================
 %%%  API
@@ -560,13 +560,13 @@ drop_one_pool(ServerAddr, #state{pools = Pools, socket_refs = Refs} = State) ->
     State#state{pools = maps:remove(ServerAddr, Pools), socket_refs = Refs1}.
 
 pool_pids(#{active := Active, cooling := Cooling}) ->
-    [maps:get(pid, F) || F <- Active] ++ Cooling.
+    [maps:get(pid, F) || F <- queue:to_list(Active)] ++ Cooling.
 
 reconfigure_ports(NPorts, State) ->
     State#state{k_ports = NPorts}.
 
 -spec new_pool() -> pool().
-new_pool() -> #{active => [], cooling => []}.
+new_pool() -> #{active => queue:new(), cooling => []}.
 
 pool_of(ServerAddr, #state{pools = Pools}) ->
     maps:get(ServerAddr, Pools, new_pool()).
@@ -576,12 +576,12 @@ put_pool(ServerAddr, Pool, #state{pools = Pools} = State) ->
 
 %% active fillers + cooling (retired-but-open) sockets. cooling pids are reclaimed
 %% when their socket exits (the 'DOWN' handler), bounding the per-server total.
-pool_total(#{active := A, cooling := C}) -> length(A) + length(C).
+pool_total(#{active := A, cooling := C}) -> queue:len(A) + length(C).
 
 %% Drop a dead socket (by pid) from a pool, whether it was an active filler or
 %% a cooling socket.
 remove_socket(Pid, _Ref, #{active := Active, cooling := Cooling} = Pool) ->
-    Pool#{active := [F || F <- Active, maps:get(pid, F) =/= Pid],
+    Pool#{active := queue:filter(fun(F) -> maps:get(pid, F) =/= Pid end, Active),
           cooling := lists:delete(Pid, Cooling)}.
 
 %% Allocate {Pid, ReqId} for ServerAddr, growing/rolling the pool as needed.
@@ -590,15 +590,15 @@ remove_socket(Pid, _Ref, #{active := Active, cooling := Cooling} = Pool) ->
 allocate(ServerAddr, State0) ->
     State1 = ensure_active(ServerAddr, State0),
     Pool = pool_of(ServerAddr, State1),
-    case maps:get(active, Pool) of
-        [] ->
+    case queue:out(maps:get(active, Pool)) of
+        {empty, _} ->
             {error, no_ports, State1};
-        [#{pid := Pid, next_id := ReqId, issued := Issued0} = F | Rest] ->
+        {{value, #{pid := Pid, next_id := ReqId, issued := Issued0} = F}, Rest} ->
             Issued = Issued0 + 1,
             case Issued >= 256 of
                 true ->
                     %% filler exhausted: retire it (socket cools+closes itself),
-                    %% move it to cooling, and open a replacement.
+                    %% drop it from the active queue, and open a replacement.
                     ok = eradius_client_socket:retire(Pid),
                     Pool1 = Pool#{active := Rest,
                                   cooling := [Pid | maps:get(cooling, Pool)]},
@@ -606,9 +606,9 @@ allocate(ServerAddr, State0) ->
                     State3 = ensure_active(ServerAddr, State2),
                     {ok, Pid, ReqId, State3};
                 false ->
-                    %% round-robin: advance this filler and move it to the tail.
+                    %% round-robin: advance this filler and re-enqueue it at the tail.
                     F1 = F#{next_id := (ReqId + 1) rem 256, issued := Issued},
-                    Pool1 = Pool#{active := Rest ++ [F1]},
+                    Pool1 = Pool#{active := queue:in(F1, Rest)},
                     {ok, Pid, ReqId, put_pool(ServerAddr, Pool1, State1)}
             end
     end.
@@ -619,12 +619,12 @@ allocate(ServerAddr, State0) ->
 ensure_active(ServerAddr, #state{k_ports = K, max_ports = Max} = State) ->
     Pool = pool_of(ServerAddr, State),
     Active = maps:get(active, Pool),
-    case length(Active) < K andalso pool_total(Pool) < Max of
+    case queue:len(Active) < K andalso pool_total(Pool) < Max of
         true ->
             case open_filler(ServerAddr, State) of
                 {ok, Filler, State1} ->
                     Pool1 = pool_of(ServerAddr, State1),
-                    Pool2 = Pool1#{active := maps:get(active, Pool1) ++ [Filler]},
+                    Pool2 = Pool1#{active := queue:in(Filler, maps:get(active, Pool1))},
                     ensure_active(ServerAddr, put_pool(ServerAddr, Pool2, State1));
                 {error, _} ->
                     State

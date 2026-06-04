@@ -166,7 +166,7 @@ send_request(_Config) ->
 
 %% true iff every pool keeps at most K active fillers (family-agnostic).
 all_pools_within_k(St, K) ->
-    lists:all(fun(#{active := A}) -> length(A) =< K end,
+    lists:all(fun(#{active := A}) -> queue:len(A) =< K end,
               maps:values(maps:get(pools, St))).
 
 wanna_send(_Config) ->
@@ -458,7 +458,7 @@ cooling_socket_reclaimed(Config) ->
     #{pools := P1} = eradius_client_mngr:get_state(Client),
     [#{active := Act1, cooling := Cool1}] = maps:values(P1),
     ?equal(0, length(Cool1)),
-    ?equal(1, length(Act1)),
+    ?equal(1, queue:len(Act1)),
     ok.
 
 rotation_uses_fresh_source_ports() ->
