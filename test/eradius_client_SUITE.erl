@@ -65,7 +65,8 @@ common() ->
      retire_holds_then_closes,
      retire_waits_for_pending,
      client_config_defaults,
-     pool_rolls_and_retires
+     pool_rolls_and_retires,
+     pool_cap_backpressures
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -494,4 +495,29 @@ pool_rolls_and_retires(Config) ->
     ?equal(2, length(lists:usort(Pids))),
     %% the retired socket was told to retire but is still alive (cooling, 30s)
     ?equal(true, is_process_alive(hd(First256))),
+    ok.
+
+pool_cap_backpressures() ->
+    [{doc, "with no_ports=1 and max_ports_per_server=2, once both sockets are "
+      "exhausted-and-cooling wanna_send returns {error, no_ports}"}].
+pool_cap_backpressures(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            no_ports => 1, max_ports_per_server => 2,
+            reqid_reuse_timeout => 60000,    %% long: cooling sockets stay open
+            servers => #{test_server => Server}}),
+    %% 512 allocations exhaust 2 sockets (256 ids each); both go to cooling and
+    %% cannot be replaced (cap = 2). The 513th allocation must be rejected.
+    ok = lists:foreach(
+           fun(_) ->
+                   {ok, {_Pid, _Id, test_server, _S, _I}} =
+                       eradius_client_mngr:wanna_send(Client, [test_server], [])
+           end, lists:seq(1, 512)),
+    ?equal({error, no_ports},
+           eradius_client_mngr:wanna_send(Client, [test_server], [])),
     ok.
