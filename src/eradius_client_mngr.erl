@@ -39,9 +39,15 @@ Pool-based failover in `m:eradius_client` automatically skips unreachable server
 
 == Socket pool ==
 
-The client opens `no_ports` UDP sockets (default: 1) on OS-assigned ports.
-Each socket supports up to 256 concurrent requests (one per RADIUS request id).
-Increase `no_ports` for higher concurrency requirements.
+For each RADIUS server the client maintains a dynamic pool of connected UDP sockets
+on OS-assigned source ports. Up to `no_ports` (default: 10) sockets are actively
+issuing request ids at once; each socket issues request ids 0..255 exactly once, then
+is retired — held open for `reqid_reuse_timeout` ms (default: 30000) so its source port
+is not reused while the server's duplicate-detection window is still open — and finally
+closed. Reusing a request id therefore always happens on a fresh source port, which the
+server sees as a distinct client. The total number of sockets per server is bounded by
+`max_ports_per_server` (default: 256); once reached, `wanna_send` returns `{error, no_ports}`
+so the caller can apply backpressure.
 """.
 
 -behaviour(gen_server).
@@ -58,8 +64,8 @@ Increase `no_ports` for higher concurrency requirements.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -ifdef(TEST).
--export([get_state/1, servers/1, server/2, get_socket_count/1]).
--ignore_xref([get_state/1, servers/1, server/2, get_socket_count/1]).
+-export([get_state/1, servers/1, server/2]).
+-ignore_xref([get_state/1, servers/1, server/2]).
 -endif.
 
 -ignore_xref([start_client/1, start_client/2]).
@@ -117,7 +123,9 @@ Increase `no_ports` for higher concurrency requirements.
           family := inet | inet6,
           ip := any | inet:ip_address(),
           active_n := once | non_neg_integer(),
-          no_ports := non_neg_integer(),
+          no_ports := pos_integer(),
+          max_ports_per_server => pos_integer(),
+          reqid_reuse_timeout => pos_integer(),
           recbuf := non_neg_integer(),
           sndbuf := non_neg_integer(),
           metrics_callback := 'undefined' | eradius_req:metrics_callback()
@@ -226,12 +234,6 @@ get_state(ServerRef) ->
     Keys = record_info(fields, state),
     Values = tl(tuple_to_list(State)),
     maps:from_list(lists:zip(Keys, Values)).
-
-get_socket_count(ServerRef) ->
-    #state{owner = Owner} = sys:get_state(ServerRef),
-    {ok, SockSup} = eradius_client_sup:socket_supervisor(Owner),
-    Counts = supervisor:count_children(SockSup),
-    proplists:get_value(active, Counts).
 
 servers(ServerRef) ->
     #state{servers = Servers} = sys:get_state(ServerRef),
