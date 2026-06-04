@@ -60,7 +60,8 @@ common() ->
      send_request_failover,
      check_upstream_servers,
      no_ports_one_wraps,
-     clobber_does_not_hang
+     clobber_does_not_hang,
+     connected_socket_matches_reply
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -315,10 +316,17 @@ clobber_does_not_hang() ->
       "request must still return {error,timeout} to its caller, not hang"}].
 clobber_does_not_hang(Config) ->
     Family = proplists:get_value(family, Config, ipv4),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    LH = eradius_test_lib:localhost(Family, native),
+    BindIP = eradius_test_lib:localhost(Family, mapped),
+    %% black-hole server: a real UDP socket that never replies, so the connected
+    %% client socket sees a listener (no ICMP econnrefused) and the clobber is exercised.
+    {ok, BH} = gen_udp:open(0, [binary, {active, false}, InetFamily, {ip, BindIP}]),
+    {ok, BHPort} = inet:port(BH),
+    Peer = {LH, BHPort},
     {ok, Sock} = eradius_client_socket:start_link(
-                   #{family => eradius_test_lib:inet_family(Family), active_n => 10}),
-    %% port 1 on loopback: packets go out, no reply ever comes back
-    Peer = {eradius_test_lib:localhost(Family, native), 1},
+                   #{family => InetFamily, active_n => 10, server_addr => Peer,
+                     reqid_reuse_timeout => 30000}),
     ReqId = 1,
     Packet = <<1, ReqId, 0, 20, 0:128>>,   %% 20-byte minimal RADIUS header
     Caller = self(),
@@ -334,10 +342,45 @@ clobber_does_not_hang(Config) ->
                   eradius_client_socket:send_request(Sock, Peer, ReqId, Packet, 2000)
           end),
     %% P1 must not hang; with the bounded call timeout it gets {error,timeout}
+    Result =
+        receive
+            {p1, R} -> R
+        after 6000 ->
+                exit(P1, kill),
+                ct:fail("P1 hung after its pending entry was clobbered")
+        end,
+    gen_udp:close(BH),
+    eradius_client_socket:close(Sock),
+    ?equal({error, timeout}, Result).
+
+connected_socket_matches_reply() ->
+    [{doc, "A connected socket sends without an explicit dest and matches a "
+      "reply to the pending request by ReqId alone"}].
+connected_socket_matches_reply(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    LH = eradius_test_lib:localhost(Family, native),
+    BindIP = eradius_test_lib:localhost(Family, mapped),
+    {ok, Server} = gen_udp:open(0, [binary, {active, false}, InetFamily, {ip, BindIP}]),
+    {ok, SrvPort} = inet:port(Server),
+    {ok, Sock} = eradius_client_socket:start_link(
+                   #{family => InetFamily, active_n => 10,
+                     server_addr => {LH, SrvPort}, reqid_reuse_timeout => 30000}),
+    ReqId = 7,
+    Req = <<1, ReqId, 0, 20, 0:128>>,
+    Caller = self(),
+    spawn(fun() ->
+                  R = eradius_client_socket:send_request(
+                        Sock, {LH, SrvPort}, ReqId, Req, 3000),
+                  Caller ! {done, R}
+          end),
+    {ok, {FromIP, FromPort, <<_, ReqId, _/binary>>}} = gen_udp:recv(Server, 0, 2000),
+    Reply = <<2, ReqId, 0, 20, 1:128>>,
+    ok = gen_udp:send(Server, FromIP, FromPort, Reply),
     receive
-        {p1, Result} ->
-            ?equal({error, timeout}, Result)
-    after 6000 ->
-            exit(P1, kill),
-            ct:fail("P1 hung after its pending entry was clobbered")
-    end.
+        {done, Result} ->
+            ?match({ok, <<2, ReqId, _/binary>>, <<>>}, Result)
+    after 4000 ->
+            ct:fail("connected socket did not deliver the reply")
+    end,
+    gen_udp:close(Server).

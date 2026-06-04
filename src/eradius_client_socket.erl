@@ -16,7 +16,10 @@
 
 -ignore_xref([start_link/1]).
 
--record(state, {family, socket, active_n, pending, mode, counter}).
+-record(state, {family, socket, active_n, pending, mode,
+                server_addr, cooldown, cooldown_done = false}).
+
+-define(DEFAULT_REQID_REUSE_TIMEOUT, 30000).
 
 %% Safety margin added to the per-request timeout for the gen_server:call.
 %% The socket process enforces the real timeout and replies {error,timeout};
@@ -59,30 +62,47 @@ close(Socket) ->
 %%% gen_server callbacks
 %%%===================================================================
 
-init([#{family := Family, active_n := ActiveN} = Config]) ->
+init([#{family := Family, active_n := ActiveN,
+        server_addr := {SrvIP, SrvPort}} = Config]) ->
     Opts = inet_opts(Config, [{active, ActiveN}, binary, Family]),
     {ok, Socket} = gen_udp:open(0, Opts),
+    case connect(Socket, Family, SrvIP, SrvPort) of
+        {ok, ConnIP} ->
+            State = #state{
+                       family = Family,
+                       socket = Socket,
+                       active_n = ActiveN,
+                       pending = #{},
+                       mode = active,
+                       server_addr = {ConnIP, SrvPort},
+                       cooldown = maps:get(reqid_reuse_timeout, Config,
+                                           ?DEFAULT_REQID_REUSE_TIMEOUT)
+                      },
+            {ok, State};
+        {error, Reason} ->
+            gen_udp:close(Socket),
+            {stop, Reason}
+    end.
 
-    State = #state{
-               family = Family,
-               socket = Socket,
-               active_n = ActiveN,
-               pending = #{},
-               mode = active
-              },
-    {ok, State}.
-
-handle_call({send_request, {IP, Port}, ReqId, Request, Timeout}, From,
-            #state{family = Family, socket = Socket} = State) ->
-    case send_ip(Family, IP) of
-        {ok, SendIP} ->
-            case gen_udp:send(Socket, SendIP, Port, Request) of
+%% Map the server IP into the socket family and connect; close+stop on any error.
+connect(Socket, Family, SrvIP, SrvPort) ->
+    case send_ip(Family, SrvIP) of
+        {ok, ConnIP} ->
+            case gen_udp:connect(Socket, ConnIP, SrvPort) of
                 ok ->
-                    ReqKey = {SendIP, Port, ReqId},
-                    {noreply, pending_request(ReqKey, From, Timeout, State)};
+                    {ok, ConnIP};
                 {error, _} = Error ->
-                    {reply, Error, State}
+                    Error
             end;
+        {error, _} = Error ->
+            Error
+    end.
+
+handle_call({send_request, _Peer, ReqId, Request, Timeout}, From,
+            #state{socket = Socket} = State) ->
+    case gen_udp:send(Socket, Request) of
+        ok ->
+            {noreply, pending_request(ReqId, From, Timeout, State)};
         {error, _} = Error ->
             {reply, Error, State}
     end;
@@ -103,26 +123,27 @@ handle_info({udp_passive, _Socket}, #state{socket = Socket, active_n = ActiveN} 
     inet:setopts(Socket, [{active, ActiveN}]),
     {noreply, State};
 
-handle_info({udp, Socket, FromIP, FromPort, Response},
+handle_info({udp, Socket, _FromIP, _FromPort, Response},
             State = #state{socket = Socket}) ->
     flow_control(State),
     NState =
         case Response of
             <<Header:20/binary, Body/binary>> ->
                 <<_, ReqId:8, _/binary>> = Header,
-                request_done({FromIP, FromPort, ReqId}, {ok, Header, Body}, State);
+                request_done(ReqId, {ok, Header, Body}, State);
             _ ->
                 %% discard reply because it was malformed
                 State
         end,
     noreply_or_stop(NState);
 
-handle_info({timeout, TRef, ReqKey}, #state{pending = Pending} = State) ->
+handle_info({timeout, TRef, ReqId}, #state{pending = Pending} = State)
+  when is_integer(ReqId) ->
     NState =
         case Pending of
-            #{ReqKey := {From, TRef}} ->
+            #{ReqId := {From, TRef}} ->
                 gen_server:reply(From, {error, timeout}),
-                State#state{pending = maps:remove(ReqKey, Pending)};
+                State#state{pending = maps:remove(ReqId, Pending)};
             _ ->
                 State
         end,
@@ -152,17 +173,16 @@ noreply_or_stop(#state{pending = Pending, mode = inactive} = State)
 noreply_or_stop(State) ->
     {noreply, State}.
 
-pending_request(ReqKey, From, Timeout,
-                #state{pending = Pending} = State) ->
-    TRef = erlang:start_timer(Timeout, self(), ReqKey),
-    State#state{pending = Pending#{ReqKey => {From, TRef}}}.
+pending_request(ReqId, From, Timeout, #state{pending = Pending} = State) ->
+    TRef = erlang:start_timer(Timeout, self(), ReqId),
+    State#state{pending = Pending#{ReqId => {From, TRef}}}.
 
-request_done(ReqKey, Reply, #state{pending = Pending} = State) ->
+request_done(ReqId, Reply, #state{pending = Pending} = State) ->
     case Pending of
-        #{ReqKey := {From, TRef}} ->
+        #{ReqId := {From, TRef}} ->
             gen_server:reply(From, Reply),
             erlang:cancel_timer(TRef),
-            State#state{pending = maps:remove(ReqKey, Pending)};
+            State#state{pending = maps:remove(ReqId, Pending)};
         _ ->
             State
     end.
