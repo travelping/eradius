@@ -61,7 +61,9 @@ common() ->
      check_upstream_servers,
      no_ports_one_wraps,
      clobber_does_not_hang,
-     connected_socket_matches_reply
+     connected_socket_matches_reply,
+     retire_holds_then_closes,
+     retire_waits_for_pending
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -384,3 +386,62 @@ connected_socket_matches_reply(Config) ->
             ct:fail("connected socket did not deliver the reply")
     end,
     gen_udp:close(Server).
+
+retire_holds_then_closes() ->
+    [{doc, "A retired socket with no pending requests stays alive during the "
+      "cooldown and exits normally once it elapses"}].
+retire_holds_then_closes(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    LH = eradius_test_lib:localhost(Family, native),
+    {ok, Sock} = eradius_client_socket:start_link(
+                   #{family => InetFamily, active_n => 10,
+                     server_addr => {LH, 1}, reqid_reuse_timeout => 700}),
+    MRef = erlang:monitor(process, Sock),
+    eradius_client_socket:retire(Sock),
+    timer:sleep(300),
+    ?equal(true, is_process_alive(Sock)),
+    receive
+        {'DOWN', MRef, process, Sock, Reason} ->
+            ?equal(normal, Reason)
+    after 2000 ->
+            ct:fail("retired socket did not close after cooldown")
+    end.
+
+retire_waits_for_pending() ->
+    [{doc, "A retired socket does not close while a request is still pending; "
+      "it closes after the pending request resolves and cooldown elapsed"}].
+retire_waits_for_pending(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    LH = eradius_test_lib:localhost(Family, native),
+    BindIP = eradius_test_lib:localhost(Family, mapped),
+    %% black-hole server (real listener, never replies): avoids ICMP econnrefused.
+    {ok, BH} = gen_udp:open(0, [binary, {active, false}, InetFamily, {ip, BindIP}]),
+    {ok, BHPort} = inet:port(BH),
+    Peer = {LH, BHPort},
+    %% cooldown 1500ms; force-close at 2x = 3000ms. Retire first so the cooldown
+    %% starts at t=0, then send a request whose 2500ms timeout resolves between
+    %% the cooldown (1500ms) and the force-close (3000ms): the close is driven by
+    %% pending-drain, with comfortable margins around the 1800ms alive-check.
+    {ok, Sock} = eradius_client_socket:start_link(
+                   #{family => InetFamily, active_n => 10,
+                     server_addr => Peer, reqid_reuse_timeout => 1500}),
+    MRef = erlang:monitor(process, Sock),
+    Caller = self(),
+    eradius_client_socket:retire(Sock),
+    spawn(fun() ->
+                  R = eradius_client_socket:send_request(
+                        Sock, Peer, 3, <<1, 3, 0, 20, 0:128>>, 2500),
+                  Caller ! {p, R}
+          end),
+    %% at ~1800ms the cooldown has elapsed but the request is still pending -> alive
+    timer:sleep(1800),
+    ?equal(true, is_process_alive(Sock)),
+    receive {p, {error, timeout}} -> ok after 4000 -> ct:fail("request never resolved") end,
+    receive
+        {'DOWN', MRef, process, Sock, normal} -> ok
+    after 4000 ->
+            ct:fail("retired socket did not close after pending drained")
+    end,
+    gen_udp:close(BH).

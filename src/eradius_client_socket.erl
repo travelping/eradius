@@ -9,7 +9,7 @@
 -behaviour(gen_server).
 
 %% API
--export([new/2, start_link/1, send_request/5, close/1]).
+-export([new/2, start_link/1, send_request/5, retire/1, close/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -20,6 +20,10 @@
                 server_addr, cooldown, cooldown_done = false}).
 
 -define(DEFAULT_REQID_REUSE_TIMEOUT, 30000).
+
+%% Hard ceiling (multiple of the cooldown) after which a retired socket is
+%% force-closed even if a straggler request is still pending, to bound resources.
+-define(FORCE_CLOSE_FACTOR, 2).
 
 %% Safety margin added to the per-request timeout for the gen_server:call.
 %% The socket process enforces the real timeout and replies {error,timeout};
@@ -54,6 +58,9 @@ send_request(Socket, Peer, ReqId, Request, Timeout) ->
 %% infinite per-attempt timeout is a caller decision, not this layer's to cap.
 call_timeout(infinity) -> infinity;
 call_timeout(Timeout) when is_integer(Timeout) -> Timeout + ?CALL_TIMEOUT_MARGIN.
+
+retire(Socket) ->
+    gen_server:cast(Socket, retire).
 
 close(Socket) ->
     gen_server:cast(Socket, close).
@@ -110,6 +117,14 @@ handle_call({send_request, _Peer, ReqId, Request, Timeout}, From,
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
+handle_cast(retire, #state{mode = retiring} = State) ->
+    %% idempotent: a second retire must not start another timer set
+    {noreply, State};
+handle_cast(retire, #state{cooldown = Cooldown} = State) ->
+    erlang:start_timer(Cooldown, self(), cooldown_expired),
+    erlang:start_timer(Cooldown * ?FORCE_CLOSE_FACTOR, self(), force_close),
+    noreply_or_stop(State#state{mode = retiring});
+
 handle_cast(close, #state{pending = Pending} = State)
   when map_size(Pending) =:= 0 ->
     {stop, normal, State};
@@ -136,6 +151,12 @@ handle_info({udp, Socket, _FromIP, _FromPort, Response},
                 State
         end,
     noreply_or_stop(NState);
+
+handle_info({timeout, _TRef, cooldown_expired}, State) ->
+    noreply_or_stop(State#state{cooldown_done = true});
+
+handle_info({timeout, _TRef, force_close}, State) ->
+    {stop, normal, State};
 
 handle_info({timeout, TRef, ReqId}, #state{pending = Pending} = State)
   when is_integer(ReqId) ->
@@ -168,6 +189,9 @@ flow_control(_) ->
     ok.
 
 noreply_or_stop(#state{pending = Pending, mode = inactive} = State)
+  when map_size(Pending) =:= 0 ->
+    {stop, normal, State};
+noreply_or_stop(#state{pending = Pending, mode = retiring, cooldown_done = true} = State)
   when map_size(Pending) =:= 0 ->
     {stop, normal, State};
 noreply_or_stop(State) ->
