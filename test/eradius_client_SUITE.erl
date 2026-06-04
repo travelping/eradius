@@ -66,7 +66,8 @@ common() ->
      retire_waits_for_pending,
      client_config_defaults,
      pool_rolls_and_retires,
-     pool_cap_backpressures
+     pool_cap_backpressures,
+     cooling_socket_reclaimed
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -520,4 +521,35 @@ pool_cap_backpressures(Config) ->
            end, lists:seq(1, 512)),
     ?equal({error, no_ports},
            eradius_client_mngr:wanna_send(Client, [test_server], [])),
+    ok.
+
+cooling_socket_reclaimed() ->
+    [{doc, "after a retired socket finishes its cooldown and exits, the manager "
+      "drops it from the pool (cooling shrinks back to empty)"}].
+cooling_socket_reclaimed(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            no_ports => 1, reqid_reuse_timeout => 400,
+            servers => #{test_server => Server}}),
+    %% 256 allocations exhaust the single filler -> it retires (cooling=1),
+    %% and a replacement filler opens (active=1). The client has exactly one
+    %% server, so read its sole pool via maps:values (avoids family-mapped keys).
+    ok = lists:foreach(
+           fun(_) ->
+                   {ok, _} = eradius_client_mngr:wanna_send(Client, [test_server], [])
+           end, lists:seq(1, 256)),
+    #{pools := P0} = eradius_client_mngr:get_state(Client),
+    [#{cooling := Cool0}] = maps:values(P0),
+    ?equal(1, length(Cool0)),
+    %% wait out the cooldown (400ms); the cooling socket exits and is reclaimed
+    timer:sleep(1200),
+    #{pools := P1} = eradius_client_mngr:get_state(Client),
+    [#{active := Act1, cooling := Cool1}] = maps:values(P1),
+    ?equal(0, length(Cool1)),
+    ?equal(1, length(Act1)),
     ok.

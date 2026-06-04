@@ -335,6 +335,18 @@ handle_call(_OtherCall, _From, State) ->
 handle_cast(_Msg, State) -> {noreply, State}.
 
 %% @private
+handle_info({'DOWN', Ref, process, Pid, _Reason},
+            #state{socket_refs = Refs} = State) ->
+    case maps:take(Ref, Refs) of
+        {ServerAddr, Refs1} ->
+            Pool = pool_of(ServerAddr, State),
+            Pool1 = remove_socket(Pid, Ref, Pool),
+            {noreply, put_pool(ServerAddr, Pool1, State#state{socket_refs = Refs1})};
+        error ->
+            {noreply, State}
+    end;
+
+%% @private
 handle_info({timeout, _, {reset, Peer}}, #state{servers = Servers0} = State0) ->
     Servers =
         case Servers0 of
@@ -526,9 +538,14 @@ put_pool(ServerAddr, Pool, #state{pools = Pools} = State) ->
     State#state{pools = Pools#{ServerAddr => Pool}}.
 
 %% active fillers + cooling (retired-but-open) sockets. cooling pids are reclaimed
-%% when their socket exits, by the 'DOWN' handler (Task A7); until then pool_total
-%% only grows, so allocate may report {error, no_ports} once the cap is reached.
+%% when their socket exits (the 'DOWN' handler), bounding the per-server total.
 pool_total(#{active := A, cooling := C}) -> length(A) + length(C).
+
+%% Drop a dead socket (by pid) from a pool, whether it was an active filler or
+%% a cooling socket.
+remove_socket(Pid, _Ref, #{active := Active, cooling := Cooling} = Pool) ->
+    Pool#{active := [F || F <- Active, maps:get(pid, F) =/= Pid],
+          cooling := lists:delete(Pid, Cooling)}.
 
 %% Allocate {Pid, ReqId} for ServerAddr, growing/rolling the pool as needed.
 -spec allocate(server_addr(), #state{}) ->
