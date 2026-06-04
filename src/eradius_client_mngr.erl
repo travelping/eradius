@@ -581,7 +581,7 @@ pool_total(#{active := A, cooling := C}) -> queue:len(A) + length(C).
 %% Drop a dead socket (by pid) from a pool, whether it was an active filler or
 %% a cooling socket.
 remove_socket(Pid, _Ref, #{active := Active, cooling := Cooling} = Pool) ->
-    Pool#{active := queue:filter(fun(F) -> maps:get(pid, F) =/= Pid end, Active),
+    Pool#{active := queue:delete_with(fun(F) -> maps:get(pid, F) =:= Pid end, Active),
           cooling := lists:delete(Pid, Cooling)}.
 
 %% Allocate {Pid, ReqId} for ServerAddr, growing/rolling the pool as needed.
