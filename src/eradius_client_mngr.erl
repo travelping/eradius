@@ -314,7 +314,7 @@ handle_call({reconfigure, Opts}, _From, #state{config = OConfig} = State0) ->
 
 %% @private
 handle_call(_OtherCall, _From, State) ->
-    {noreply, State}.
+    {reply, {error, unknown_request}, State}.
 
 %% @private
 handle_cast(_Msg, State) -> {noreply, State}.
