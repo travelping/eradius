@@ -45,9 +45,13 @@ init([]) ->
                  intensity => 5,
                  period => 10},
 
+    %% Pool sockets are managed by eradius_client_mngr: it opens them on demand,
+    %% monitors them, and reclaims them on exit. They must NOT auto-restart -- a
+    %% restarted socket would be a pid the manager never learns about (an orphaned
+    %% FD/source port). The manager reopens a replacement on the next allocation.
     Child = #{id => eradius_client_socket,
               start => {eradius_client_socket, start_link, []},
-              restart => transient,
+              restart => temporary,
               shutdown => 5000,
               type => worker,
               modules => [eradius_client_socket]},

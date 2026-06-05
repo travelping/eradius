@@ -59,8 +59,15 @@ common() ->
      wanna_send,
      send_request_failover,
      check_upstream_servers,
-     no_ports_one_wraps,
-     clobber_does_not_hang
+     clobber_does_not_hang,
+     connected_socket_matches_reply,
+     retire_holds_then_closes,
+     retire_waits_for_pending,
+     client_config_defaults,
+     pool_rolls_and_retires,
+     pool_cap_backpressures,
+     cooling_socket_reclaimed,
+     rotation_uses_fresh_source_ports
     ].
 
 -spec groups() -> [ct_suite:ct_group_def(), ...].
@@ -128,6 +135,13 @@ init_per_testcase(check_upstream_servers, Config) ->
     Config;
 init_per_testcase(wanna_send, Config) ->
     start_client(Config),
+    %% The named client persists across the group; a preceding reconf_address
+    %% may have left it bound to a non-existent IP. Restore a usable client_ip
+    %% and the default port count so socket opens succeed.
+    Family = proplists:get_value(family, Config),
+    ok = eradius_client_mngr:reconfigure(
+           ?SERVER, #{ip => eradius_test_lib:localhost(Family, native),
+                      no_ports => 10}),
     Config;
 init_per_testcase(_Test, Config) ->
     Config.
@@ -144,135 +158,54 @@ end_per_testcase(check_upstream_servers, Config) ->
 end_per_testcase(_Test, Config) ->
     Config.
 
-%% STUFF
-
-getSocketCount() ->
-    eradius_client_mngr:get_socket_count(?SERVER).
-
-testSocket(undefined) ->
-    true;
-testSocket(Pid) ->
-    not is_process_alive(Pid).
-
-split(N, List) -> split2(N, [], List).
-
-split2(0, List1, List2)     -> {lists:reverse(List1), List2};
-split2(_, List1, [])        -> {lists:reverse(List1), []};
-split2(N, List1, [L|List2]) -> split2(N-1, [L|List1], List2).
-
-meckStart() ->
-    ok = meck:new(eradius_client_socket, [passthrough]),
-    ok = meck:expect(eradius_client_socket, init,
-                     fun(_) -> {ok, undefined} end),
-    ok = meck:expect(eradius_client_socket, handle_call,
-                     fun(_Request, _From, State) -> {noreply, State} end),
-    ok = meck:expect(eradius_client_socket, handle_cast,
-                     fun(close, State) -> {stop, normal, State};
-                        (_Request, State) -> {noreply, State} end),
-    ok = meck:expect(eradius_client_socket, handle_info,
-                     fun(_Info, State) -> {noreply, State} end),
-    ok.
-
-meckStop() ->
-    ok = meck:unload(eradius_client_socket).
-
-parse_ip(undefined) ->
-    {ok, undefined};
-parse_ip(any) ->
-    {ok, any};
-parse_ip(Address) when is_list(Address) ->
-    inet_parse:address(Address);
-parse_ip(T = {_, _, _, _}) ->
-    {ok, T};
-parse_ip(T = {_, _, _, _, _, _, _, _}) ->
-    {ok, T}.
-
-%% CHECK
-
-test(true, _Msg) -> true;
-test(false, Msg) ->
-    ct:pal("~s", [Msg]),
-    false.
-
-check(OldState, NewState = #{no_ports := P}, null, A) -> check(OldState, NewState, P, A);
-check(OldState, NewState = #{socket_id := {_, A}}, P, null) -> check(OldState, NewState, P, A);
-check(#{sockets := OS, no_ports := _OP, idcounters := _OC, socket_id := {_, OA}},
-      #{sockets := NS, no_ports := NP, idcounters := NC, socket_id := {_, NA}},
-      P, A) ->
-    {ok, PA} = parse_ip(A),
-    test(PA == NA, "Address not configured") and
-        case NA of
-            OA  ->
-                ct:pal("NP: ~p, NC: ~p", [NP, NC]),
-                {_, Rest} = split(NP, array:to_list(OS)),
-                test(P == NP,"Ports not configured") and
-                    test(maps:fold( fun(_Peer, {NextPortIdx, _NextReqId}, Akk) ->
-                                            Akk and (NextPortIdx =< NP)
-                                    end, true, NC), "Invalid port counter") and
-                    test(getSocketCount() =< NP, "Sockets not closed") and
-                    test(array:size(NS) =< NP, "Socket array not resized") and
-                    test(lists:all(fun(Pid) -> testSocket(Pid) end, Rest), "Sockets still available");
-            _   ->
-                test(array:size(NS) == 0, "Socket array not cleaned") and
-                    test(getSocketCount() == 0, "Sockets not closed") and
-                    test(lists:all(fun(Pid) -> testSocket(Pid) end, array:to_list(OS)), "Sockets still available")
-        end.
-
 %% TESTS
 
 send_request(_Config) ->
     ?equal(accept, eradius_test_handler:send_request(one)),
     ok.
 
-send(FUN, Ports, Address) ->
-    meckStart(),
-    OldState = eradius_client_mngr:get_state(?SERVER),
-    FUN(),
-    NewState = eradius_client_mngr:get_state(?SERVER),
-    true = check(OldState, NewState, Ports, Address),
-    meckStop().
+%% true iff every pool keeps at most K active fillers (family-agnostic).
+all_pools_within_k(St, K) ->
+    lists:all(fun(#{active := A}) -> queue:len(A) =< K end,
+              maps:values(maps:get(pools, St))).
 
 wanna_send(_Config) ->
-    lists:map(fun(X) ->
-                      Server = binary_to_atom(<<(X+$A)>>),
-                      FUN = fun() -> eradius_client_mngr:wanna_send(?SERVER, [Server], []) end,
-                      send(FUN, null, null)
-              end, lists:seq(0, 9)).
+    %% Allocations stay within K active fillers per server. Server `one`
+    %% is configured by eradius_test_handler:start_client/2 at port 1812.
+    K = 10,
+    lists:foreach(
+      fun(_) ->
+              {ok, {_Pid, _Id, one, _S, _I}} =
+                  eradius_client_mngr:wanna_send(?SERVER, [one], [])
+      end, lists:seq(1, 50)),
+    St = eradius_client_mngr:get_state(?SERVER),
+    ?equal(true, all_pools_within_k(St, K)),
+    ok.
 
 reconf_address(Config) ->
     IP = case proplists:get_value(family, Config) of
-             ipv4 ->
-                 {7, 13, 23, 42};
-             ipv4_mapped_ipv6 ->
-                 inet:ipv4_mapped_ipv6_address({7, 13, 23, 42});
-             ipv6 ->
-                 {16#fd96, 16#dcd2, 16#efdb, 16#41c3, 0, 0, 16#100, 1}
+             ipv4 -> {7, 13, 23, 42};
+             ipv4_mapped_ipv6 -> inet:ipv4_mapped_ipv6_address({7, 13, 23, 42});
+             ipv6 -> {16#fd96, 16#dcd2, 16#efdb, 16#41c3, 0, 0, 16#100, 1}
          end,
-    FUN = fun() ->
-                  eradius_client_mngr:reconfigure(?SERVER, #{ip => IP}),
-                  %% socket shutdown is done asynchronous,
-                  %% the tests need to wait a bit for it to finish.
-                  timer:sleep(100)
-          end,
-    send(FUN, null, inet:ntoa(IP)).
+    {ok, _} = eradius_client_mngr:wanna_send(?SERVER, [one], []),
+    ok = eradius_client_mngr:reconfigure(?SERVER, #{ip => IP}),
+    timer:sleep(100),
+    St = eradius_client_mngr:get_state(?SERVER),
+    ?equal(#{}, maps:get(pools, St)),
+    ok.
 
 reconf_ports_30(_Config) ->
-    FUN = fun() ->
-                  eradius_client_mngr:reconfigure(?SERVER, #{no_ports => 30}),
-                  %% socket shutdown is done asynchronous,
-                  %% the tests need to wait a bit for it to finish.
-                  timer:sleep(100)
-          end,
-    send(FUN, 30, null).
+    ok = eradius_client_mngr:reconfigure(?SERVER, #{no_ports => 30}),
+    St = eradius_client_mngr:get_state(?SERVER),
+    ?equal(30, maps:get(k_ports, St)),
+    ok.
 
 reconf_ports_10(_Config) ->
-    FUN = fun() ->
-                  eradius_client_mngr:reconfigure(?SERVER, #{no_ports => 10}),
-                  %% socket shutdown is done asynchronous,
-                  %% the tests need to wait a bit for it to finish.
-                  timer:sleep(100)
-          end,
-    send(FUN, 10, null).
+    ok = eradius_client_mngr:reconfigure(?SERVER, #{no_ports => 10}),
+    St = eradius_client_mngr:get_state(?SERVER),
+    ?equal(10, maps:get(k_ports, St)),
+    ok.
 
 send_request_failover(Config) ->
     Family = proplists:get_value(family, Config),
@@ -291,34 +224,22 @@ check_upstream_servers(Config) ->
                           sets:from_list(Servers))),
     ok.
 
-no_ports_one_wraps() ->
-    [{doc, "wanna_send must not crash when no_ports = 1 and the req-id wraps past 255"}].
-no_ports_one_wraps(Config) ->
-    Family = proplists:get_value(family, Config, ipv4),
-    {ok, _} = application:ensure_all_started(eradius),
-    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
-               secret => <<"secret">>, retries => 3},
-    {ok, Client} =
-        eradius_client_mngr:start_client(
-          #{family => eradius_test_lib:inet_family(Family), ip => any, no_ports => 1,
-            servers => #{test_server => Server}}),
-    %% 257 allocations force the {PortIdx, 255} wrap branch at least once
-    lists:foreach(
-      fun(_) ->
-              ?match({ok, {_Sock, _ReqId, test_server, _Srv, _Info}},
-                     eradius_client_mngr:wanna_send(Client, [test_server], []))
-      end, lists:seq(1, 257)),
-    ok.
-
 clobber_does_not_hang() ->
     [{doc, "A pending request whose entry is overwritten by a same-ReqId "
       "request must still return {error,timeout} to its caller, not hang"}].
 clobber_does_not_hang(Config) ->
     Family = proplists:get_value(family, Config, ipv4),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    LH = eradius_test_lib:localhost(Family, native),
+    BindIP = eradius_test_lib:localhost(Family, mapped),
+    %% black-hole server: a real UDP socket that never replies, so the connected
+    %% client socket sees a listener (no ICMP econnrefused) and the clobber is exercised.
+    {ok, BH} = gen_udp:open(0, [binary, {active, false}, InetFamily, {ip, BindIP}]),
+    {ok, BHPort} = inet:port(BH),
+    Peer = {LH, BHPort},
     {ok, Sock} = eradius_client_socket:start_link(
-                   #{family => eradius_test_lib:inet_family(Family), active_n => 10}),
-    %% port 1 on loopback: packets go out, no reply ever comes back
-    Peer = {eradius_test_lib:localhost(Family, native), 1},
+                   #{family => InetFamily, active_n => 10, server_addr => Peer,
+                     reqid_reuse_timeout => 30000}),
     ReqId = 1,
     Packet = <<1, ReqId, 0, 20, 0:128>>,   %% 20-byte minimal RADIUS header
     Caller = self(),
@@ -334,10 +255,260 @@ clobber_does_not_hang(Config) ->
                   eradius_client_socket:send_request(Sock, Peer, ReqId, Packet, 2000)
           end),
     %% P1 must not hang; with the bounded call timeout it gets {error,timeout}
+    Result =
+        receive
+            {p1, R} -> R
+        after 6000 ->
+                exit(P1, kill),
+                ct:fail("P1 hung after its pending entry was clobbered")
+        end,
+    gen_udp:close(BH),
+    eradius_client_socket:close(Sock),
+    ?equal({error, timeout}, Result).
+
+connected_socket_matches_reply() ->
+    [{doc, "A connected socket sends without an explicit dest and matches a "
+      "reply to the pending request by ReqId alone"}].
+connected_socket_matches_reply(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    LH = eradius_test_lib:localhost(Family, native),
+    BindIP = eradius_test_lib:localhost(Family, mapped),
+    {ok, Server} = gen_udp:open(0, [binary, {active, false}, InetFamily, {ip, BindIP}]),
+    {ok, SrvPort} = inet:port(Server),
+    {ok, Sock} = eradius_client_socket:start_link(
+                   #{family => InetFamily, active_n => 10,
+                     server_addr => {LH, SrvPort}, reqid_reuse_timeout => 30000}),
+    ReqId = 7,
+    Req = <<1, ReqId, 0, 20, 0:128>>,
+    Caller = self(),
+    spawn(fun() ->
+                  R = eradius_client_socket:send_request(
+                        Sock, {LH, SrvPort}, ReqId, Req, 3000),
+                  Caller ! {done, R}
+          end),
+    {ok, {FromIP, FromPort, <<_, ReqId, _/binary>>}} = gen_udp:recv(Server, 0, 2000),
+    Reply = <<2, ReqId, 0, 20, 1:128>>,
+    ok = gen_udp:send(Server, FromIP, FromPort, Reply),
     receive
-        {p1, Result} ->
-            ?equal({error, timeout}, Result)
-    after 6000 ->
-            exit(P1, kill),
-            ct:fail("P1 hung after its pending entry was clobbered")
+        {done, Result} ->
+            ?match({ok, <<2, ReqId, _/binary>>, <<>>}, Result)
+    after 4000 ->
+            ct:fail("connected socket did not deliver the reply")
+    end,
+    gen_udp:close(Server).
+
+retire_holds_then_closes() ->
+    [{doc, "A retired socket with no pending requests stays alive during the "
+      "cooldown and exits normally once it elapses"}].
+retire_holds_then_closes(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    LH = eradius_test_lib:localhost(Family, native),
+    {ok, Sock} = eradius_client_socket:start_link(
+                   #{family => InetFamily, active_n => 10,
+                     server_addr => {LH, 1}, reqid_reuse_timeout => 700}),
+    MRef = erlang:monitor(process, Sock),
+    eradius_client_socket:retire(Sock),
+    timer:sleep(300),
+    ?equal(true, is_process_alive(Sock)),
+    receive
+        {'DOWN', MRef, process, Sock, Reason} ->
+            ?equal(normal, Reason)
+    after 2000 ->
+            ct:fail("retired socket did not close after cooldown")
+    end.
+
+retire_waits_for_pending() ->
+    [{doc, "A retired socket does not close while a request is still pending; "
+      "it closes after the pending request resolves and cooldown elapsed"}].
+retire_waits_for_pending(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    LH = eradius_test_lib:localhost(Family, native),
+    BindIP = eradius_test_lib:localhost(Family, mapped),
+    %% black-hole server (real listener, never replies): avoids ICMP econnrefused.
+    {ok, BH} = gen_udp:open(0, [binary, {active, false}, InetFamily, {ip, BindIP}]),
+    {ok, BHPort} = inet:port(BH),
+    Peer = {LH, BHPort},
+    %% cooldown 1500ms; force-close at 2x = 3000ms. Retire first so the cooldown
+    %% starts at t=0, then send a request whose 2500ms timeout resolves between
+    %% the cooldown (1500ms) and the force-close (3000ms): the close is driven by
+    %% pending-drain, with comfortable margins around the 1800ms alive-check.
+    {ok, Sock} = eradius_client_socket:start_link(
+                   #{family => InetFamily, active_n => 10,
+                     server_addr => Peer, reqid_reuse_timeout => 1500}),
+    MRef = erlang:monitor(process, Sock),
+    Caller = self(),
+    eradius_client_socket:retire(Sock),
+    spawn(fun() ->
+                  R = eradius_client_socket:send_request(
+                        Sock, Peer, 3, <<1, 3, 0, 20, 0:128>>, 2500),
+                  Caller ! {p, R}
+          end),
+    %% at ~1800ms the cooldown has elapsed but the request is still pending -> alive
+    timer:sleep(1800),
+    ?equal(true, is_process_alive(Sock)),
+    receive {p, {error, timeout}} -> ok after 4000 -> ct:fail("request never resolved") end,
+    receive
+        {'DOWN', MRef, process, Sock, normal} -> ok
+    after 4000 ->
+            ct:fail("retired socket did not close after pending drained")
+    end,
+    gen_udp:close(BH).
+
+client_config_defaults() ->
+    [{doc, "new client config carries no_ports (K), max_ports and "
+      "reqid_reuse_timeout with sane defaults"}].
+client_config_defaults(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            servers => #{test_server => Server}}),
+    St = eradius_client_mngr:get_state(Client),
+    ?equal(10, maps:get(k_ports, St)),
+    ?equal(256, maps:get(max_ports, St)),
+    ?equal(30000, maps:get(reqid_reuse_timeout, St)),
+    ok.
+
+pool_rolls_and_retires() ->
+    [{doc, "with no_ports=1 the single filler issues ids 0..255 then rolls to a "
+      "fresh socket on the 257th send; the exhausted socket is retired"}].
+pool_rolls_and_retires(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            no_ports => 1, reqid_reuse_timeout => 30000,
+            servers => #{test_server => Server}}),
+    Allocs =
+        [begin
+             {ok, {Pid, ReqId, test_server, _Srv, _Info}} =
+                 eradius_client_mngr:wanna_send(Client, [test_server], []),
+             {Pid, ReqId}
+         end || _ <- lists:seq(1, 257)],
+    {Pids, Ids} = lists:unzip(Allocs),
+    ?equal(lists:seq(0, 255) ++ [0], Ids),
+    First256 = lists:sublist(Pids, 256),
+    ?equal(1, length(lists:usort(First256))),
+    Socket257 = lists:nth(257, Pids),
+    ?equal(false, lists:member(Socket257, First256)),
+    ?equal(2, length(lists:usort(Pids))),
+    %% the retired socket was told to retire but is still alive (cooling, 30s)
+    ?equal(true, is_process_alive(hd(First256))),
+    ok.
+
+pool_cap_backpressures() ->
+    [{doc, "with no_ports=1 and max_ports_per_server=2, once both sockets are "
+      "exhausted-and-cooling wanna_send returns {error, no_ports}"}].
+pool_cap_backpressures(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            no_ports => 1, max_ports_per_server => 2,
+            reqid_reuse_timeout => 60000,    %% long: cooling sockets stay open
+            servers => #{test_server => Server}}),
+    %% 512 allocations exhaust 2 sockets (256 ids each); both go to cooling and
+    %% cannot be replaced (cap = 2). The 513th allocation must be rejected.
+    ok = lists:foreach(
+           fun(_) ->
+                   {ok, {_Pid, _Id, test_server, _S, _I}} =
+                       eradius_client_mngr:wanna_send(Client, [test_server], [])
+           end, lists:seq(1, 512)),
+    ?equal({error, no_ports},
+           eradius_client_mngr:wanna_send(Client, [test_server], [])),
+    ok.
+
+cooling_socket_reclaimed() ->
+    [{doc, "after a retired socket finishes its cooldown and exits, the manager "
+      "drops it from the pool (cooling shrinks back to empty)"}].
+cooling_socket_reclaimed(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1812,
+               secret => <<"secret">>, retries => 3},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            no_ports => 1, reqid_reuse_timeout => 400,
+            servers => #{test_server => Server}}),
+    %% 256 allocations exhaust the single filler -> it retires (cooling=1),
+    %% and a replacement filler opens (active=1). The client has exactly one
+    %% server, so read its sole pool via maps:values (avoids family-mapped keys).
+    ok = lists:foreach(
+           fun(_) ->
+                   {ok, _} = eradius_client_mngr:wanna_send(Client, [test_server], [])
+           end, lists:seq(1, 256)),
+    #{pools := P0} = eradius_client_mngr:get_state(Client),
+    [#{cooling := Cool0}] = maps:values(P0),
+    ?equal(1, length(Cool0)),
+    %% wait out the cooldown (400ms); the cooling socket exits and is reclaimed
+    timer:sleep(1200),
+    #{pools := P1} = eradius_client_mngr:get_state(Client),
+    [#{active := Act1, cooling := Cool1}] = maps:values(P1),
+    ?equal(0, length(Cool1)),
+    ?equal(1, queue:len(Act1)),
+    ok.
+
+rotation_uses_fresh_source_ports() ->
+    [{doc, "across a 256-id wrap the client sends from a different source port, "
+      "so no {srcport, ReqId} pair repeats while the old port is cooling"}].
+rotation_uses_fresh_source_ports(Config) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    InetFamily = eradius_test_lib:inet_family(Family),
+    BindIP = eradius_test_lib:localhost(Family, mapped),
+    LH = eradius_test_lib:localhost(Family, native),
+    {ok, Server} = gen_udp:open(0, [binary, {active, false}, InetFamily, {ip, BindIP}]),
+    {ok, SrvPort} = inet:port(Server),
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => InetFamily, ip => any, no_ports => 1,
+            reqid_reuse_timeout => 60000,
+            servers => #{s => #{ip => LH, port => SrvPort,
+                                secret => <<"secret">>, retries => 1}}}),
+    Test = self(),
+    %% echo server: reply to each request and report the observed source port
+    _Echo = spawn_link(fun() -> echo_loop(Server, Test) end),
+    %% 257 synchronous sends: ids run 0..255 on socket 1, then the 257th rolls
+    %% to a fresh socket (id 0 again) on a new OS-assigned source port.
+    Pairs =
+        [begin
+             {ok, {Pid, ReqId, s, _S, _I}} =
+                 eradius_client_mngr:wanna_send(Client, [s], []),
+             {ok, _H, _B} =
+                 eradius_client_socket:send_request(
+                   Pid, {LH, SrvPort}, ReqId, <<1, ReqId, 0, 20, 0:128>>, 2000),
+             receive
+                 {observed, Port, ReqId} -> {Port, ReqId}
+             after 2000 ->
+                     ct:fail("server did not observe request id ~p", [ReqId])
+             end
+         end || _ <- lists:seq(1, 257)],
+    gen_udp:close(Server),
+    %% no {source port, ReqId} pair repeats within the cooldown window
+    ?equal(length(Pairs), length(lists:usort(Pairs))),
+    %% the id-0 wrap landed on a second, distinct source port
+    ?equal(true, length(lists:usort([P || {P, _} <- Pairs])) >= 2),
+    ok.
+
+echo_loop(Server, Test) ->
+    case gen_udp:recv(Server, 0, 5000) of
+        {ok, {FromIP, FromPort, <<_, ReqId, _/binary>>}} ->
+            gen_udp:send(Server, FromIP, FromPort, <<2, ReqId, 0, 20, 0:128>>),
+            Test ! {observed, FromPort, ReqId},
+            echo_loop(Server, Test);
+        {error, _} ->
+            ok
     end.

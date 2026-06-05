@@ -39,9 +39,15 @@ Pool-based failover in `m:eradius_client` automatically skips unreachable server
 
 == Socket pool ==
 
-The client opens `no_ports` UDP sockets (default: 1) on OS-assigned ports.
-Each socket supports up to 256 concurrent requests (one per RADIUS request id).
-Increase `no_ports` for higher concurrency requirements.
+For each RADIUS server the client maintains a dynamic pool of connected UDP sockets
+on OS-assigned source ports. Up to `no_ports` (default: 10) sockets are actively
+issuing request ids at once; each socket issues request ids 0..255 exactly once, then
+is retired — held open for `reqid_reuse_timeout` ms (default: 30000) so its source port
+is not reused while the server's duplicate-detection window is still open — and finally
+closed. Reusing a request id therefore always happens on a fresh source port, which the
+server sees as a distinct client. The total number of sockets per server is bounded by
+`max_ports_per_server` (default: 256); once reached, `wanna_send` returns `{error, no_ports}`
+so the caller can apply backpressure.
 """.
 
 -behaviour(gen_server).
@@ -58,8 +64,8 @@ Increase `no_ports` for higher concurrency requirements.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -ifdef(TEST).
--export([get_state/1, servers/1, server/2, get_socket_count/1]).
--ignore_xref([get_state/1, servers/1, server/2, get_socket_count/1]).
+-export([get_state/1, servers/1, server/2]).
+-ignore_xref([get_state/1, servers/1, server/2]).
 -endif.
 
 -ignore_xref([start_client/1, start_client/2]).
@@ -102,7 +108,9 @@ Increase `no_ports` for higher concurrency requirements.
           inet_backend => inet | socket,
           ip => any | inet:ip_address(),
           active_n => once | non_neg_integer(),
-          no_ports => non_neg_integer(),
+          no_ports => pos_integer(),
+          max_ports_per_server => pos_integer(),
+          reqid_reuse_timeout => pos_integer(),
           recbuf => non_neg_integer(),
           sndbuf => non_neg_integer(),
           metrics_callback => eradius_req:metrics_callback()
@@ -115,7 +123,9 @@ Increase `no_ports` for higher concurrency requirements.
           family := inet | inet6,
           ip := any | inet:ip_address(),
           active_n := once | non_neg_integer(),
-          no_ports := non_neg_integer(),
+          no_ports := pos_integer(),
+          max_ports_per_server => pos_integer(),
+          reqid_reuse_timeout => pos_integer(),
           recbuf := non_neg_integer(),
           sndbuf := non_neg_integer(),
           metrics_callback := 'undefined' | eradius_req:metrics_callback()
@@ -125,6 +135,13 @@ Increase `no_ports` for higher concurrency requirements.
 
 -export_type([server_name/0, server_pool/0, servers/0, client_opts/0]).
 
+-define(RECONFIGURE_TIMEOUT, 15000).
+-define(DEFAULT_MAX_RETRIES, 20).
+-define(DEFAULT_DOWN_TIME, 1000).
+-define(DEFAULT_K_PORTS, 10).
+-define(DEFAULT_MAX_PORTS_PER_SERVER, 256).
+-define(DEFAULT_REQID_REUSE_TIMEOUT, 30000).
+
 -record(state, {
                 owner :: pid(),
                 config :: client_config(),
@@ -132,15 +149,19 @@ Increase `no_ports` for higher concurrency requirements.
                 client_addr :: any | inet:ip_address(),
                 servers :: servers(),
                 socket_id :: {Family :: inet | inet6, IP :: any | inet:ip_address()},
-                no_ports = 1 :: pos_integer(),
-                idcounters = maps:new() :: map(),
-                sockets = array:new() :: array:array(),
+                k_ports = ?DEFAULT_K_PORTS :: pos_integer(),
+                max_ports = ?DEFAULT_MAX_PORTS_PER_SERVER :: pos_integer(),
+                reqid_reuse_timeout = ?DEFAULT_REQID_REUSE_TIMEOUT :: pos_integer(),
+                pools = #{} :: #{server_addr() => pool()},
+                socket_refs = #{} :: #{reference() => server_addr()},
+                no_ports_rejections = 0 :: non_neg_integer(),
                 metrics_callback :: undefined | eradius_req:metrics_callback()
                }).
 
--define(RECONFIGURE_TIMEOUT, 15000).
--define(DEFAULT_MAX_RETRIES, 20).
--define(DEFAULT_DOWN_TIME, 1000).
+-type server_addr() :: {inet:ip_address(), inet:port_number()}.
+-type filler() :: #{pid := pid(), monitor := reference(),
+                    next_id := 0..255, issued := 0..256}.
+-type pool() :: #{active := queue:queue(filler()), cooling := [pid()]}.
 
 %%%=========================================================================
 %%%  API
@@ -214,12 +235,6 @@ get_state(ServerRef) ->
     Values = tl(tuple_to_list(State)),
     maps:from_list(lists:zip(Keys, Values)).
 
-get_socket_count(ServerRef) ->
-    #state{owner = Owner} = sys:get_state(ServerRef),
-    {ok, SockSup} = eradius_client_sup:socket_supervisor(Owner),
-    Counts = supervisor:count_children(SockSup),
-    proplists:get_value(active, Counts).
-
 servers(ServerRef) ->
     #state{servers = Servers} = sys:get_state(ServerRef),
     maps:fold(
@@ -257,33 +272,35 @@ init([Owner, #{name := ClientName, servers := Servers,
                config = Config,
                servers = Servers,
                socket_id = socket_id(Config),
-               no_ports = NPorts,
+               k_ports = NPorts,
+               max_ports = maps:get(max_ports_per_server, Config,
+                                    ?DEFAULT_MAX_PORTS_PER_SERVER),
+               reqid_reuse_timeout = maps:get(reqid_reuse_timeout, Config,
+                                              ?DEFAULT_REQID_REUSE_TIMEOUT),
                metrics_callback = MetricsCallback
               },
     {ok, State}.
 
 %% @private
 handle_call({wanna_send, Candidates, Tried}, _From,
-            #state{
-               client_name = ClientName,
-               client_addr = ClientAddr,
-               servers = Servers,
-               no_ports = NoPorts, idcounters = IdCounters,
-               sockets = Sockets,
-               metrics_callback = MetricsCallback} = State0) ->
+            #state{client_name = ClientName, client_addr = ClientAddr,
+                   servers = Servers,
+                   metrics_callback = MetricsCallback} = State0) ->
     case select_server(Candidates, Tried, Servers) of
         {ok, {ServerName, #{ip := IP, port := Port} = Server}} ->
             ServerAddr = {IP, Port},
-            {PortIdx, ReqId, NewIdCounters} =
-                next_port_and_req_id(ServerAddr, NoPorts, IdCounters),
-            {SocketProcess, NewSockets} = find_socket_process(PortIdx, Sockets, State0),
-            State = State0#state{idcounters = NewIdCounters, sockets = NewSockets},
-            ReqInfo =
-                #{server => ServerName, server_addr => ServerAddr,
-                  client => ClientName, client_addr => ClientAddr,
-                  metrics_callback => MetricsCallback},
-            Reply = {ok, {SocketProcess, ReqId, ServerName, Server, ReqInfo}},
-            {reply, Reply, State};
+            case allocate(ServerAddr, State0) of
+                {ok, Pid, ReqId, State} ->
+                    ReqInfo =
+                        #{server => ServerName, server_addr => ServerAddr,
+                          client => ClientName, client_addr => ClientAddr,
+                          metrics_callback => MetricsCallback},
+                    {reply, {ok, {Pid, ReqId, ServerName, Server, ReqInfo}}, State};
+                {error, no_ports, #state{no_ports_rejections = N} = State1} ->
+                    State = State1#state{no_ports_rejections = N + 1},
+                    ?LOG(warning, "RADIUS client port pool for ~p saturated", [ServerAddr]),
+                    {reply, {error, no_ports}, State}
+            end;
         {error, _} = Error ->
             {reply, Error, State0}
     end;
@@ -304,8 +321,14 @@ handle_call({failed, _Peer}, _From, State) ->
 handle_call({reconfigure, Opts}, _From, #state{config = OConfig} = State0) ->
     case client_config(maps:merge(OConfig, Opts)) of
         {ok, #{servers := Servers} = Config} ->
-            State1 = State0#state{config = Config, servers = Servers},
-            State = reconfigure_address(Config, State1),
+            State1 = State0#state{
+                       config = Config, servers = Servers,
+                       max_ports = maps:get(max_ports_per_server, Config,
+                                            ?DEFAULT_MAX_PORTS_PER_SERVER),
+                       reqid_reuse_timeout = maps:get(reqid_reuse_timeout, Config,
+                                                      ?DEFAULT_REQID_REUSE_TIMEOUT)},
+            State2 = reconfigure_address(Config, State1),
+            State = drop_removed_pools(Servers, State2),
             {reply, ok, State};
 
         {error, _} = Error ->
@@ -318,6 +341,18 @@ handle_call(_OtherCall, _From, State) ->
 
 %% @private
 handle_cast(_Msg, State) -> {noreply, State}.
+
+%% @private
+handle_info({'DOWN', Ref, process, Pid, _Reason},
+            #state{socket_refs = Refs} = State) ->
+    case maps:take(Ref, Refs) of
+        {ServerAddr, Refs1} ->
+            Pool = pool_of(ServerAddr, State),
+            Pool1 = remove_socket(Pid, Ref, Pool),
+            {noreply, put_pool(ServerAddr, Pool1, State#state{socket_refs = Refs1})};
+        error ->
+            {noreply, State}
+    end;
 
 %% @private
 handle_info({timeout, _, {reset, Peer}}, #state{servers = Servers0} = State0) ->
@@ -372,7 +407,9 @@ socket_id_str({_, IP}) when is_atom(IP) ->
 default_client_opts() ->
     #{family => inet6,
       ip => any,
-      no_ports => 10,
+      no_ports => ?DEFAULT_K_PORTS,
+      max_ports_per_server => ?DEFAULT_MAX_PORTS_PER_SERVER,
+      reqid_reuse_timeout => ?DEFAULT_REQID_REUSE_TIMEOUT,
       active_n => 100,
       recbuf => 8192,
       sndbuf => 131072,
@@ -481,76 +518,137 @@ client_config(Opts0) ->
     end.
 
 reconfigure_address(#{no_ports := NPorts} = Config,
-                    #state{socket_id = OAdd, sockets = Sockts} = State) ->
+                    #state{socket_id = OAdd, socket_refs = Refs} = State) ->
     NAdd = socket_id(Config),
     case OAdd of
-        NAdd    ->
+        NAdd ->
             reconfigure_ports(NPorts, State);
         _ ->
             ?LOG(info, "Reopening RADIUS client sockets (client_ip changed to ~s)",
                  [socket_id_str(NAdd)]),
-            array:map(
-              fun(_PortIdx, undefined) ->
-                      ok;
-                 (_PortIdx, Socket) ->
-                      eradius_client_socket:close(Socket)
-              end, Sockts),
-            Counters = fix_counters(NPorts, State#state.idcounters),
-            State#state{sockets = array:new(), socket_id = NAdd,
-                        no_ports = NPorts, idcounters = Counters}
+            close_all_pools(State),
+            maps:foreach(fun(Ref, _SA) -> erlang:demonitor(Ref, [flush]) end, Refs),
+            State#state{socket_id = NAdd, k_ports = NPorts,
+                        pools = #{}, socket_refs = #{}}
     end.
 
-reconfigure_ports(NPorts, #state{no_ports = OPorts, sockets = Sockets} = State) ->
-    if
-        OPorts =< NPorts ->
-            State#state{no_ports = NPorts};
+close_all_pools(#state{pools = Pools}) ->
+    maps:foreach(
+      fun(_ServerAddr, Pool) ->
+              lists:foreach(fun eradius_client_socket:close/1, pool_pids(Pool))
+      end, Pools),
+    ok.
+
+%% Drop pools whose server is no longer configured; close their sockets and
+%% demonitor them.
+drop_removed_pools(Servers, #state{pools = Pools} = State) ->
+    Active = sets:from_list(
+               maps:fold(fun(_, #{ip := IP, port := Port}, Acc) -> [{IP, Port} | Acc];
+                            (_, _Pool, Acc) -> Acc
+                         end, [], Servers)),
+    Drop = [SA || SA <- maps:keys(Pools), not sets:is_element(SA, Active)],
+    lists:foldl(fun drop_one_pool/2, State, Drop).
+
+drop_one_pool(ServerAddr, #state{pools = Pools, socket_refs = Refs} = State) ->
+    lists:foreach(fun eradius_client_socket:close/1,
+                  pool_pids(maps:get(ServerAddr, Pools))),
+    Refs1 =
+        maps:filter(
+          fun(Ref, SA) when SA =:= ServerAddr -> erlang:demonitor(Ref, [flush]), false;
+             (_Ref, _SA) -> true
+          end, Refs),
+    State#state{pools = maps:remove(ServerAddr, Pools), socket_refs = Refs1}.
+
+pool_pids(#{active := Active, cooling := Cooling}) ->
+    [maps:get(pid, F) || F <- queue:to_list(Active)] ++ Cooling.
+
+reconfigure_ports(NPorts, State) ->
+    State#state{k_ports = NPorts}.
+
+-spec new_pool() -> pool().
+new_pool() -> #{active => queue:new(), cooling => []}.
+
+pool_of(ServerAddr, #state{pools = Pools}) ->
+    maps:get(ServerAddr, Pools, new_pool()).
+
+put_pool(ServerAddr, Pool, #state{pools = Pools} = State) ->
+    State#state{pools = Pools#{ServerAddr => Pool}}.
+
+%% active fillers + cooling (retired-but-open) sockets. cooling pids are reclaimed
+%% when their socket exits (the 'DOWN' handler), bounding the per-server total.
+pool_total(#{active := A, cooling := C}) -> queue:len(A) + length(C).
+
+%% Drop a dead socket (by pid) from a pool, whether it was an active filler or
+%% a cooling socket.
+remove_socket(Pid, _Ref, #{active := Active, cooling := Cooling} = Pool) ->
+    Pool#{active := queue:delete_with(fun(F) -> maps:get(pid, F) =:= Pid end, Active),
+          cooling := lists:delete(Pid, Cooling)}.
+
+%% Allocate {Pid, ReqId} for ServerAddr, growing/rolling the pool as needed.
+-spec allocate(server_addr(), #state{}) ->
+          {ok, pid(), 0..255, #state{}} | {error, no_ports, #state{}}.
+allocate(ServerAddr, State0) ->
+    State1 = ensure_active(ServerAddr, State0),
+    Pool = pool_of(ServerAddr, State1),
+    case queue:out(maps:get(active, Pool)) of
+        {empty, _} ->
+            {error, no_ports, State1};
+        {{value, #{pid := Pid, next_id := ReqId, issued := Issued0} = F}, Rest} ->
+            Issued = Issued0 + 1,
+            case Issued >= 256 of
+                true ->
+                    %% filler exhausted: retire it (socket cools+closes itself),
+                    %% drop it from the active queue, and open a replacement.
+                    ok = eradius_client_socket:retire(Pid),
+                    Pool1 = Pool#{active := Rest,
+                                  cooling := [Pid | maps:get(cooling, Pool)]},
+                    State2 = put_pool(ServerAddr, Pool1, State1),
+                    State3 = ensure_active(ServerAddr, State2),
+                    {ok, Pid, ReqId, State3};
+                false ->
+                    %% round-robin: advance this filler and re-enqueue it at the tail.
+                    F1 = F#{next_id := (ReqId + 1) rem 256, issued := Issued},
+                    Pool1 = Pool#{active := queue:in(F1, Rest)},
+                    {ok, Pid, ReqId, put_pool(ServerAddr, Pool1, State1)}
+            end
+    end.
+
+%% Open fillers until there are K active (or the per-server cap is hit, or a
+%% socket open fails). Idempotent.
+-spec ensure_active(server_addr(), #state{}) -> #state{}.
+ensure_active(ServerAddr, #state{k_ports = K, max_ports = Max} = State) ->
+    Pool = pool_of(ServerAddr, State),
+    Active = maps:get(active, Pool),
+    case queue:len(Active) < K andalso pool_total(Pool) < Max of
         true ->
-            Counters = fix_counters(NPorts, State#state.idcounters),
-            NSockets = close_sockets(NPorts, Sockets),
-            State#state{sockets = NSockets, no_ports = NPorts, idcounters = Counters}
+            case open_filler(ServerAddr, State) of
+                {ok, Filler, State1} ->
+                    Pool1 = pool_of(ServerAddr, State1),
+                    Pool2 = Pool1#{active := queue:in(Filler, maps:get(active, Pool1))},
+                    ensure_active(ServerAddr, put_pool(ServerAddr, Pool2, State1));
+                {error, _} ->
+                    State
+            end;
+        false ->
+            State
     end.
 
-fix_counters(NPorts, Counters) ->
-    maps:map(fun(_Peer, Value = {NextPortIdx, _NextReqId}) when NextPortIdx < NPorts -> Value;
-                (_Peer, {_NextPortIdx, NextReqId}) -> {0, NextReqId}
-             end, Counters).
-
-close_sockets(NPorts, Sockets) ->
-    case array:size(Sockets) =< NPorts of
-        true    ->
-            Sockets;
-        false   ->
-            List = array:to_list(Sockets),
-            {_, Rest} = lists:split(NPorts, List),
-            lists:map(
-              fun(undefined) -> ok;
-                 (Socket) -> eradius_client_socket:close(Socket)
-              end, Rest),
-            array:resize(NPorts, Sockets)
-    end.
-
-next_port_and_req_id(Peer, NumberOfPorts, Counters) ->
-    case Counters of
-        #{Peer := {NextPortIdx, ReqId}} when ReqId < 255 ->
-            NextReqId = (ReqId + 1);
-        #{Peer := {PortIdx, 255}} ->
-            NextPortIdx = (PortIdx + 1) rem NumberOfPorts,
-            NextReqId = 0;
-        _ ->
-            NextPortIdx = erlang:phash2(Peer, NumberOfPorts),
-            NextReqId = 0
-    end,
-    NewCounters = Counters#{Peer => {NextPortIdx, NextReqId}},
-    {NextPortIdx, NextReqId, NewCounters}.
-
-find_socket_process(PortIdx, Sockets, #state{owner = Owner, config = Config}) ->
-    case array:get(PortIdx, Sockets) of
-        undefined ->
-            {ok, Supervisor} = eradius_client_sup:socket_supervisor(Owner),
-            {ok, Socket} = eradius_client_socket:new(Supervisor, Config),
-            {Socket, array:set(PortIdx, Socket, Sockets)};
-        Socket ->
-            {Socket, Sockets}
+-spec open_filler(server_addr(), #state{}) ->
+          {ok, filler(), #state{}} | {error, term()}.
+open_filler(ServerAddr, #state{owner = Owner, config = Config,
+                               reqid_reuse_timeout = RT,
+                               socket_refs = Refs} = State) ->
+    {ok, Supervisor} = eradius_client_sup:socket_supervisor(Owner),
+    SockConfig = Config#{server_addr => ServerAddr, reqid_reuse_timeout => RT},
+    case eradius_client_socket:new(Supervisor, SockConfig) of
+        {ok, Pid} ->
+            Ref = erlang:monitor(process, Pid),
+            Filler = #{pid => Pid, monitor => Ref, next_id => 0, issued => 0},
+            {ok, Filler, State#state{socket_refs = Refs#{Ref => ServerAddr}}};
+        {error, _} = Error ->
+            ?LOG(warning, "could not open RADIUS client socket for ~p: ~p",
+                 [ServerAddr, Error]),
+            Error
     end.
 
 client_mngr_pid(SupPid) ->
