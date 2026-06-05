@@ -20,11 +20,19 @@ init([]) ->
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
     DictServer   = {dict, {eradius_dict, start_link, []}, permanent, brutal_kill, worker, [eradius_dict]},
-    StatsServer  = {counter, {eradius_counter, start_link, []}, permanent, brutal_kill, worker, [eradius_counter]},
-    StatsCollect = {aggregator, {eradius_counter_aggregator, start_link, []}, permanent, brutal_kill, worker, [eradius_counter_aggregator]},
-    NodeMon      = {node_mon, {eradius_node_mon, start_link, []}, permanent, brutal_kill, worker, [eradius_node_mon]},
-    RadiusLog    = {radius_log, {eradius_log, start_link, []}, permanent, brutal_kill, worker, [eradius_log]},
-    ServerTopSup = {server_top_sup, {eradius_server_top_sup, start_link, []}, permanent, infinity, supervisor, [eradius_server_top_sup]},
-    Client       = {client, {eradius_client, start_link, []}, permanent, 500, worker, [eradius_client]},
+    ServerSup =
+        #{id => server_sup,
+          start => {eradius_server_sup, start_link, []},
+          restart => permanent,
+          shutdown => infinity,
+          type => supervisor,
+          modules => [eradius_server_sup]},
+    ClientTopSup =
+        #{id => client_top_sup,
+          start => {eradius_client_top_sup, start_link, []},
+          restart => permanent,
+          shutdown => infinity,
+          type => supervisor,
+          modules => [eradius_client_top_sup]},
 
-    {ok, {SupFlags, [DictServer, NodeMon, StatsServer, StatsCollect, RadiusLog, ServerTopSup, Client]}}.
+    {ok, {SupFlags, [DictServer, ServerSup, ClientTopSup]}}.
