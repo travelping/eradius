@@ -305,7 +305,11 @@ update_client_response(_, _, _)                           -> ok.
 
 %% @private
 reconfigure() ->
-    catch gen_server:call(?SERVER, reconfigure, ?RECONFIGURE_TIMEOUT).
+    try
+        gen_server:call(?SERVER, reconfigure, ?RECONFIGURE_TIMEOUT)
+    catch
+        exit:Reason -> {'EXIT', Reason}
+    end.
 
 %% ------------------------------------------------------------------------------------------
 %% -- socket process manager

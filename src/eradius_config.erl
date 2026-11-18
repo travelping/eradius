@@ -125,7 +125,12 @@ validate_ip(X) ->
     ?invalid("bad IP address: ~p", [X]).
 
 validate_ports(Ports) -> map_helper(fun validate_port/1, Ports).
-validate_port(Port) when is_list(Port) -> validate_port(catch list_to_integer(Port));
+validate_port(Port) when is_list(Port) ->
+    try list_to_integer(Port) of
+        Num -> validate_port(Num)
+    catch
+        error:badarg -> ?invalid("bad port number: ~p", [Port])
+    end;
 validate_port(Port) when ?pos_int(Port) -> Port;
 validate_port(Port) when is_integer(Port) -> ?invalid("port number out of range: ~p", [Port]);
 validate_port(Port) -> ?invalid("bad port number: ~p", [Port]).
@@ -234,13 +239,14 @@ validate_server_config([{Server, NasList} | ConfigRest]) ->
 validate_server_config([InvalidTerm | _ConfigRest]) -> ?invalid("bad term in server list: ~p", [InvalidTerm]).
 
 validate_server({IP, Port}) when is_list(Port) ->
-    case (catch list_to_integer(Port)) of
-        {'EXIT', _} ->
-            {invalid, io_lib:format("bad port number: ~p", [Port])};
+    try list_to_integer(Port) of
         Num when ?pos_int(Num) ->
             validate_server({IP, Num});
         Num ->
             {invalid, io_lib:format("port number out of range: ~p", [Num])}
+    catch
+        error:badarg ->
+            {invalid, io_lib:format("bad port number: ~p", [Port])}
     end;
 validate_server({IP, Port}) when is_list(IP), ?pos_int(Port) ->
     case inet_parse:ipv4_address(IP) of
@@ -385,7 +391,11 @@ ok_error_helper({ok, Value}, _ErrorMessage) -> Value;
 ok_error_helper(Value, _ErrorMessage) -> Value.
 
 generate_ip_list(IP, Mask) when is_list(Mask) ->
-    generate_ip_list(IP, catch list_to_integer(Mask));
+    try list_to_integer(Mask) of
+        Num -> generate_ip_list(IP, Num)
+    catch
+        error:badarg -> ?invalid("invalid mask ~p", [Mask])
+    end;
 generate_ip_list({A, B, C, D}, Mask) when Mask >=0, Mask =< 32 ->
     <<Address:32/integer>> = <<A, B, C, D>>,
     Wildcard = 16#ffffffff bsr Mask,
