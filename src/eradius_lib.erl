@@ -231,9 +231,11 @@ decode_request(Packet, Secret) ->
 
 -spec decode_request(binary(), secret(), authenticator()) -> #radius_request{} | {bad_pdu, list()}.
 decode_request(Packet, Secret, Authenticator) ->
-    case (catch decode_request0(Packet, Secret, Authenticator)) of
-        {'EXIT', _} -> {bad_pdu, "decode packet error"};
-        Else        -> Else
+    try
+        decode_request0(Packet, Secret, Authenticator)
+    catch
+        throw:Thrown -> Thrown;
+        _:_          -> {bad_pdu, "decode packet error"}
     end.
 
 -spec decode_request0(binary(), secret(), authenticator() | 'undefined') -> #radius_request{}.

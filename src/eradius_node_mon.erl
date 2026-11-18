@@ -109,12 +109,13 @@ handle_info(ping_dead_nodes, State = #state{app_masters = AppMasters, live_regis
     erlang:cancel_timer(State#state.ping_timer),
     {NewLive, NewDead, NewAppMasters} =
         sets:fold(fun (Node, {Live, Dead, AppMastersAcc}) ->
-                          case (catch gen_server:call({?SERVER, Node}, remote_get_regs_v1, ?PING_TIMEOUT)) of
+                          try gen_server:call({?SERVER, Node}, remote_get_regs_v1, ?PING_TIMEOUT) of
                               {ok, Registrations} ->
                                   NewAppMastersAcc = lists:foldl(fun register_locally/2, AppMastersAcc, Registrations),
                                   erlang:monitor(process, {?SERVER, Node}),
-                                  {sets:add_element(Node, Live), Dead, NewAppMastersAcc};
-                              {'EXIT', _Reason} ->
+                                  {sets:add_element(Node, Live), Dead, NewAppMastersAcc}
+                          catch
+                              _:_ ->
                                   {Live, sets:add_element(Node, Dead), AppMastersAcc}
                           end
                   end, {LiveRegistrars, sets:new(), AppMasters}, State#state.dead_registrar_nodes),
