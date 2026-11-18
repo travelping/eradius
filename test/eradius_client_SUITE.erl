@@ -64,6 +64,9 @@ common() ->
      retire_holds_then_closes,
      retire_waits_for_pending,
      client_config_defaults,
+     server_down_and_back,
+     success_resets_failures,
+     stale_down_timer_ignored,
      pool_rolls_and_retires,
      pool_cap_backpressures,
      cooling_socket_reclaimed,
@@ -210,8 +213,6 @@ reconf_ports_10(_Config) ->
 send_request_failover(Config) ->
     Family = proplists:get_value(family, Config),
     ?equal(accept, eradius_test_handler:send_request_failover(bad)),
-    {ok, Timeout} = application:get_env(eradius, unreachable_timeout),
-    timer:sleep(Timeout * 1000),
     ?equal(?BAD_SERVER_TUPLE(Family), eradius_client_mngr:server(?SERVER, bad)),
     ok.
 
@@ -373,6 +374,76 @@ client_config_defaults(Config) ->
     ?equal(10, maps:get(k_ports, St)),
     ?equal(256, maps:get(max_ports, St)),
     ?equal(30000, maps:get(reqid_reuse_timeout, St)),
+    ok.
+
+%% client with one server that nothing listens on; failures are injected
+%% through the manager API, so no request has to time out
+start_down_test_client(Config, DownTime) ->
+    Family = proplists:get_value(family, Config, ipv4),
+    {ok, _} = application:ensure_all_started(eradius),
+    Server = #{ip => eradius_test_lib:localhost(Family, native), port => 1921,
+               secret => <<"secret">>, retries => 2},
+    {ok, Client} =
+        eradius_client_mngr:start_client(
+          #{family => eradius_test_lib:inet_family(Family), ip => any,
+            unreachable_timeout => DownTime,
+            servers => #{srv => Server}}),
+    Client.
+
+fail_n(Client, N) ->
+    [ok = eradius_client_mngr:request_failed(Client, srv) || _ <- lists:seq(1, N)],
+    ok.
+
+failed_count(Client) ->
+    {_, _, Failed} = eradius_client_mngr:server(Client, srv),
+    Failed.
+
+server_down_and_back() ->
+    [{doc, "retries + 1 failures take the server out of selection; it comes back "
+      "after unreachable_timeout without any further failure report"}].
+server_down_and_back(Config) ->
+    Client = start_down_test_client(Config, 300),
+    ok = fail_n(Client, 2),
+    {ok, _} = eradius_client_mngr:wanna_send(Client, [srv], []),
+    ok = fail_n(Client, 1),
+    ?equal({error, no_active_servers},
+           eradius_client_mngr:wanna_send(Client, [srv], [])),
+    ?equal({{error, no_active_servers}, eradius_req:new(request)},
+           eradius_client:send_request(Client, srv, eradius_req:new(request), #{})),
+    timer:sleep(500),
+    ?equal(0, failed_count(Client)),
+    {ok, _} = eradius_client_mngr:wanna_send(Client, [srv], []),
+    ok.
+
+success_resets_failures() ->
+    [{doc, "a successful response sets the failure count back to zero, so only "
+      "consecutive failures take a server down"}].
+success_resets_failures(Config) ->
+    Client = start_down_test_client(Config, 300),
+    ok = fail_n(Client, 2),
+    ?equal(2, failed_count(Client)),
+    ok = eradius_client_mngr:request_succeeded(Client, srv),
+    ?equal(0, failed_count(Client)),
+    ok = fail_n(Client, 2),
+    {ok, _} = eradius_client_mngr:wanna_send(Client, [srv], []),
+    ok.
+
+stale_down_timer_ignored() ->
+    [{doc, "a down timer that a successful response made obsolete must not "
+      "shorten a later down period; late failures do not extend it either"}].
+stale_down_timer_ignored(Config) ->
+    Client = start_down_test_client(Config, 600),
+    ok = fail_n(Client, 3),                 %% down, timer T1 fires at ~600 ms
+    ok = eradius_client_mngr:request_succeeded(Client, srv),
+    ?equal(0, failed_count(Client)),
+    timer:sleep(300),
+    ok = fail_n(Client, 5),                 %% down again at ~300 ms, T2 at ~900 ms
+    ?equal(3, failed_count(Client)),        %% capped at retries + 1
+    timer:sleep(450),                       %% ~750 ms: T1 would have fired
+    ?equal({error, no_active_servers},
+           eradius_client_mngr:wanna_send(Client, [srv], [])),
+    timer:sleep(400),                       %% ~1150 ms: T2 fired
+    {ok, _} = eradius_client_mngr:wanna_send(Client, [srv], []),
     ok.
 
 pool_rolls_and_retires() ->

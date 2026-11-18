@@ -33,8 +33,13 @@ server names to either a `t:server_opts/0` map (a concrete server) or a
 
 == Failure tracking ==
 
-The manager tracks server failures. A server that fails to respond is marked as
-unreachable for a configurable period (`unreachable_timeout` application env, default 2 s).
+The manager counts consecutive failed requests per server. A request fails when all of
+its transmissions time out. A successful response sets the count back to zero.
+
+When the count exceeds the server's `retries` value, the server is marked as unreachable
+for `unreachable_timeout` milliseconds (client option, default: 1000). After that period
+the count starts again at zero. While all candidate servers are unreachable,
+`eradius_client:send_request/4` returns `{error, no_active_servers}` without sending.
 Pool-based failover in `m:eradius_client` automatically skips unreachable servers.
 
 == Socket pool ==
@@ -58,7 +63,7 @@ so the caller can apply backpressure.
 %% internal API
 -export([start_link/2, start_link/3]).
 -export([wanna_send/3, reconfigure/2]).
--export([request_failed/2]).
+-export([request_failed/2, request_succeeded/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -91,7 +96,8 @@ so the caller can apply backpressure.
                     secret := binary(),
                     retries := non_neg_integer(),
                     timeout := non_neg_integer(),
-                    failed := non_neg_integer()}.
+                    failed := non_neg_integer(),
+                    down_timer => reference()}.
 %% Options to describe a RADIUS server.
 %% Conceptually the same as server_opts(), except that mandatory fields use :=.
 
@@ -111,6 +117,7 @@ so the caller can apply backpressure.
           no_ports => pos_integer(),
           max_ports_per_server => pos_integer(),
           reqid_reuse_timeout => pos_integer(),
+          unreachable_timeout => pos_integer(),
           recbuf => non_neg_integer(),
           sndbuf => non_neg_integer(),
           metrics_callback => eradius_req:metrics_callback()
@@ -126,6 +133,7 @@ so the caller can apply backpressure.
           no_ports := pos_integer(),
           max_ports_per_server => pos_integer(),
           reqid_reuse_timeout => pos_integer(),
+          unreachable_timeout => pos_integer(),
           recbuf := non_neg_integer(),
           sndbuf := non_neg_integer(),
           metrics_callback := 'undefined' | eradius_req:metrics_callback()
@@ -152,6 +160,7 @@ so the caller can apply backpressure.
                 k_ports = ?DEFAULT_K_PORTS :: pos_integer(),
                 max_ports = ?DEFAULT_MAX_PORTS_PER_SERVER :: pos_integer(),
                 reqid_reuse_timeout = ?DEFAULT_REQID_REUSE_TIMEOUT :: pos_integer(),
+                down_time = ?DEFAULT_DOWN_TIME :: pos_integer(),
                 pools = #{} :: #{server_addr() => pool()},
                 socket_refs = #{} :: #{reference() => server_addr()},
                 no_ports_rejections = 0 :: non_neg_integer(),
@@ -217,6 +226,10 @@ wanna_send(Server, Peer, Tried) ->
 request_failed(Server, Peer) ->
     gen_server:call(Server, {failed, Peer}).
 
+%% @private
+request_succeeded(Server, Peer) ->
+    gen_server:cast(Server, {succeeded, Peer}).
+
 -doc """
 Reconfigure a running RADIUS client manager.
 
@@ -277,6 +290,7 @@ init([Owner, #{name := ClientName, servers := Servers,
                                     ?DEFAULT_MAX_PORTS_PER_SERVER),
                reqid_reuse_timeout = maps:get(reqid_reuse_timeout, Config,
                                               ?DEFAULT_REQID_REUSE_TIMEOUT),
+               down_time = maps:get(unreachable_timeout, Config, ?DEFAULT_DOWN_TIME),
                metrics_callback = MetricsCallback
               },
     {ok, State}.
@@ -305,14 +319,22 @@ handle_call({wanna_send, Candidates, Tried}, _From,
             {reply, Error, State0}
     end;
 
-handle_call({failed, Peer}, _From, #state{servers = Servers} = State0)
+handle_call({failed, Peer}, _From,
+            #state{servers = Servers, down_time = DownTime} = State0)
   when is_map_key(Peer, Servers) ->
-    #{retries := Retries, failed := Failed} = Server = map_get(Peer, Servers),
-    case Failed > Retries of
-        true  -> erlang:start_timer(?DEFAULT_DOWN_TIME, self(), {reset, Peer});
-        false -> ok
-    end,
-    State = State0#state{servers = Servers#{Peer := Server#{failed := Failed + 1}}},
+    #{retries := Retries, failed := Failed} = Server0 = map_get(Peer, Servers),
+    %% The failure that takes the server out of selection must arm the timer:
+    %% once the server is out, no later request reaches it to do so.
+    Server1 =
+        case Failed >= Retries andalso not is_map_key(down_timer, Server0) of
+            true ->
+                TRef = erlang:start_timer(DownTime, self(), {reset, Peer}),
+                Server0#{down_timer => TRef};
+            false ->
+                Server0
+        end,
+    Server = Server1#{failed := min(Failed + 1, Retries + 1)},
+    State = State0#state{servers = Servers#{Peer := Server}},
     {reply, ok, State};
 handle_call({failed, _Peer}, _From, State) ->
     {reply, ok, State};
@@ -326,7 +348,9 @@ handle_call({reconfigure, Opts}, _From, #state{config = OConfig} = State0) ->
                        max_ports = maps:get(max_ports_per_server, Config,
                                             ?DEFAULT_MAX_PORTS_PER_SERVER),
                        reqid_reuse_timeout = maps:get(reqid_reuse_timeout, Config,
-                                                      ?DEFAULT_REQID_REUSE_TIMEOUT)},
+                                                      ?DEFAULT_REQID_REUSE_TIMEOUT),
+                       down_time = maps:get(unreachable_timeout, Config,
+                                            ?DEFAULT_DOWN_TIME)},
             State2 = reconfigure_address(Config, State1),
             State = drop_removed_pools(Servers, State2),
             {reply, ok, State};
@@ -340,6 +364,21 @@ handle_call(_OtherCall, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
 %% @private
+handle_cast({succeeded, Peer}, #state{servers = Servers} = State) ->
+    case Servers of
+        #{Peer := #{failed := _} = Server0} ->
+            Server =
+                case maps:take(down_timer, Server0) of
+                    {TRef, Server1} ->
+                        _ = erlang:cancel_timer(TRef),
+                        Server1;
+                    error ->
+                        Server0
+                end,
+            {noreply, State#state{servers = Servers#{Peer := Server#{failed := 0}}}};
+        _ ->
+            {noreply, State}
+    end;
 handle_cast(_Msg, State) -> {noreply, State}.
 
 %% @private
@@ -355,12 +394,13 @@ handle_info({'DOWN', Ref, process, Pid, _Reason},
     end;
 
 %% @private
-handle_info({timeout, _, {reset, Peer}}, #state{servers = Servers0} = State0) ->
+handle_info({timeout, TRef, {reset, Peer}}, #state{servers = Servers0} = State0) ->
     Servers =
         case Servers0 of
-            #{Peer := Server} ->
-                Servers0#{Peer := Server#{failed := 0}};
+            #{Peer := #{down_timer := TRef} = Server} ->
+                Servers0#{Peer := maps:remove(down_timer, Server#{failed := 0})};
             _ ->
+                %% timer from before a reconfigure or a successful response
                 Servers0
         end,
     State = State0#state{servers = Servers},
