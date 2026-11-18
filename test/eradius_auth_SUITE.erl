@@ -1,44 +1,44 @@
-% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
+%% Copyright (c) 2010-2017 by Travelping GmbH <info@travelping.com>
 
-% Permission is hereby granted, free of charge, to any person obtaining a
-% copy of this software and associated documentation files (the "Software"),
-% to deal in the Software without restriction, including without limitation
-% the rights to use, copy, modify, merge, publish, distribute, sublicense,
-% and/or sell copies of the Software, and to permit persons to whom the
-% Software is furnished to do so, subject to the following conditions:
+%% Permission is hereby granted, free of charge, to any person obtaining a
+%% copy of this software and associated documentation files (the "Software"),
+%% to deal in the Software without restriction, including without limitation
+%% the rights to use, copy, modify, merge, publish, distribute, sublicense,
+%% and/or sell copies of the Software, and to permit persons to whom the
+%% Software is furnished to do so, subject to the following conditions:
 
-% The above copyright notice and this permission notice shall be included in
-% all copies or substantial portions of the Software.
+%% The above copyright notice and this permission notice shall be included in
+%% all copies or substantial portions of the Software.
 
-% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-% DEALINGS IN THE SOFTWARE.
+%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+%% DEALINGS IN THE SOFTWARE.
 
 -module(eradius_auth_SUITE).
 -compile(export_all).
 -include("eradius_test.hrl").
 
 all() -> [
-    unicode_test,
-    password_hash_test,
-    unicode_password_hash_test,
-    password_hashhash_test,
-    password_hash2_test,
-    des_key_test,
-    nt_response_test,
-    v2_authenticator_test,
-    mppe_master_key_test,
-    mppe_sendstart_key40_test,
-    mppe_sendstart_key56_test,
-    mppe_sendstart_key128_test,
-    mppe_start_key40_test,
-    mppe_start_key56_test,
-    mppe_start_key128_test
-    ].
+          unicode_test,
+          password_hash_test,
+          unicode_password_hash_test,
+          password_hashhash_test,
+          password_hash2_test,
+          des_key_test,
+          nt_response_test,
+          v2_authenticator_test,
+          mppe_master_key_test,
+          mppe_sendstart_key40_test,
+          mppe_sendstart_key56_test,
+          mppe_sendstart_key128_test,
+          mppe_start_key40_test,
+          mppe_start_key56_test,
+          mppe_start_key128_test
+         ].
 
 
 %% 0-to-256-char UserName

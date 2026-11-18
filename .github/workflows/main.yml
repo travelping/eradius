@@ -8,17 +8,33 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        otp: [22, 23, 24, 25, 26, 27, 28]
+        otp: [27.3, 28, 29]
     container:
       image: erlang:${{ matrix.otp }}-alpine
     steps:
+    - name: Prepare
+      run: |
+           apk update
+           apk --no-cache upgrade
+           apk --no-cache add zstd
     - name: Checkout
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Build
       run: rebar3 compile
     - name: Run tests
       run: |
+           export ERL_AFLAGS="+pc unicode"
            rebar3 do xref, ct
+           rebar3 as dialyzer dialyzer
+    - name: Tar Test Output
+      if: ${{ always() }}
+      run: tar -cf - _build/test/logs/ | zstd -15 -o ct-logs-${{ matrix.otp }}.tar.zst
+    - name: Archive Test Output
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-output-${{ matrix.otp }}
+        path: ct-logs-${{ matrix.otp }}.tar.zst
 
   slack:
     needs: test
