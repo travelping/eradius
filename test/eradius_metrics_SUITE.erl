@@ -44,7 +44,6 @@ all() -> [good_requests, bad_requests, error_requests, request_with_attrs_as_rec
 init_per_suite(Config) ->
     logger:set_primary_config(level, debug),
     application:load(eradius),
-    application:set_env(eradius, unreachable_timeout, 2),
     {ok, _} = application:ensure_all_started(eradius),
 
     ok = start_client(Config),

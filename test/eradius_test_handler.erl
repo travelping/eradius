@@ -14,7 +14,6 @@ start(Backend, Family) ->
     application:stop(eradius),
 
     application:load(eradius),
-    application:set_env(eradius, unreachable_timeout, 2),
     application:ensure_all_started(eradius),
 
     ok = start_client(Backend, Family),

@@ -66,7 +66,10 @@ from each failover pool in order.
 %% Options for a RADIUS request to override configure
 %% server defaults and to add failover alternatives
 
--export_type([options/0]).
+-type error_reason() :: 'timeout' | 'socket_down' | 'no_active_servers' | 'no_ports'.
+%% Reason for a failed request.
+
+-export_type([options/0, error_reason/0]).
 
 -define(DEFAULT_REQUEST_OPTS, #{retries => 3, timeout => 5_000, failover => []}).
 -define(SERVER, ?MODULE).
@@ -79,7 +82,7 @@ from each failover pool in order.
 -spec send_request(gen_server:server_ref(),
                    eradius_client_mngr:server_name() | [eradius_client_mngr:server_name()],
                    eradius_req:req()) ->
-          {{ok, eradius_req:req()} | {error, 'timeout' | 'socket_down'}, eradius_req:req()}.
+          {{ok, eradius_req:req()} | {error, error_reason()}, eradius_req:req()}.
 send_request(ServerRef, ServerName, #{cmd := _, payload := _} = Req) ->
     send_request(ServerRef, ServerName, Req, #{}).
 
@@ -98,28 +101,32 @@ client's `servers` map, or a list of names to try in order (first reachable wins
 
 `Opts` may contain:
 - `retries` — number of retransmissions before giving up (default: 3)
-- `timeout` — milliseconds to wait per attempt (default: 5000)
+- `timeout`: milliseconds to wait per attempt (default: 5000)
 - `failover` — list of server pool names to try if the primary fails
 
                                                    Returns `{{ok, Response}, Request}` on success or `{{error, Reason}, Request}` on failure.
-`Reason` is `timeout` if all retries were exhausted, or `socket_down` if the socket closed.
+`Reason` is one of:
+- `timeout`: all retries were exhausted
+- `socket_down`: the socket closed
+- `no_active_servers`: all candidate servers are marked unreachable, nothing was sent
+- `no_ports`: the source port pool for the server is saturated, nothing was sent
 """.
 -spec send_request(gen_server:server_ref(),
                    eradius_client_mngr:server_name() | [eradius_client_mngr:server_pool()],
                    eradius_req:req(), options()) ->
-          {{ok, eradius_req:req()} | {error, 'timeout' | 'socket_down'}, eradius_req:req()}.
+          {{ok, eradius_req:req()} | {error, error_reason()}, eradius_req:req()}.
 send_request(ServerRef, ServerName, #{cmd := Cmd} = Req, Opts)
   when ?GOOD_CMD(Cmd), is_map(Opts), is_list(ServerName) ->
     do_send_request(ServerRef, ServerName, [], Req, Opts);
 send_request(ServerRef, ServerName, Req, Opts) when not is_list(ServerName) ->
     send_request(ServerRef, [ServerName], Req, Opts).
 
-do_send_request(_ServerRef, [], _Tried, _Req, _Opts) ->
-    {error, no_active_servers};
+do_send_request(_ServerRef, [], _Tried, Req, _Opts) ->
+    {{error, no_active_servers}, Req};
 do_send_request(ServerRef, Peers, Tried, Req0, Opts0) ->
     case eradius_client_mngr:wanna_send(ServerRef, Peers, Tried) of
         {ok, {Socket, ReqId, ServerName, Server, ReqInfo}} ->
-            #{secret := Secret} = Server,
+            #{secret := Secret, failed := Failed} = Server,
 
             ServerOpts0 = maps:with([retries, timeout], Server),
             ServerOpts = maps:merge(?DEFAULT_REQUEST_OPTS, ServerOpts0),
@@ -131,6 +138,14 @@ do_send_request(ServerRef, Peers, Tried, Req0, Opts0) ->
             {Response, Req} =
                 send_request_loop(
                   Socket, ReqId, Req2#{req_id => ReqId, secret => Secret}, Opts),
+            %% a response proves the server is alive; the failure count seen at
+            %% selection time keeps the common path free of an extra message
+            case Response of
+                {ok, _} when Failed > 0 ->
+                    eradius_client_mngr:request_succeeded(ServerRef, ServerName);
+                _ ->
+                    ok
+            end,
             proceed_response(ServerRef, [ServerName | Tried], Req, Response, ServerName, Opts);
 
         {error, _} = Error ->
